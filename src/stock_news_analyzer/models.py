@@ -4,6 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     Date,
@@ -12,8 +13,10 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -78,3 +81,45 @@ class CompanyPeer(Base):
     approved_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class Document(Base):
+    """Any raw item collected: exchange filings now, news articles later. Never edited.
+
+    `published_at` is when the source made it public; `first_seen_at` is when we collected it.
+    A future model may only use what was seen before the moment it is predicting.
+    """
+
+    __tablename__ = "documents"
+    __table_args__ = (UniqueConstraint("source", "source_id", name="documents_source_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source: Mapped[str] = mapped_column(String(32))  # 'bse', 'nse'
+    source_id: Mapped[str] = mapped_column(String(64))
+    doc_type: Mapped[str] = mapped_column(String(32), index=True)  # see announcements.classify
+    title: Mapped[str] = mapped_column(Text)
+    subject: Mapped[str | None] = mapped_column(Text)
+    category: Mapped[str | None] = mapped_column(Text)
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    attachment_url: Mapped[str | None] = mapped_column(Text)
+    attachment_path: Mapped[str | None] = mapped_column(Text)  # relative to DATA_DIR
+    attachment_sha256: Mapped[str | None] = mapped_column(String(64), index=True)
+    attachment_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    text: Mapped[str | None] = mapped_column(Text)
+    # 'pending', 'ok', 'empty' (scanned PDF, no text layer), 'skipped', 'failed'
+    text_status: Mapped[str] = mapped_column(String(16), default="pending")
+    raw: Mapped[dict] = mapped_column(JSONB)
+
+
+class DocumentCompany(Base):
+    """Which companies a document is about."""
+
+    __tablename__ = "document_companies"
+
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True
+    )
+    isin: Mapped[str] = mapped_column(ForeignKey("companies.isin"), primary_key=True, index=True)

@@ -10,8 +10,8 @@ A set of small agents that track news, exchange filings and earnings calls for I
 | Step | What | Status |
 | --- | --- | --- |
 | 1 | Project skeleton: Python package, Postgres + pgvector in Docker, config, health check, CI | done |
-| 2 | Database tables + Watchlist Manager agent | this PR |
-| 3 | Filings Collector (BSE) | planned |
+| 2 | Database tables + Watchlist Manager agent | done |
+| 3 | Filings Collector (BSE + NSE announcements) | this PR |
 | 4 | News Collector (RSS) | planned |
 | 5 | Price & Label (NSE bhavcopy) | planned |
 | 6 | Orchestrator + first daily digest | planned |
@@ -61,6 +61,19 @@ Watchlist commands:
 | `uv run sna watchlist remove LT` | Stop tracking |
 | `uv run sna watchlist peers LT` | Suggest same-industry peers; save with `--approve SYMBOL` |
 
+Filings (exchange announcements) for every company on the watchlist:
+
+```bash
+make filings                                        # new filings since the last run (first run: last 7 days)
+uv run sna filings backfill --since 2023-10-01      # one-off history; PDFs only for important filings
+uv run sna filings list LT                          # latest filings for one company
+uv run sna filings list --type order_win            # filter by type: results, concall_transcript, credit_rating, ...
+uv run sna filings show 42                          # details + extracted text of filing 42
+uv run sna filings attachments --pdf all            # download PDFs skipped earlier
+```
+
+PDFs are saved under `data/filings/<ISIN>/<bse|nse>/<YYYY-MM>/` and their text is stored in the database.
+
 Other commands:
 
 | Command | What it does |
@@ -79,7 +92,10 @@ src/stock_news_analyzer/   Python package (agents will live here)
   models.py                database tables
   migrations/              Alembic migrations (one per schema change)
   sources/securities.py    NSE/BSE security list download + parsing
+  sources/exchange_http.py BSE/NSE web access (browser-like, gets past bot protection)
+  sources/announcements.py BSE/NSE announcement parsing + filing types
   agents/watchlist.py      Watchlist Manager (agent 1)
+  agents/filings.py        Filings Collector (agent 2)
   cli.py                   `sna` command-line tool
 config/watchlist.yaml      your stocks and bullion
 tests/                     pytest tests

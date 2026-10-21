@@ -1,0 +1,104 @@
+"""HTTP access to BSE and NSE websites.
+
+Both exchanges sit behind bot protection (Akamai) that rejects ordinary HTTP clients on their
+announcement APIs. `curl_cffi` presents the same TLS fingerprint as Chrome, which gets through.
+Each session first loads an exchange web page to pick up cookies, as a browser would.
+"""
+
+import logging
+import time
+from datetime import date
+
+from curl_cffi import requests as creq
+
+log = logging.getLogger(__name__)
+
+BSE_WARMUP_URL = "https://www.bseindia.com/corporates/ann.html"
+BSE_ANNOUNCEMENTS_URL = "https://api.bseindia.com/BseIndiaAPI/api/AnnSubCategoryGetData/w"
+BSE_ATTACHMENT_URLS = (
+    "https://www.bseindia.com/xml-data/corpfiling/AttachLive/{name}",
+    "https://www.bseindia.com/xml-data/corpfiling/AttachHis/{name}",  # older filings
+)
+BSE_HEADERS = {"Referer": "https://www.bseindia.com/", "Origin": "https://www.bseindia.com"}
+
+NSE_WARMUP_URL = "https://www.nseindia.com/companies-listing/corporate-filings-announcements"
+NSE_ANNOUNCEMENTS_URL = "https://www.nseindia.com/api/corporate-announcements"
+
+
+class ExchangeError(Exception):
+    pass
+
+
+class ExchangeClient:
+    """Fetches announcement listings and attachments. Waits `delay` seconds between requests."""
+
+    def __init__(self, delay: float = 1.0, timeout: float = 60):
+        self.delay = delay
+        self.timeout = timeout
+        self._sessions: dict[str, creq.Session] = {}
+        self._last_request = 0.0
+
+    def _session(self, exchange: str) -> creq.Session:
+        if exchange not in self._sessions:
+            s = creq.Session(impersonate="chrome")
+            self._get(s, BSE_WARMUP_URL if exchange == "bse" else NSE_WARMUP_URL)
+            self._sessions[exchange] = s
+        return self._sessions[exchange]
+
+    def _get(self, session: creq.Session, url: str, **kwargs):
+        wait = self.delay - (time.monotonic() - self._last_request)
+        if wait > 0:
+            time.sleep(wait)
+        self._last_request = time.monotonic()
+        log.debug("GET %s %s", url, kwargs.get("params", ""))
+        return session.get(url, timeout=self.timeout, **kwargs)
+
+    def _get_json(self, exchange: str, url: str, params: dict, headers: dict | None = None):
+        for attempt in (1, 2):
+            resp = self._get(self._session(exchange), url, params=params, headers=headers)
+            if resp.status_code == 200 and "json" in resp.headers.get("content-type", ""):
+                return resp.json()
+            if attempt == 1 and resp.status_code in (401, 403):
+                log.info(
+                    "%s returned %s; refreshing cookies and retrying", exchange, resp.status_code
+                )
+                self._sessions.pop(exchange, None)
+                continue
+            raise ExchangeError(
+                f"{exchange.upper()} returned HTTP {resp.status_code} "
+                f"({resp.headers.get('content-type')}) for {url}"
+            )
+        raise AssertionError("unreachable")
+
+    def bse_announcements(self, scrip_code: str, start: date, end: date, page: int = 1) -> dict:
+        params = {
+            "pageno": page,
+            "strCat": -1,
+            "strPrevDate": start.strftime("%Y%m%d"),
+            "strScrip": scrip_code,
+            "strSearch": "P",
+            "strToDate": end.strftime("%Y%m%d"),
+            "strType": "C",
+            "subcategory": -1,
+        }
+        return self._get_json("bse", BSE_ANNOUNCEMENTS_URL, params, headers=BSE_HEADERS)
+
+    def nse_announcements(self, symbol: str, start: date, end: date) -> list:
+        params = {
+            "index": "equities",
+            "symbol": symbol,
+            "from_date": start.strftime("%d-%m-%Y"),
+            "to_date": end.strftime("%d-%m-%Y"),
+        }
+        return self._get_json("nse", NSE_ANNOUNCEMENTS_URL, params)
+
+    def download(self, exchange: str, urls: list[str]) -> tuple[str, bytes]:
+        """Download the first URL that returns a file. Returns (url, content)."""
+        session = self._session(exchange)
+        last = None
+        for url in urls:
+            resp = self._get(session, url, headers=BSE_HEADERS if exchange == "bse" else None)
+            if resp.status_code == 200 and "html" not in resp.headers.get("content-type", ""):
+                return url, resp.content
+            last = resp.status_code
+        raise ExchangeError(f"attachment not found (last HTTP {last}): {urls[0]}")

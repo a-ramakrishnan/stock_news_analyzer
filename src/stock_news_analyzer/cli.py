@@ -477,7 +477,7 @@ def news_fetch(
             typer.echo("watchlist is empty")
             raise typer.Exit(1)
         result = NewsCollector(session, NewsClient(), _news_config(feeds_file)).collect(
-            feed_keys=feed or None, google=google
+            feed_keys=feed or None, google=google, progress=typer.echo
         )
     typer.echo(
         f"{result.seen} articles read from {len(result.feeds)} feeds; "

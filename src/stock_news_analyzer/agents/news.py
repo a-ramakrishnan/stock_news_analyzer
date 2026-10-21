@@ -6,7 +6,7 @@ mention a watchlist company, and links each article to the companies it mentions
 
 import logging
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -116,7 +116,14 @@ class NewsCollector:
         self.client = client
         self.config = config
 
-    def collect(self, feed_keys: list[str] | None = None, google: bool = True) -> NewsResult:
+    def collect(
+        self,
+        feed_keys: list[str] | None = None,
+        google: bool = True,
+        progress: Callable[[str], None] | None = None,
+    ) -> NewsResult:
+        """Read every feed (and Google News per company). `progress` gets one line per feed."""
+        self.progress = progress
         matcher = watchlist_matcher(self.session)
         result = NewsResult()
         for feed in self.config.feeds:
@@ -140,16 +147,26 @@ class NewsCollector:
         except NewsError as exc:
             report.error = str(exc)
             log.warning("%s: %s", key, exc)
+            self._report(f"{key}: FAILED {exc}")
             return
         report.items = len(articles)
+        matched = new = 0
         for article in articles:
             result.seen += 1
             companies = matcher.match(f"{article.title}\n{article.summary}")
             if not companies:
                 continue
-            result.matched += 1
+            matched += 1
             if self._store(article, companies):
-                result.new += 1
+                new += 1
+        result.matched += matched
+        result.new += new
+        self._report(f"{key}: {len(articles)} read, {matched} about your stocks, {new} new")
+
+    def _report(self, line: str) -> None:
+        log.debug(line)
+        if getattr(self, "progress", None):
+            self.progress(line)
 
     def _store(self, article: Article, companies: list[Company]) -> bool:
         """Store the article (once) and link it to the companies. True if it was new."""

@@ -31,6 +31,12 @@ Known limitation: "L&T" also matches "L&T Finance" and "L&T Technology Services"
 - **Duplicates:** the same article is stored once per source (by its feed id). The same story from different outlets is kept separately for now; the Triage agent (step 6) clusters them.
 - **A web page instead of a feed** (an "Access Denied" page served with HTTP 200) is reported as an error rather than read as an empty feed.
 
+## First live check (Mac, 21 Oct 2026)
+
+`sna news check-feeds`: 10 of 11 feeds worked (384 items in total; ET 50+50, Moneycontrol 15+4, Business Standard 35+35, Mint 35+35, BusinessLine 60+60). Financial Express failed with "not well-formed (invalid token)": malformed XML, typically an unescaped `&` or a control character.
+
+Fix: when a feed is malformed, the parser now repairs control characters and bare `&` and reparses. Testing this showed a second problem: feedparser's lenient fallback silently turns "L&T" into "L&T;", which would break alias matching. So the repaired document is preferred for any malformed feed, not only for unreadable ones.
+
 ## Also in this PR
 
 - **Broken files at the source:** NSE served the same 2,523,136-byte truncated PDF for the 21 Oct L&T order win every time (its server's Content-Length says so too). When two downloads come back identical and incomplete, the file is now kept as is, its readable text is recovered, and it is marked `partial` instead of being retried forever. Run `uv run sna filings attachments --retry-failed` to apply this to the stored filing.

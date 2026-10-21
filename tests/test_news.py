@@ -46,6 +46,13 @@ def test_parse_google_news_strips_publisher_from_title():
     assert article.publisher == "Business Standard"
 
 
+def test_parse_feed_repairs_bare_ampersands_and_control_characters():
+    content = (FIXTURES / "rss_malformed.xml").read_bytes()
+    assert b"L&T, M&M" in content and b"\x0b" in content
+    [article] = parse_feed(content, "news:fe_market", "Financial Express")
+    assert article.title == "L&T, M&M and Karur Vysya Bank lead gains & volumes rise"
+
+
 def test_parse_feed_rejects_non_feeds():
     with pytest.raises(NewsError):
         parse_feed(b"<html><body>Access Denied</body></html>", "news:x", "X")

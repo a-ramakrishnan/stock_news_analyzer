@@ -3,6 +3,7 @@
 import calendar
 import hashlib
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -71,9 +72,22 @@ def _published(entry) -> datetime | None:
     return datetime.fromtimestamp(calendar.timegm(parsed), tz=UTC)
 
 
+def repair_xml(content: bytes) -> bytes:
+    """Fix the two mistakes that most often make a feed unreadable: control characters and
+    bare '&' (e.g. "M&M" written without escaping). Seen in the Financial Express feed."""
+    content = re.sub(rb"[\x00-\x08\x0b\x0c\x0e-\x1f]", b"", content)
+    return re.sub(rb"&(?!#\d+;|#x[0-9a-fA-F]+;|[A-Za-z][A-Za-z0-9]*;)", b"&amp;", content)
+
+
 def parse_feed(content: bytes, source: str, publisher: str) -> list[Article]:
     """Parse RSS or Atom. Items without a link or title are skipped."""
     parsed = feedparser.parse(content)
+    if parsed.bozo:
+        # feedparser's lenient fallback garbles text ("L&T" becomes "L&T;"), so prefer the
+        # repaired document whenever it parses at least as well.
+        repaired = feedparser.parse(repair_xml(content))
+        if repaired.entries and (not repaired.bozo or len(repaired.entries) >= len(parsed.entries)):
+            parsed = repaired
     if not parsed.entries and (not parsed.get("version") or parsed.bozo):
         # e.g. an "Access Denied" web page served with HTTP 200
         reason = parsed.get("bozo_exception") or "no RSS/Atom content"

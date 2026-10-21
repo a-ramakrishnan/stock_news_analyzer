@@ -54,5 +54,28 @@ services:
     restart: unless-stopped
     command: ["sna", "orchestrator", "start"]
 
+  ui:
+    # The dashboard (read-only). Start with `make ui-docker`, open http://localhost:8501.
+    build: .
+    profiles: ["ui"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://sna:sna@db:5432/sna
+      DATA_DIR: /app/data
+      TZ: Asia/Kolkata
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data:ro
+      - ./config:/app/config:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    command: ["streamlit", "run", "src/stock_news_analyzer/ui/app.py",
+              "--server.address", "0.0.0.0", "--server.headless", "true"]
+
 volumes:
   pgdata:

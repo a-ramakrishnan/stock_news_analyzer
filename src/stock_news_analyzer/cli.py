@@ -847,3 +847,31 @@ def digest(
     typer.echo(result.markdown)
     if save:
         typer.echo(f"saved to {save_digest(result, get_settings().data_dir)}")
+
+
+@app.command("ui")
+def ui(
+    port: int = typer.Option(8501, help="Port for the dashboard."),
+    open_browser: bool = typer.Option(True, "--open/--no-open", help="Open it in the browser."),
+) -> None:
+    """Start the dashboard at http://localhost:8501 (read-only; Ctrl+C to stop)."""
+    import subprocess
+    import sys
+
+    script = Path(__file__).parent / "ui" / "app.py"
+    typer.echo(f"dashboard on http://localhost:{port}  (Ctrl+C to stop)")
+    cmd = [
+        sys.executable,
+        "-m",
+        "streamlit",
+        "run",
+        str(script),
+        "--server.port",
+        str(port),
+        "--server.headless",
+        str(not open_browser).lower(),
+    ]
+    try:
+        raise typer.Exit(subprocess.call(cmd))
+    except KeyboardInterrupt:
+        typer.echo("dashboard stopped")

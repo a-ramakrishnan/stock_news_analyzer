@@ -1,0 +1,12 @@
+# Dashboard settings (`sna ui`).
+[browser]
+gatherUsageStats = false
+
+[server]
+address = "localhost"
+
+[theme]
+primaryColor = "#2a78d6"
+
+[client]
+toolbarMode = "viewer"

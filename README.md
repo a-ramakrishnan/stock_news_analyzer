@@ -16,7 +16,8 @@ Every command block below can be pasted into Terminal as is; explanations are in
 | 3 | Filings Collector (BSE + NSE announcements) | done |
 | 4 | News Collector (RSS feeds + Google News) | done |
 | 5 | Price & Label (NSE daily prices, moves, labels) | done |
-| 6 | Orchestrator + first daily digest | this PR |
+| 6 | Orchestrator + first daily digest | done |
+| 7 | Dashboard: Phase 1 output in the browser | this PR |
 
 ## Run it on a Mac
 
@@ -155,6 +156,28 @@ make scheduler
 
 Scheduled digests are saved as Markdown under `data/digests/`. While the Mac sleeps nothing runs; a run missed by up to 3 hours happens on wake.
 
+## Dashboard
+
+A local web page over everything collected. It only reads the database.
+
+```bash
+make ui
+```
+
+| Command | What it does |
+| --- | --- |
+| `make ui` | Open the dashboard at http://localhost:8501 (Ctrl+C in the terminal stops it) |
+| `make ui-docker` / `make ui-stop` | Run it in Docker instead, next to the scheduler / stop it |
+
+| Page | What it shows |
+| --- | --- |
+| Today | Indices, a card per stock (move vs Nifty 50 and sector, unusual badge, 3-month sparkline), the latest digest, job health |
+| Stock | Stock vs sector vs Nifty 50 indexed to 100, key filings and unusual days marked; its filings, news, reactions and corporate actions |
+| Filings | Search by stock, type, words and date; read a filing's extracted text |
+| News | Search headlines; links to the articles |
+| What moves the stock | Average return vs Nifty 50 after each kind of filing, 1, 5 and 20 trading days later |
+| System | Schedule, stored data, recent runs and errors |
+
 ## Other commands
 
 | Command | What it does |
@@ -185,11 +208,15 @@ src/stock_news_analyzer/   Python package
   sources/corporate_actions.py  NSE bonus/split/dividend parsing
   agents/orchestrator.py   Orchestrator (agent 0): jobs, schedule, run log
   agents/digest.py         Reporter, basic (agent 16): the daily digest
+  ui/queries.py            dashboard: read-only queries
+  ui/charts.py             dashboard: charts
+  ui/app.py                dashboard: the Streamlit pages
   cli.py                   `sna` command-line tool
 config/watchlist.yaml      your stocks, bullion and their news aliases
 config/news_feeds.yaml     news feeds to read
 config/schedule.yaml       when each job runs
 tests/                     pytest tests
+.streamlit/config.toml     dashboard settings
 docker/postgres/init.sql   enables pgvector when the database is created
 docs/build-log/            what each step added and how to check it
 ```

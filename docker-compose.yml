@@ -1,0 +1,38 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: sna
+      POSTGRES_PASSWORD: sna
+      POSTGRES_DB: sna
+      TZ: Asia/Kolkata
+    ports:
+      # 5433 on the laptop, so it does not clash with a Postgres you may already run on 5432.
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sna -d sna"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Inside Docker the database is reached by its service name, not localhost.
+      DATABASE_URL: postgresql+psycopg://sna:sna@db:5432/sna
+      DATA_DIR: /app/data
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["sna", "health"]
+
+volumes:
+  pgdata:

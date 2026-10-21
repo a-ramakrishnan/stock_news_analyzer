@@ -1,0 +1,26 @@
+"""Settings, read from environment variables and an optional `.env` file."""
+
+from functools import lru_cache
+from pathlib import Path
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    # Postgres connection. The default matches docker-compose.yml when run from the laptop.
+    database_url: str = "postgresql+psycopg://sna:sna@localhost:5433/sna"
+
+    # Where raw files (filing PDFs, transcripts, audio) and generated reports are stored.
+    data_dir: Path = Path("data")
+
+    # All timestamps are stored and shown in Indian Standard Time.
+    timezone: str = "Asia/Kolkata"
+
+    log_level: str = "INFO"
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

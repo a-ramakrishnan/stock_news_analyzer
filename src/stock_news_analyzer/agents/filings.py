@@ -7,7 +7,7 @@ one unchanged with its publication time, downloads the attached file and extract
 import hashlib
 import io
 import logging
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path, PurePosixPath
@@ -98,11 +98,13 @@ class FilingsCollector:
         end: date | None = None,
         default_days: int = 7,
         sources: tuple[str, ...] = SOURCES,
+        progress: Callable[[str], None] | None = None,
     ) -> CollectResult:
         """Fetch announcements for each company and source.
 
         Without `start`, each company/source continues from its latest stored filing (minus a
-        day of overlap), or goes back `default_days` the first time.
+        day of overlap), or goes back `default_days` the first time. `progress` receives one
+        line per company, exchange and 30-day window.
         """
         end = end or datetime.now(IST).date()
         result = CollectResult()
@@ -112,9 +114,18 @@ class FilingsCollector:
                 if not code:
                     continue
                 since = start or self._resume_date(company.isin, source, end, default_days)
+                label = f"{company.nse_symbol or company.isin} {source.upper()}"
                 try:
-                    for ann in self._listings(source, code, since, end):
-                        self._store(ann, company, result)
+                    for lo, hi in date_chunks(since, end):
+                        new, had, pdfs = result.new, result.already_had, result.attachments
+                        for ann in self._chunk(source, code, lo, hi):
+                            self._store(ann, company, result)
+                        if progress:
+                            progress(
+                                f"{label} {lo}..{hi}: {result.new - new} new, "
+                                f"{result.already_had - had} already stored, "
+                                f"{result.attachments - pdfs} PDFs"
+                            )
                 except ExchangeError as exc:
                     msg = f"{company.nse_symbol or company.isin} {source.upper()}: {exc}"
                     log.error(msg)
@@ -131,20 +142,19 @@ class FilingsCollector:
             return end - timedelta(days=default_days)
         return latest.astimezone(IST).date() - timedelta(days=1)
 
-    def _listings(self, source: str, code: str, start: date, end: date) -> Iterator[Announcement]:
-        for lo, hi in date_chunks(start, end):
-            if source == "nse":
-                yield from parse_nse(self.client.nse_announcements(code, lo, hi))
-                continue
-            page, seen = 1, 0
-            while True:
-                data = self.client.bse_announcements(code, lo, hi, page)
-                rows = parse_bse(data)
-                yield from rows
-                seen += len(data.get("Table") or [])
-                if not rows or seen >= bse_total_rows(data):
-                    break
-                page += 1
+    def _chunk(self, source: str, code: str, lo: date, hi: date) -> Iterator[Announcement]:
+        if source == "nse":
+            yield from parse_nse(self.client.nse_announcements(code, lo, hi))
+            return
+        page, seen = 1, 0
+        while True:
+            data = self.client.bse_announcements(code, lo, hi, page)
+            rows = parse_bse(data)
+            yield from rows
+            seen += len(data.get("Table") or [])
+            if not rows or seen >= bse_total_rows(data):
+                break
+            page += 1
 
     # --- storing -------------------------------------------------------------
 

@@ -20,6 +20,10 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
+    # A day is "unusual" when a stock's return minus the Nifty 50's exceeds this many standard
+    # deviations of the previous 60 trading days. 2.0 flags about 5% of days.
+    unusual_threshold: float = 2.0
+
 
 @lru_cache
 def get_settings() -> Settings:

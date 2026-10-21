@@ -22,7 +22,9 @@ BSE_ATTACHMENT_URLS = (
 BSE_HEADERS = {"Referer": "https://www.bseindia.com/", "Origin": "https://www.bseindia.com"}
 
 NSE_WARMUP_URL = "https://www.nseindia.com/companies-listing/corporate-filings-announcements"
+NSE_ARCHIVES = "https://nsearchives.nseindia.com"
 NSE_ANNOUNCEMENTS_URL = "https://www.nseindia.com/api/corporate-announcements"
+NSE_CORPORATE_ACTIONS_URL = "https://www.nseindia.com/api/corporates-corporateActions"
 
 
 class ExchangeError(Exception):
@@ -91,6 +93,30 @@ class ExchangeClient:
             "to_date": end.strftime("%d-%m-%Y"),
         }
         return self._get_json("nse", NSE_ANNOUNCEMENTS_URL, params)
+
+    def nse_corporate_actions(self, symbol: str, start: date, end: date) -> list:
+        params = {
+            "index": "equities",
+            "symbol": symbol,
+            "from_date": start.strftime("%d-%m-%Y"),
+            "to_date": end.strftime("%d-%m-%Y"),
+        }
+        data = self._get_json("nse", NSE_CORPORATE_ACTIONS_URL, params)
+        return data if isinstance(data, list) else data.get("data", [])
+
+    def nse_file(self, url: str) -> bytes | None:
+        """An NSE archive file, or None if NSE has none for that day (HTTP 404: a holiday)."""
+        for attempt in (1, 2):
+            resp = self._get(self._session("nse"), url)
+            if resp.status_code == 404:
+                return None
+            if resp.status_code == 200 and "html" not in resp.headers.get("content-type", ""):
+                return resp.content
+            if attempt == 1 and resp.status_code in (401, 403):
+                self._sessions.pop("nse", None)
+                continue
+            raise ExchangeError(f"NSE returned HTTP {resp.status_code} for {url}")
+        raise AssertionError("unreachable")
 
     def download(
         self, exchange: str, urls: list[str], attempts: int = 3

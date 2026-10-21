@@ -6,7 +6,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote_plus
 
@@ -63,6 +63,16 @@ def load_feed_config(path: Path) -> FeedConfig:
 
 def google_news_url(query: str, days: int) -> str:
     return GOOGLE_NEWS_URL.format(q=quote_plus(f"{query} when:{days}d"))
+
+
+# Google News returns at most this many items per search; a window that hits it is split.
+GOOGLE_MAX_ITEMS = 100
+
+
+def google_news_range_url(query: str, start: date, end: date) -> str:
+    """A search for articles published from `start` to `end` (both inclusive)."""
+    before = end + timedelta(days=1)  # Google's before: excludes the day itself
+    return GOOGLE_NEWS_URL.format(q=quote_plus(f"{query} after:{start} before:{before}"))
 
 
 def _published(entry) -> datetime | None:

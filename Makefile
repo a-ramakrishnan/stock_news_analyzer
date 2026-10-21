@@ -1,4 +1,4 @@
-.PHONY: setup up down health migrate securities watchlist filings news prices digest run-all scheduler scheduler-logs scheduler-stop ui ui-docker ui-stop test lint format docker-health
+.PHONY: setup up down health migrate securities watchlist filings news prices digest backfill run-all scheduler scheduler-logs scheduler-stop ui ui-docker ui-stop test lint format docker-health
 
 setup:          ## Install Python dependencies and create .env
 	uv sync
@@ -35,6 +35,15 @@ prices:         ## Load new NSE prices, update moves and labels
 
 digest:         ## Print the digest (everything since the last scheduled digest)
 	uv run sna digest
+
+SINCE ?= 2023-10-01
+
+# A part that reports errors does not stop the rest ("-"); re-run to retry what failed.
+backfill:       ## Load history since SINCE (default 2023-10-01): prices, filings, news, labels
+	-uv run sna prices backfill --since $(SINCE)
+	-uv run sna filings backfill --since $(SINCE)
+	-uv run sna news backfill --since $(SINCE)
+	uv run sna labels update
 
 run-all:        ## Run filings, news, prices and digest once, now
 	uv run sna run all

@@ -487,6 +487,35 @@ def news_fetch(
         typer.echo(f"error: {report.key}: {report.error}")
 
 
+@news_app.command("backfill")
+def news_backfill(
+    since: str = typer.Option(..., help="Start date, YYYY-MM-DD (e.g. 2023-10-01)."),
+    until: str = typer.Option(None, help="End date, YYYY-MM-DD (default: today)."),
+    symbol: str = typer.Option(None, help="Only this NSE symbol (default: whole watchlist)."),
+) -> None:
+    """Older articles from Google News, a month at a time. Safe to re-run; stored ones are kept."""
+    from stock_news_analyzer.agents.news import NewsCollector
+    from stock_news_analyzer.sources.news import NewsClient
+
+    start = datetime.strptime(since, "%Y-%m-%d").date()
+    end = datetime.strptime(until, "%Y-%m-%d").date() if until else date.today()
+    with get_session() as session:
+        if not fl.watchlist_companies(session, symbol):
+            typer.echo(f"{symbol} is not on the watchlist" if symbol else "watchlist is empty")
+            raise typer.Exit(1)
+        result = NewsCollector(session, NewsClient(), _news_config(FEEDS_FILE)).backfill(
+            start, end, symbol=symbol, progress=typer.echo
+        )
+    typer.echo(
+        f"{len(result.feeds)} searches; {result.matched} articles mention a watchlist company; "
+        f"{result.new} new"
+    )
+    for report in result.errors:
+        typer.echo(f"error: {report.key}: {report.error}")
+    if result.errors:
+        typer.echo("re-run the same command to retry; stored articles are skipped")
+
+
 @news_app.command("relink")
 def news_relink() -> None:
     """Re-match stored articles to companies after changing aliases or exclusions."""

@@ -1,13 +1,18 @@
 # Your watchlist. Load or re-load it with: sna watchlist load
 # Each stock needs a name; add `symbol:` (NSE symbol) if the name matches more than one company.
 # `owned: true` turns on earnings-call tracking for that stock. `quantity` is optional.
+# `aliases`: other names the news uses. Short or all-capital aliases match case-sensitively.
+# The company name (without "Limited") is always matched, so it needn't be listed.
 stocks:
   - name: Larsen & Toubro
     owned: true
+    aliases: ["L&T"]
   - name: Karur Vysya Bank
     owned: true
+    aliases: ["KVB"]
   - name: Motherson Sumi Wiring
     owned: true
+    aliases: ["MSWIL"]
 
 # Bullion to track: gold and/or silver, e.g.
 # bullion:

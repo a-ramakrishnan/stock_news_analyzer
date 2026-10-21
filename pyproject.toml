@@ -15,6 +15,7 @@ dependencies = [
     "pyyaml>=6.0.3",
     "curl-cffi>=0.16.3",
     "pypdf>=6.21.1",
+    "feedparser>=6.0.14",
 ]
 
 [project.scripts]

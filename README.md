@@ -5,31 +5,38 @@ A set of small agents that track news, exchange filings and earnings calls for I
 - Design doc: [Indian Market News Intelligence System](https://claude.ai/artifact/2rcGGrRLaCoqDkBeg2nwxJ) (architecture, data sources, agent-by-agent plan)
 - Build log, one file per step: [`docs/build-log/`](docs/build-log/)
 
+Every command block below can be pasted into Terminal as is; explanations are in the tables.
+
 ## Status
 
 | Step | What | Status |
 | --- | --- | --- |
 | 1 | Project skeleton: Python package, Postgres + pgvector in Docker, config, health check, CI | done |
 | 2 | Database tables + Watchlist Manager agent | done |
-| 3 | Filings Collector (BSE + NSE announcements) | this PR |
-| 4 | News Collector (RSS) | planned |
+| 3 | Filings Collector (BSE + NSE announcements) | done |
+| 4 | News Collector (RSS feeds + Google News) | this PR |
 | 5 | Price & Label (NSE bhavcopy) | planned |
 | 6 | Orchestrator + first daily digest | planned |
 
 ## Run it on a Mac
 
-You need [Homebrew](https://brew.sh), then:
+You need [Homebrew](https://brew.sh). Install uv (Python package manager) and Docker Desktop, then open Docker Desktop once so it starts:
 
 ```bash
-brew install uv                       # Python package manager (installs Python for you)
-brew install --cask docker            # Docker Desktop; open it once so it starts
+brew install uv
+brew install --cask docker
 git clone https://github.com/a-ramakrishnan/stock_news_analyzer.git
 cd stock_news_analyzer
-
-make setup    # install dependencies, create .env from .env.example
-make up       # start Postgres + pgvector in Docker (port 5433)
-make health   # check everything is connected
+make setup
+make up
+make health
 ```
+
+| Command | What it does |
+| --- | --- |
+| `make setup` | Install dependencies; create `.env` from `.env.example` |
+| `make up` | Start Postgres + pgvector in Docker (port 5433) |
+| `make health` | Check everything is connected |
 
 `make health` should print:
 
@@ -40,43 +47,69 @@ postgres     ok  16.x
 pgvector     ok  0.8.x
 ```
 
-Then set up your watchlist (edit [`config/watchlist.yaml`](config/watchlist.yaml) first):
+## Watchlist
+
+Edit [`config/watchlist.yaml`](config/watchlist.yaml) first, then:
 
 ```bash
-make migrate      # create the database tables
-make securities   # download the NSE + BSE lists of listed companies
-make watchlist    # load config/watchlist.yaml and show it
+make migrate
+make securities
+make watchlist
 ```
-
-If NSE blocks the download, open the link it prints in a browser, save the file, and run
-`uv run sna securities refresh --nse-file ~/Downloads/EQUITY_L.csv`.
-
-Watchlist commands:
 
 | Command | What it does |
 | --- | --- |
-| `uv run sna watchlist add "Karur Vysya Bank" --owned` | Add or update a stock by name, NSE symbol, BSE code or ISIN |
+| `make migrate` | Create or update the database tables |
+| `make securities` | Download the NSE + BSE lists of listed companies |
+| `make watchlist` | Load `config/watchlist.yaml` and show the watchlist |
+| `uv run sna watchlist add "Karur Vysya Bank" --owned --alias KVB` | Add or update a stock by name, NSE symbol, BSE code or ISIN |
 | `uv run sna watchlist add gold` | Track bullion (gold or silver) |
 | `uv run sna watchlist list` | Show the watchlist with NSE/BSE codes and industry |
 | `uv run sna watchlist remove LT` | Stop tracking |
 | `uv run sna watchlist peers LT` | Suggest same-industry peers; save with `--approve SYMBOL` |
 
-Filings (exchange announcements) for every company on the watchlist:
+If NSE blocks the download, open the link `make securities` prints in a browser, save the file, and run `uv run sna securities refresh --nse-file ~/Downloads/EQUITY_L.csv`.
+
+## Filings (exchange announcements)
 
 ```bash
-make filings                                        # new filings since the last run (first run: last 7 days)
-uv run sna filings backfill --since 2023-10-01      # one-off history; PDFs only for important filings
-uv run sna filings list LT                          # latest filings for one company
-uv run sna filings list --type order_win            # filter by type: results, concall_transcript, credit_rating, ...
-uv run sna filings show 42                          # details + extracted text of filing 42
-uv run sna filings attachments --pdf all            # download PDFs skipped earlier
-uv run sna filings attachments --retry-failed       # re-download PDFs that failed to read
-uv run sna filings reclassify                       # re-apply filing-type rules to stored filings
+make filings
+uv run sna filings list
 ```
+
+| Command | What it does |
+| --- | --- |
+| `make filings` | New BSE + NSE filings since the last run (first run: last 7 days) |
+| `uv run sna filings backfill --since 2023-10-01` | One-off history; PDFs only for important filings |
+| `uv run sna filings list LT` | Latest filings for one company |
+| `uv run sna filings list --type order_win` | Filter by type: `results`, `concall_transcript`, `credit_rating`, ... |
+| `uv run sna filings show 42` | Details and extracted text of filing 42 |
+| `uv run sna filings attachments --pdf all` | Download PDFs skipped earlier |
+| `uv run sna filings attachments --retry-failed` | Re-download PDFs that failed to read |
+| `uv run sna filings reclassify` | Re-apply filing-type rules to stored filings |
 
 PDFs are saved under `data/filings/<ISIN>/<bse|nse>/<YYYY-MM>/` and their text is stored in the database.
 
-Other commands:
+## News
+
+Feeds are listed in [`config/news_feeds.yaml`](config/news_feeds.yaml). Check them once, then fetch:
+
+```bash
+uv run sna news check-feeds
+make news
+uv run sna news list
+```
+
+| Command | What it does |
+| --- | --- |
+| `uv run sna news check-feeds` | Fetch every feed once; report which work |
+| `make news` | Read all feeds + a Google News search per company; keep articles that mention a watchlist company |
+| `uv run sna news fetch --no-google` | Feeds only, no Google News |
+| `uv run sna news list KARURVYSYA` | Latest articles for one company |
+
+Articles are matched by company name (without "Limited") and the `aliases` in `config/watchlist.yaml`.
+
+## Other commands
 
 | Command | What it does |
 | --- | --- |
@@ -88,18 +121,22 @@ Other commands:
 ## Layout
 
 ```
-src/stock_news_analyzer/   Python package (agents will live here)
+src/stock_news_analyzer/   Python package
   config.py                settings from environment / .env
   db.py                    database connection, migrations, health check
   models.py                database tables
   migrations/              Alembic migrations (one per schema change)
+  text.py                  shared text cleaning
   sources/securities.py    NSE/BSE security list download + parsing
   sources/exchange_http.py BSE/NSE web access (browser-like, gets past bot protection)
   sources/announcements.py BSE/NSE announcement parsing + filing types
+  sources/news.py          RSS/Atom + Google News fetching and parsing
   agents/watchlist.py      Watchlist Manager (agent 1)
   agents/filings.py        Filings Collector (agent 2)
+  agents/news.py           News Collector (agent 3)
   cli.py                   `sna` command-line tool
-config/watchlist.yaml      your stocks and bullion
+config/watchlist.yaml      your stocks, bullion and their news aliases
+config/news_feeds.yaml     news feeds to read
 tests/                     pytest tests
 docker/postgres/init.sql   enables pgvector when the database is created
 docs/build-log/            what each step added and how to check it

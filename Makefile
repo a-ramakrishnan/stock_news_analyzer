@@ -1,4 +1,4 @@
-.PHONY: setup up down health migrate securities watchlist filings test lint format docker-health
+.PHONY: setup up down health migrate securities watchlist filings news test lint format docker-health
 
 setup:          ## Install Python dependencies and create .env
 	uv sync
@@ -25,6 +25,9 @@ watchlist:      ## Load config/watchlist.yaml and show the watchlist
 
 filings:        ## Fetch new BSE/NSE announcements for the watchlist
 	uv run sna filings fetch
+
+news:           ## Read news feeds + Google News for the watchlist
+	uv run sna news fetch
 
 docker-health:  ## Run the same check inside the app container
 	docker compose run --rm --build app

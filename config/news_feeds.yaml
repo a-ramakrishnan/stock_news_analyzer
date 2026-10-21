@@ -1,0 +1,43 @@
+# News feeds read by `sna news fetch`. Test them all with: sna news check-feeds
+# Remove or fix any feed that check-feeds reports as failing; add your own the same way.
+# `key` names the feed in the database, so keep it stable once articles are stored.
+feeds:
+  - key: et_stocks
+    name: Economic Times - Stocks
+    url: https://economictimes.indiatimes.com/markets/stocks/news/rssfeeds/2146842.cms
+  - key: et_markets
+    name: Economic Times - Markets
+    url: https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms
+  - key: moneycontrol_business
+    name: Moneycontrol - Business
+    url: https://www.moneycontrol.com/rss/business.xml
+  - key: moneycontrol_markets
+    name: Moneycontrol - Market reports
+    url: https://www.moneycontrol.com/rss/marketreports.xml
+  - key: bs_markets
+    name: Business Standard - Markets
+    url: https://www.business-standard.com/rss/markets-106.rss
+  - key: bs_companies
+    name: Business Standard - Companies
+    url: https://www.business-standard.com/rss/companies-101.rss
+  - key: mint_markets
+    name: Mint - Markets
+    url: https://www.livemint.com/rss/markets
+  - key: mint_companies
+    name: Mint - Companies
+    url: https://www.livemint.com/rss/companies
+  - key: businessline_markets
+    name: Hindu BusinessLine - Markets
+    url: https://www.thehindubusinessline.com/markets/feeder/default.rss
+  - key: businessline_companies
+    name: Hindu BusinessLine - Companies
+    url: https://www.thehindubusinessline.com/companies/feeder/default.rss
+  - key: fe_market
+    name: Financial Express - Market
+    url: https://www.financialexpress.com/market/feed/
+
+# Google News: one search per watchlist company, by its main name, for the last 7 days.
+# Picks up outlets not listed above (CNBC-TV18, NDTV Profit, regional papers).
+google_news:
+  enabled: true
+  days: 7

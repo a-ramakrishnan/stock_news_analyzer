@@ -165,6 +165,7 @@ def add_equity(
     owned: bool = False,
     quantity: Decimal | None = None,
     notes: str | None = None,
+    aliases: list[str] | None = None,
 ) -> WatchlistItem:
     item = session.scalar(select(WatchlistItem).where(WatchlistItem.isin == company.isin))
     if item is None:
@@ -174,6 +175,8 @@ def add_equity(
     item.quantity = quantity
     if notes is not None:
         item.notes = notes
+    if aliases is not None:
+        item.aliases = [a.strip() for a in aliases if a.strip()]
     session.commit()
     return item
 
@@ -290,6 +293,7 @@ def load_file(session: Session, path: Path) -> FileLoadResult:
                 owned=bool(entry.get("owned", False)),
                 quantity=Decimal(str(quantity)) if quantity is not None else None,
                 notes=entry.get("notes"),
+                aliases=[str(a) for a in entry.get("aliases") or []],
             )
         )
 

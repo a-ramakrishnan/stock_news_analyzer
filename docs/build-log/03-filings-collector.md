@@ -42,11 +42,13 @@ Keyword rules, checked in order: `concall_transcript`, `concall_audio`, `newspap
 
 ## How to check it
 
+`make filings` fetches the last 7 days the first time; `show` takes an id from `list` (17 was the L&T order win).
+
 ```bash
 make migrate
-make filings                          # last 7 days for LT, KARURVYSYA, MSUMI
+make filings
 uv run sna filings list
-uv run sna filings show <id>          # pick an order win or results filing
+uv run sna filings show 17
 uv run sna filings backfill --since 2023-10-01
 make test
 ```

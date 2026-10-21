@@ -41,7 +41,8 @@ def make_pdf(text: str) -> bytes:
 class FakeClient:
     """Stands in for ExchangeClient: serves the fixture responses and records calls."""
 
-    def __init__(self, fail_nse=False):
+    def __init__(self, fail_nse=False, complete=True):
+        self.complete = complete
         self.bse = json.loads((FIXTURES / "bse_announcements_LT.json").read_text())
         self.nse = json.loads((FIXTURES / "nse_announcements_LT.json").read_text())
         self.fail_nse = fail_nse
@@ -62,9 +63,9 @@ class FakeClient:
         self.downloads.append(urls[0])
         if "AttachLive" in urls[0] and "transcript" in urls[0]:
             # Older BSE files live under AttachHis: the first URL fails, the second works.
-            return urls[1], make_pdf("Transcript of the Q2 earnings call")
+            return urls[1], make_pdf("Transcript of the Q2 earnings call"), True
         if urls[0].endswith(".pdf"):
-            return urls[0], make_pdf("Order worth Rs 1240 crore")
+            return urls[0], make_pdf("Order worth Rs 1240 crore"), self.complete
         raise ExchangeError("not found")
 
 
@@ -228,3 +229,13 @@ def test_retry_failed_downloads_again(watchlist, tmp_path):
     assert collector.fetch_missing_attachments(retry_failed=True) == 1
     watchlist.refresh(doc)
     assert doc.text_status == "ok" and doc.text == "Order worth Rs 1240 crore"
+
+
+def test_file_broken_at_source_is_kept_as_partial(watchlist, tmp_path):
+    client = FakeClient(complete=False)
+    fl.FilingsCollector(watchlist, client, tmp_path).collect(
+        fl.watchlist_companies(watchlist, "LT"), start=date(2026, 10, 1), end=date(2026, 10, 21)
+    )
+    doc = watchlist.query(Document).filter_by(source="nse", doc_type="order_win").one()
+    assert doc.text_status == "partial" and doc.text == "Order worth Rs 1240 crore"
+    assert (tmp_path / doc.attachment_path).is_file()

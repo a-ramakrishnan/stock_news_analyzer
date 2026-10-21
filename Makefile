@@ -1,4 +1,4 @@
-.PHONY: setup up down health migrate securities watchlist filings news prices digest run-all scheduler scheduler-logs scheduler-stop test lint format docker-health
+.PHONY: setup up down health migrate securities watchlist filings news prices digest run-all scheduler scheduler-logs scheduler-stop ui ui-docker ui-stop test lint format docker-health
 
 setup:          ## Install Python dependencies and create .env
 	uv sync
@@ -47,6 +47,15 @@ scheduler-logs: ## Follow the orchestrator's output
 
 scheduler-stop: ## Stop the orchestrator
 	docker compose stop scheduler
+
+ui:             ## Open the dashboard at http://localhost:8501 (Ctrl+C to stop)
+	uv run sna ui
+
+ui-docker:      ## Run the dashboard in Docker instead, at http://localhost:8501
+	docker compose --profile ui up -d --build ui
+
+ui-stop:        ## Stop the Docker dashboard
+	docker compose stop ui
 
 docker-health:  ## Run the same check inside the app container
 	docker compose run --rm --build app

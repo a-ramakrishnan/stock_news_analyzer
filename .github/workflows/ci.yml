@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check the compose file, including the scheduler service
-        run: docker compose --profile scheduler config -q
+      - name: Check the compose file, including the scheduler and dashboard services
+        run: docker compose --profile scheduler --profile ui config -q
       - name: Build the app image and run its health check against Postgres
         run: docker compose run --rm --build app

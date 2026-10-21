@@ -8,10 +8,11 @@ and article with what the stock did afterwards.
 import gzip
 import logging
 import statistics
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
+from time import monotonic
 from typing import Protocol
 
 from sqlalchemy import func, select
@@ -57,6 +58,7 @@ class Client(Protocol):
 class PriceResult:
     days: int = 0
     holidays: int = 0
+    already_stored: int = 0
     rows: int = 0
     errors: list[str] = field(default_factory=list)
 
@@ -83,7 +85,19 @@ class PriceCollector:
         today = datetime.now(IST).date()
         return latest + timedelta(days=1) if latest else today - timedelta(days=default_days)
 
-    def collect(self, start: date, end: date | None = None) -> PriceResult:
+    def collect(
+        self,
+        start: date,
+        end: date | None = None,
+        skip_stored: bool = False,
+        progress: Callable[[int, int, date, str, float | None], None] | None = None,
+    ) -> PriceResult:
+        """Load each weekday from start to end.
+
+        With `skip_stored`, days already in the database are not downloaded again, so a
+        stopped backfill can be re-run cheaply. `progress(done, total, day, status, eta_s)`
+        is called after each day.
+        """
         end = end or datetime.now(IST).date()
         result = PriceResult()
         isins = dict(
@@ -91,23 +105,41 @@ class PriceCollector:
                 select(Company.nse_symbol, Company.isin).where(Company.nse_symbol.is_not(None))
             ).all()
         )
-        for day in weekdays(start, end):
-            try:
-                self._collect_day(day, isins, result)
-            except ExchangeError as exc:
-                result.errors.append(f"{day}: {exc}")
-                log.error("%s: %s", day, exc)
+        stored = (
+            set(self.session.scalars(select(IndexDaily.trade_date).distinct()))
+            if skip_stored
+            else set()
+        )
+        days = list(weekdays(start, end))
+        to_fetch = sum(1 for d in days if d not in stored)
+        fetched, started = 0, monotonic()
+        for done, day in enumerate(days, 1):
+            if day in stored:
+                result.already_stored += 1
+                status = "already stored"
+            else:
+                try:
+                    status = self._collect_day(day, isins, result)
+                except ExchangeError as exc:
+                    result.errors.append(f"{day}: {exc}")
+                    log.error("%s: %s", day, exc)
+                    status = f"error: {exc}"
+                fetched += 1
+            if progress:
+                remaining = to_fetch - fetched
+                eta = (monotonic() - started) / fetched * remaining if fetched else None
+                progress(done, len(days), day, status, eta)
         return result
 
-    def _collect_day(self, day: date, isins: dict[str, str], result: PriceResult) -> None:
+    def _collect_day(self, day: date, isins: dict[str, str], result: PriceResult) -> str:
         index_raw = self.client.nse_file(INDEX_CLOSE_URL.format(d=day))
         if index_raw is None:  # no index file: a holiday, or not published yet today
             result.holidays += 1
-            return
+            return "no trading (holiday, or not published yet)"
         full_raw = self.client.nse_file(FULL_BHAVCOPY_URL.format(d=day))
         if full_raw is None:
             result.errors.append(f"{day}: index file present but no price file")
-            return
+            return "error: index file present but no price file"
         indices = [r for r in parse_index_close(index_raw.decode("utf-8", "replace"))]
         prices = parse_full_bhavcopy(full_raw.decode("utf-8", "replace"))
         if not prices or prices[0].trade_date != day:
@@ -115,7 +147,7 @@ class PriceCollector:
             found = prices[0].trade_date if prices else "nothing"
             log.info("%s: price file holds %s; skipping", day, found)
             result.holidays += 1
-            return
+            return f"no trading (NSE served {found}'s file)"
 
         self._keep_raw(day, "sec_bhavdata_full", full_raw)
         self._keep_raw(day, "ind_close_all", index_raw)
@@ -144,6 +176,7 @@ class PriceCollector:
         self.session.commit()
         result.days += 1
         result.rows += len(rows)
+        return f"loaded {len(rows):,} prices, {len(index_rows)} indices"
 
     def _keep_raw(self, day: date, name: str, content: bytes) -> None:
         path = self.data_dir / "prices" / f"{day:%Y}" / f"{name}_{day:%Y%m%d}.csv.gz"

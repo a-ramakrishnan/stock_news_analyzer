@@ -121,7 +121,7 @@ uv run sna labels list LT
 
 | Command | What it does |
 | --- | --- |
-| `uv run sna prices backfill --since 2023-10-01` | One-off: load NSE daily prices and index closes for every listed stock (about 2 requests per trading day) |
+| `uv run sna prices backfill --since 2023-10-01` | One-off: load NSE daily prices and index closes for every listed stock (about 2 requests per trading day, progress shown; re-running skips stored days) |
 | `make prices` | Load new trading days, update daily moves and labels |
 | `uv run sna prices moves LT` | Daily return vs Nifty 50 and the sector index; `!!` marks unusual days |
 | `uv run sna prices moves --unusual --days 250` | Only the unusual days of the last year |

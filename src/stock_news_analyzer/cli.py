@@ -326,7 +326,9 @@ def filings_fetch(
     sources = fl.SOURCES if source == "both" else (source,)
     with get_session() as session:
         companies = _companies_or_exit(session, symbol)
-        result = _collector(session, pdf).collect(companies, default_days=days, sources=sources)
+        result = _collector(session, pdf).collect(
+            companies, default_days=days, sources=sources, progress=typer.echo
+        )
     _report(result)
 
 
@@ -344,7 +346,9 @@ def filings_backfill(
     sources = fl.SOURCES if source == "both" else (source,)
     with get_session() as session:
         companies = _companies_or_exit(session, symbol)
-        result = _collector(session, pdf).collect(companies, start=start, sources=sources)
+        result = _collector(session, pdf).collect(
+            companies, start=start, sources=sources, progress=typer.echo
+        )
     _report(result)
 
 
@@ -522,10 +526,16 @@ def _price_collector(session):
     return PriceCollector(session, ExchangeClient(), get_settings().data_dir)
 
 
+def _price_progress(done: int, total: int, day, status: str, eta: float | None) -> None:
+    left = f"  ~{eta / 60:.0f} min left" if eta is not None and eta >= 60 else ""
+    typer.echo(f"[{done:>{len(str(total))}}/{total}] {day}  {status}{left}")
+
+
 def _price_report(result, warnings: list[str]) -> None:
     typer.echo(
-        f"{result.days} trading days loaded ({result.rows} price rows), "
-        f"{result.holidays} holidays or not yet published"
+        f"{result.days} trading days loaded ({result.rows:,} price rows), "
+        f"{result.holidays} holidays or not yet published, "
+        f"{result.already_stored} already stored"
     )
     for w in warnings:
         typer.echo(f"warning: {w}")
@@ -544,7 +554,8 @@ def prices_fetch(
 
     with get_session() as session:
         collector = _price_collector(session)
-        result = collector.collect(collector.resume_date(days))
+        result = collector.collect(collector.resume_date(days), progress=_price_progress)
+        typer.echo("updating daily moves...")
         warnings = compute_moves(session)
     _price_report(result, warnings)
 
@@ -553,14 +564,18 @@ def prices_fetch(
 def prices_backfill(
     since: str = typer.Option(..., help="Start date, YYYY-MM-DD (e.g. 2023-10-01)."),
     until: str = typer.Option(None, help="End date, YYYY-MM-DD (default: today)."),
+    force: bool = typer.Option(False, help="Download days already stored again."),
 ) -> None:
-    """Load history (about 2 requests per trading day). Safe to re-run."""
+    """Load history (about 2 requests per trading day). Safe to stop and re-run."""
     from stock_news_analyzer.agents.prices import compute_moves
 
     start = datetime.strptime(since, "%Y-%m-%d").date()
     end = datetime.strptime(until, "%Y-%m-%d").date() if until else None
     with get_session() as session:
-        result = _price_collector(session).collect(start, end)
+        result = _price_collector(session).collect(
+            start, end, skip_stored=not force, progress=_price_progress
+        )
+        typer.echo("updating daily moves...")
         warnings = compute_moves(session)
     _price_report(result, warnings)
 

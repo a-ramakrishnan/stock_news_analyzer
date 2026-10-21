@@ -239,3 +239,15 @@ def test_file_broken_at_source_is_kept_as_partial(watchlist, tmp_path):
     doc = watchlist.query(Document).filter_by(source="nse", doc_type="order_win").one()
     assert doc.text_status == "partial" and doc.text == "Order worth Rs 1240 crore"
     assert (tmp_path / doc.attachment_path).is_file()
+
+
+def test_progress_reports_each_window(watchlist, tmp_path):
+    lines = []
+    fl.FilingsCollector(watchlist, FakeClient(), tmp_path, pdf_policy="none").collect(
+        fl.watchlist_companies(watchlist, "LT"),
+        start=date(2026, 9, 1),
+        end=date(2026, 10, 21),
+        progress=lines.append,
+    )
+    assert lines[0] == "LT BSE 2026-09-22..2026-10-21: 2 new, 0 already stored, 0 PDFs"
+    assert len(lines) == 4  # two 30-day windows for each exchange

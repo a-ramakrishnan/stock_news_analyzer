@@ -52,7 +52,7 @@ uv run sna labels update
 uv run sna labels list LT --type order_win
 ```
 
-`make watchlist` stores the sector indices. The backfill makes about 1,500 requests (roughly 25–40 minutes); it can be stopped and re-run safely.
+`make watchlist` stores the sector indices. The backfill makes about 1,500 requests (roughly 25–40 minutes) and prints one line per day with the time left, e.g. `[123/780] 2024-04-15  loaded 2,612 prices, 130 indices  ~18 min left`. Stopping it with Ctrl+C and re-running skips days already stored (`--force` downloads them again). `sna filings fetch/backfill` now print a line per company, exchange and 30-day window too.
 
 ## Tweet draft
 

@@ -270,3 +270,22 @@ def test_cli_moves_and_labels(watchlist, tmp_path, test_database_url, monkeypatc
     assert "Nifty Bank" in result.stdout
     result = runner.invoke(app, ["labels", "update"])
     assert result.exit_code == 0 and "labels computed" in result.stdout
+
+
+@pytest.mark.db
+def test_progress_and_skipping_stored_days(watchlist, tmp_path):
+    lines = []
+    collector = pr.PriceCollector(watchlist, FakeNSE(), tmp_path)
+    collector.collect(
+        date(2026, 10, 16),
+        date(2026, 10, 19),
+        progress=lambda done, total, day, status, eta: lines.append((done, total, day, status)),
+    )
+    assert lines[0][:3] == (1, 2, date(2026, 10, 16)) and lines[0][3].startswith("loaded ")
+
+    client = FakeNSE()
+    result = pr.PriceCollector(watchlist, client, tmp_path).collect(
+        date(2026, 10, 16), date(2026, 10, 21), skip_stored=True
+    )
+    assert (result.already_stored, result.days, result.holidays) == (2, 1, 1)
+    assert not any("16102026" in u or "19102026" in u for u in client.urls)

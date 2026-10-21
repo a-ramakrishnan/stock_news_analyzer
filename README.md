@@ -17,7 +17,8 @@ Every command block below can be pasted into Terminal as is; explanations are in
 | 4 | News Collector (RSS feeds + Google News) | done |
 | 5 | Price & Label (NSE daily prices, moves, labels) | done |
 | 6 | Orchestrator + first daily digest | done |
-| 7 | Dashboard: Phase 1 output in the browser | this PR |
+| 7 | Dashboard: Phase 1 output in the browser | done |
+| 8 | History since Oct 2023: news backfill + `make backfill` | this PR |
 
 ## Run it on a Mac
 
@@ -107,6 +108,7 @@ uv run sna news list
 | `make news` | Read all feeds + a Google News search per company; keep articles that mention a watchlist company |
 | `uv run sna news fetch --no-google` | Feeds only, no Google News |
 | `uv run sna news list KARURVYSYA` | Latest articles for one company |
+| `uv run sna news backfill --since 2023-10-01` | One-off: older articles from Google News, a month per search per company (feeds only carry recent news) |
 | `uv run sna news relink` | Re-match stored articles after editing `aliases` or `exclude` |
 
 Articles are matched by company name (without "Limited") and the `aliases` in `config/watchlist.yaml`; `exclude` phrases there (e.g. "L&T Technology") stop look-alike companies from matching.
@@ -131,6 +133,21 @@ uv run sna labels list LT
 | `uv run sna labels list LT --type order_win` | Each filing or article with the stock's return vs Nifty 50 after 1, 5 and 20 trading days |
 
 Returns are adjusted for bonus issues, splits and dividends using NSE's corporate actions. A day is unusual when the stock's return minus the Nifty 50's is more than `UNUSUAL_THRESHOLD` (default 2.0, set in `.env`) standard deviations of the previous 60 days. Labels start from the first trading day whose close could reflect the news (same day if published before 15:30 IST).
+
+## History in one go
+
+```bash
+make scheduler-stop
+make backfill
+make scheduler
+```
+
+| Command | What it does |
+| --- | --- |
+| `make backfill` | Prices, filings (PDFs for important ones), news and labels since 1 Oct 2023; safe to stop and re-run, stored items are skipped |
+| `make backfill SINCE=2024-04-01` | The same from another date |
+
+Stopping the scheduler first keeps the two from fetching from the exchanges at the same time.
 
 ## Orchestrator and daily digest
 

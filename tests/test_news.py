@@ -1,5 +1,6 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from conftest import FIXTURES
@@ -12,6 +13,7 @@ from stock_news_analyzer.sources.news import (
     Feed,
     FeedConfig,
     NewsError,
+    google_news_range_url,
     google_news_url,
     load_feed_config,
     parse_feed,
@@ -253,3 +255,78 @@ def test_progress_line_per_feed(watchlist):
         "et_stocks: 4 read, 3 about your stocks, 3 new",
         "broken: FAILED HTTP 403",
     ]
+
+
+# --- history from Google News --------------------------------------------------
+
+
+def test_google_news_range_url_includes_the_last_day():
+    url = google_news_range_url('"Karur Vysya Bank"', date(2023, 10, 1), date(2023, 10, 30))
+    assert parse_qs(urlparse(url).query)["q"] == [
+        '"Karur Vysya Bank" after:2023-10-01 before:2023-10-31'
+    ]
+
+
+def test_month_windows_cover_the_range_without_gaps():
+    windows = list(nw.month_windows(date(2023, 10, 1), date(2024, 1, 15)))
+    assert windows[0] == (date(2023, 10, 1), date(2023, 10, 30))
+    assert windows[-1][1] == date(2024, 1, 15)
+    for (_, hi), (lo, _) in zip(windows, windows[1:], strict=False):
+        assert (lo - hi).days == 1
+
+
+def _query(url):
+    return parse_qs(urlparse(url).query)["q"][0]
+
+
+class HistoryClient:
+    """Google News with one Motherson article; a full page (100 items) for 1-30 Oct 2023."""
+
+    def __init__(self):
+        self.queries = []
+
+    def fetch(self, url):
+        q = _query(url)
+        self.queries.append(q)
+        if "after:2023-10-01 before:2023-10-31" in q:
+            item = (FIXTURES / "rss_google_news.xml").read_text()
+            head, rest = item.split("<item>", 1)
+            body, tail = rest.split("</item>", 1)
+            items = "".join(
+                f"<item>{body.replace('CBMiSGh0', f'CBMi{i:03d}')}</item>" for i in range(100)
+            )
+            return f"{head}{items}{tail}".encode()
+        if "Motherson" in q:
+            return (FIXTURES / "rss_google_news.xml").read_bytes()
+        return EMPTY_FEED
+
+
+@pytest.mark.db
+def test_backfill_searches_each_month_and_splits_full_windows(watchlist):
+    client = HistoryClient()
+    lines = []
+    result = nw.NewsCollector(watchlist, client, CONFIG).backfill(
+        date(2023, 10, 1), date(2023, 11, 29), symbol="MSUMI", progress=lines.append
+    )
+    # Two monthly windows; the first returned 100 items, so it was searched again in halves.
+    assert [q.split('" ', 1)[1] for q in client.queries] == [
+        "after:2023-10-01 before:2023-10-31",
+        "after:2023-10-01 before:2023-10-16",
+        "after:2023-10-16 before:2023-10-31",
+        "after:2023-10-31 before:2023-11-30",
+    ]
+    assert all(q.startswith('"Motherson Sumi Wiring India"') for q in client.queries)
+    # 100 distinct articles from the full page, plus the fixture article found in the halves
+    # and again in November (stored once).
+    assert result.new == 101 and not result.errors
+    assert lines[0].startswith("google:MSUMI 01 Oct 2023-30 Oct 2023: 100 read")
+
+
+@pytest.mark.db
+def test_backfill_all_companies_and_reruns_store_nothing_new(watchlist):
+    client = HistoryClient()
+    collector = nw.NewsCollector(watchlist, client, CONFIG)
+    collector.backfill(date(2023, 11, 1), date(2023, 11, 30))
+    assert len(client.queries) == 3  # one month, three companies
+    again = collector.backfill(date(2023, 11, 1), date(2023, 11, 30))
+    assert again.new == 0 and again.matched == 1

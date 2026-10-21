@@ -6,8 +6,9 @@ mention a watchlist company, and links each article to the companies it mentions
 
 import logging
 import re
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 from typing import Protocol
 
 from sqlalchemy import delete, select
@@ -16,9 +17,11 @@ from sqlalchemy.orm import Session
 
 from stock_news_analyzer.models import Company, Document, DocumentCompany, WatchlistItem
 from stock_news_analyzer.sources.news import (
+    GOOGLE_MAX_ITEMS,
     Article,
     FeedConfig,
     NewsError,
+    google_news_range_url,
     google_news_url,
     parse_feed,
 )
@@ -110,6 +113,15 @@ class NewsResult:
         return [f for f in self.feeds if f.error]
 
 
+def month_windows(start: date, end: date, days: int = 30) -> Iterator[tuple[date, date]]:
+    """Consecutive (first, last) windows of `days` days covering start..end, oldest first."""
+    lo = start
+    while lo <= end:
+        hi = min(end, lo + timedelta(days=days - 1))
+        yield lo, hi
+        lo = hi + timedelta(days=1)
+
+
 class NewsCollector:
     def __init__(self, session: Session, client: Client, config: FeedConfig):
         self.session = session
@@ -139,7 +151,41 @@ class NewsCollector:
                 self._read("news:google", key, url, "Google News", matcher, result)
         return result
 
-    def _read(self, source, key, url, publisher, matcher, result: NewsResult) -> None:
+    def backfill(
+        self,
+        start: date,
+        end: date,
+        symbol: str | None = None,
+        window_days: int = 30,
+        progress: Callable[[str], None] | None = None,
+    ) -> NewsResult:
+        """Search Google News for each company, one window (about a month) at a time.
+
+        Feeds only carry recent articles, so history comes from Google News alone. A window
+        that returns Google's maximum is split in half and searched again, down to one day.
+        """
+        self.progress = progress
+        matcher = watchlist_matcher(self.session)
+        result = NewsResult()
+        for company, *_ in matcher.entries:
+            if symbol and company.nse_symbol != symbol:
+                continue
+            query = f'"{default_aliases(company)[0]}"'
+            for lo, hi in month_windows(start, end, window_days):
+                self._search(company, query, lo, hi, matcher, result)
+        return result
+
+    def _search(self, company, query, lo, hi, matcher, result: NewsResult) -> None:
+        key = f"google:{company.nse_symbol or company.isin} {lo:%d %b %Y}-{hi:%d %b %Y}"
+        report = self._read(
+            "news:google", key, google_news_range_url(query, lo, hi), "Google News", matcher, result
+        )
+        if report.items >= GOOGLE_MAX_ITEMS and hi > lo:
+            mid = lo + (hi - lo) // 2
+            self._search(company, query, lo, mid, matcher, result)
+            self._search(company, query, mid + timedelta(days=1), hi, matcher, result)
+
+    def _read(self, source, key, url, publisher, matcher, result: NewsResult) -> FeedReport:
         report = FeedReport(key=key)
         result.feeds.append(report)
         try:
@@ -148,7 +194,7 @@ class NewsCollector:
             report.error = str(exc)
             log.warning("%s: %s", key, exc)
             self._report(f"{key}: FAILED {exc}")
-            return
+            return report
         report.items = len(articles)
         matched = new = 0
         for article in articles:
@@ -162,6 +208,7 @@ class NewsCollector:
         result.matched += matched
         result.new += new
         self._report(f"{key}: {len(articles)} read, {matched} about your stocks, {new} new")
+        return report
 
     def _report(self, line: str) -> None:
         log.debug(line)

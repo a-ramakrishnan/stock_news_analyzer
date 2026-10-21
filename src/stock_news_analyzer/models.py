@@ -227,3 +227,22 @@ class EventLabel(Base):
     computed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class CorporateAction(Base):
+    """NSE corporate actions (bonus, split, dividend...) used to adjust daily returns.
+
+    Keyed by NSE symbol rather than ISIN: NSE's records sometimes carry an older ISIN.
+    """
+
+    __tablename__ = "corporate_actions"
+
+    symbol: Mapped[str] = mapped_column(String(32), primary_key=True)
+    ex_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    subject: Mapped[str] = mapped_column(Text, primary_key=True)
+    series: Mapped[str | None] = mapped_column(String(4))
+    isin: Mapped[str | None] = mapped_column(String(12))
+    kind: Mapped[str] = mapped_column(String(16))  # bonus, split, consolidation, dividend, ...
+    price_factor: Mapped[float] = mapped_column(default=1.0)
+    dividend: Mapped[Decimal | None] = mapped_column(Numeric(14, 4))
+    raw: Mapped[dict] = mapped_column(JSONB)

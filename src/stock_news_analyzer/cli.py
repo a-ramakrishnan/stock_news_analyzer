@@ -526,6 +526,16 @@ def _price_collector(session):
     return PriceCollector(session, ExchangeClient(), get_settings().data_dir)
 
 
+def _refresh_actions(session, client, start=None) -> list[str]:
+    """Bonus issues, splits and dividends for the watchlist, used to adjust returns."""
+    from stock_news_analyzer.agents.prices import refresh_corporate_actions
+
+    today = datetime.now(fl.IST).date()
+    since = min(start or today, today.replace(year=today.year - 3))
+    typer.echo("fetching corporate actions (bonus, split, dividend)...")
+    return refresh_corporate_actions(session, client, since, today)
+
+
 def _price_progress(done: int, total: int, day, status: str, eta: float | None) -> None:
     left = f"  ~{eta / 60:.0f} min left" if eta is not None and eta >= 60 else ""
     typer.echo(f"[{done:>{len(str(total))}}/{total}] {day}  {status}{left}")
@@ -555,8 +565,9 @@ def prices_fetch(
     with get_session() as session:
         collector = _price_collector(session)
         result = collector.collect(collector.resume_date(days), progress=_price_progress)
+        warnings = _refresh_actions(session, collector.client)
         typer.echo("updating daily moves...")
-        warnings = compute_moves(session)
+        warnings += compute_moves(session)
     _price_report(result, warnings)
 
 
@@ -572,11 +583,11 @@ def prices_backfill(
     start = datetime.strptime(since, "%Y-%m-%d").date()
     end = datetime.strptime(until, "%Y-%m-%d").date() if until else None
     with get_session() as session:
-        result = _price_collector(session).collect(
-            start, end, skip_stored=not force, progress=_price_progress
-        )
+        collector = _price_collector(session)
+        result = collector.collect(start, end, skip_stored=not force, progress=_price_progress)
+        warnings = _refresh_actions(session, collector.client, start)
         typer.echo("updating daily moves...")
-        warnings = compute_moves(session)
+        warnings += compute_moves(session)
     _price_report(result, warnings)
 
 
@@ -617,6 +628,30 @@ def prices_moves(
                     f"{pct(m.sector_return):>12} {pct(m.excess_return):>9} "
                     f"{pct(m.sector_excess_return):>9} {z:>6}{'  !!' if m.unusual else ''}"
                 )
+
+
+@prices_app.command("actions")
+def prices_actions(
+    symbol: str = typer.Argument(None, help="NSE symbol (default: all watchlist stocks)."),
+) -> None:
+    """Corporate actions used to adjust returns (refreshed by `prices fetch`)."""
+    from sqlalchemy import select
+
+    from stock_news_analyzer.models import CorporateAction
+
+    with get_session() as session:
+        symbols = [c.nse_symbol for c in _companies_or_exit(session, symbol)]
+        actions = session.scalars(
+            select(CorporateAction)
+            .where(CorporateAction.symbol.in_(symbols))
+            .order_by(CorporateAction.symbol, CorporateAction.ex_date)
+        ).all()
+        if not actions:
+            typer.echo("no corporate actions stored yet; run: sna prices fetch")
+        for a in actions:
+            adj = f"x{a.price_factor:.4f}" if a.price_factor != 1 else ""
+            div = f"-Rs {a.dividend:g}" if a.dividend else ""
+            typer.echo(f"{a.symbol:<11} {a.ex_date}  {a.kind:<13} {adj or div:<12} {a.subject}")
 
 
 @prices_app.command("indices")

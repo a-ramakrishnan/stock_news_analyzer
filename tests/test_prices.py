@@ -256,11 +256,11 @@ def test_cli_moves_and_labels(watchlist, tmp_path, test_database_url, monkeypatc
 
     from stock_news_analyzer.cli import app
 
+    monkeypatch.setenv("DATABASE_URL", test_database_url)  # before settings are first read
     pr.PriceCollector(watchlist, FakeNSE(), tmp_path).collect(
         date(2026, 10, 16), date(2026, 10, 21)
     )
     pr.compute_moves(watchlist)
-    monkeypatch.setenv("DATABASE_URL", test_database_url)
     runner = CliRunner()
     result = runner.invoke(app, ["prices", "moves", "LT", "--days", "5"])
     assert result.exit_code == 0, result.stdout

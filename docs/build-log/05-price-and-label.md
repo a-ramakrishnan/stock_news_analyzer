@@ -30,13 +30,26 @@ The full bhavcopy is the price source: it reaches back years (the new format onl
 
 ## How the numbers are calculated
 
-- **Daily return** = close ÷ NSE's previous close − 1. NSE adjusts the previous close on split and bonus ex-dates, so those don't look like crashes.
+- **Daily return** = close ÷ (previous close × corporate-action factor − dividend) − 1. See "First live run" below for why the adjustment is needed.
 - **Excess return** = stock return − benchmark return (Nifty 50, and the sector index).
-- **Unusual day:** excess return vs Nifty 50 more than 2× the standard deviation of the previous 60 trading days (needs at least 20 days of history).
+- **Unusual day:** excess return vs Nifty 50 more than `UNUSUAL_THRESHOLD` (default 2.0) × the standard deviation of the previous 60 trading days (needs at least 20 days of history). 2.0 flags about 5% of days, roughly one per stock per month.
 - **day0** for a filing or article: the same trading day if published before 15:30 IST, otherwise the next trading day. Weekends and holidays roll forward.
 - **Labels** compound daily returns from day0 over 1, 5 and 20 trading days. A label stays incomplete until all 20 days have happened, and is recomputed on each `labels update` until then.
 
 Example from the real data: on 19 Oct L&T rose 0.96% while the Nifty 50 fell 1.11%, so it beat the market by 2.07% (and Nifty Infrastructure by about 2%).
+
+## First live run (Mac, 21 Oct 2026)
+
+The 3-year backfill loaded 751 trading days (1.4 million price rows, 162–167 indices a day); all three sector index names matched NSE's. L&T's 19 Oct check held: +0.96% vs Nifty −1.11%, flagged unusual (z = +2.6).
+
+It also exposed a wrong assumption: **NSE's full bhavcopy does not adjust the previous close on ex-dates.**
+
+| Stock | Ex-date | Action | Stored prev close → close | Unadjusted | Adjusted |
+| --- | --- | --- | --- | --- | --- |
+| MSUMI | 18 Jul 2025 | Bonus 1:2 | 64.47 → 43.52 | −32.5% | +1.26% |
+| KARURVYSYA | 26 Aug 2025 | Bonus 1:5 | 263.95 → 216.10 | −18.1% | −1.75% |
+
+Each fake crash also inflated the "usual move" for the next 60 days, hiding real unusual days. Fix: a `corporate_actions` table (migration 0007) filled from NSE's corporate-actions API for watchlist stocks on every `prices fetch`/`backfill`; on an ex-date the previous close is multiplied by the price factor (bonus a:b → b/(a+b), split → new/old face value) and dividends are subtracted, so returns are total returns. NSE's record for KVB carries an older ISIN (`INE036D01010`), so actions are matched on NSE symbol. `sna prices actions` lists them.
 
 ## How to check it
 
@@ -45,6 +58,7 @@ git pull
 make migrate
 make watchlist
 uv run sna prices backfill --since 2023-10-01
+uv run sna prices actions
 uv run sna prices indices
 uv run sna prices moves LT --days 10
 uv run sna prices moves --unusual --days 250

@@ -24,6 +24,7 @@ BSE_HEADERS = {"Referer": "https://www.bseindia.com/", "Origin": "https://www.bs
 NSE_WARMUP_URL = "https://www.nseindia.com/companies-listing/corporate-filings-announcements"
 NSE_ARCHIVES = "https://nsearchives.nseindia.com"
 NSE_ANNOUNCEMENTS_URL = "https://www.nseindia.com/api/corporate-announcements"
+NSE_CORPORATE_ACTIONS_URL = "https://www.nseindia.com/api/corporates-corporateActions"
 
 
 class ExchangeError(Exception):
@@ -92,6 +93,16 @@ class ExchangeClient:
             "to_date": end.strftime("%d-%m-%Y"),
         }
         return self._get_json("nse", NSE_ANNOUNCEMENTS_URL, params)
+
+    def nse_corporate_actions(self, symbol: str, start: date, end: date) -> list:
+        params = {
+            "index": "equities",
+            "symbol": symbol,
+            "from_date": start.strftime("%d-%m-%Y"),
+            "to_date": end.strftime("%d-%m-%Y"),
+        }
+        data = self._get_json("nse", NSE_CORPORATE_ACTIONS_URL, params)
+        return data if isinstance(data, list) else data.get("data", [])
 
     def nse_file(self, url: str) -> bytes | None:
         """An NSE archive file, or None if NSE has none for that day (HTTP 404: a holiday)."""

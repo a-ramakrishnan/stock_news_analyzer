@@ -126,9 +126,10 @@ uv run sna labels list LT
 | `uv run sna prices moves LT` | Daily return vs Nifty 50 and the sector index; `!!` marks unusual days |
 | `uv run sna prices moves --unusual --days 250` | Only the unusual days of the last year |
 | `uv run sna prices indices bank` | NSE index names, for `sector_index` in `config/watchlist.yaml` |
+| `uv run sna prices actions` | Bonus issues, splits and dividends used to adjust returns |
 | `uv run sna labels list LT --type order_win` | Each filing or article with the stock's return vs Nifty 50 after 1, 5 and 20 trading days |
 
-A day is unusual when the stock's return minus the Nifty 50's is more than 2 standard deviations of the previous 60 days. Labels start from the first trading day whose close could reflect the news (same day if published before 15:30 IST).
+Returns are adjusted for bonus issues, splits and dividends using NSE's corporate actions. A day is unusual when the stock's return minus the Nifty 50's is more than `UNUSUAL_THRESHOLD` (default 2.0, set in `.env`) standard deviations of the previous 60 days. Labels start from the first trading day whose close could reflect the news (same day if published before 15:30 IST).
 
 ## Other commands
 

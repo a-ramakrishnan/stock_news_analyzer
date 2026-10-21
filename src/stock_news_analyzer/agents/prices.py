@@ -19,8 +19,10 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from stock_news_analyzer.config import get_settings
 from stock_news_analyzer.models import (
     Company,
+    CorporateAction,
     Document,
     DocumentCompany,
     EventLabel,
@@ -30,6 +32,7 @@ from stock_news_analyzer.models import (
     WatchlistItem,
 )
 from stock_news_analyzer.sources.announcements import IST
+from stock_news_analyzer.sources.corporate_actions import parse_corporate_actions
 from stock_news_analyzer.sources.exchange_http import ExchangeError
 from stock_news_analyzer.sources.prices import (
     FULL_BHAVCOPY_URL,
@@ -46,7 +49,6 @@ MAIN_SERIES = ("EQ", "BE", "BZ", "SM", "ST")
 MARKET_CLOSE = time(15, 30)
 WINDOW = 60  # trading days used to judge what a normal move is
 MIN_HISTORY = 20  # no unusual-move flag until this many days of history exist
-THRESHOLD = 2.0  # |excess return| above this many standard deviations is unusual
 HORIZONS = (1, 5, 20)
 
 
@@ -200,8 +202,23 @@ def index_returns(session: Session, index_name: str) -> dict[date, float]:
     }
 
 
-def stock_returns(session: Session, isin: str) -> dict[date, float]:
-    """Daily returns from NSE's previous close, which NSE adjusts on split and bonus ex-dates."""
+def stock_returns(session: Session, isin: str, symbol: str | None = None) -> dict[date, float]:
+    """Daily total returns: close against the previous close, adjusted on ex-dates.
+
+    NSE's bhavcopy does not adjust its previous close for bonus issues, splits or dividends,
+    so on an ex-date the previous close is multiplied by the action's price factor and the
+    dividend is subtracted (MSUMI's 1:2 bonus: 43.52 / (64.47 x 2/3) - 1 = +1.26%, not -32.5%).
+    """
+    adjustments: dict[date, tuple[float, float]] = {}
+    if symbol:
+        for action in session.scalars(
+            select(CorporateAction).where(CorporateAction.symbol == symbol)
+        ):
+            factor, dividend = adjustments.get(action.ex_date, (1.0, 0.0))
+            adjustments[action.ex_date] = (
+                factor * action.price_factor,
+                dividend + float(action.dividend or 0),
+            )
     rows = session.execute(
         select(PriceDaily.trade_date, PriceDaily.series, PriceDaily.prev_close, PriceDaily.close)
         .where(PriceDaily.isin == isin, PriceDaily.close.is_not(None))
@@ -211,10 +228,53 @@ def stock_returns(session: Session, isin: str) -> dict[date, float]:
     for d, series, prev, close in rows:
         if not prev:
             continue
+        factor, dividend = adjustments.get(d, (1.0, 0.0))
+        base = float(prev) * factor - dividend
+        if base <= 0:
+            continue
         rank = MAIN_SERIES.index(series) if series in MAIN_SERIES else len(MAIN_SERIES)
         if d not in best or rank < best[d][0]:
-            best[d] = (rank, float(close) / float(prev) - 1)
+            best[d] = (rank, float(close) / base - 1)
     return {d: r for d, (_, r) in sorted(best.items())}
+
+
+def refresh_corporate_actions(session: Session, client, start: date, end: date) -> list[str]:
+    """Fetch NSE corporate actions for every watchlist stock. Returns error messages."""
+    errors = []
+    for company, _ in watchlist_benchmarks(session):
+        if not company.nse_symbol:
+            continue
+        try:
+            actions = parse_corporate_actions(
+                client.nse_corporate_actions(company.nse_symbol, start, end)
+            )
+        except ExchangeError as exc:
+            errors.append(f"{company.nse_symbol} corporate actions: {exc}")
+            continue
+        rows = [
+            {
+                "symbol": a.symbol or company.nse_symbol,
+                "ex_date": a.ex_date,
+                "subject": a.subject,
+                "series": a.series,
+                "isin": a.isin,
+                "kind": a.kind,
+                "price_factor": a.price_factor,
+                "dividend": a.dividend,
+                "raw": a.raw,
+            }
+            for a in actions
+        ]
+        if rows:
+            stmt = insert(CorporateAction).values(rows)
+            session.execute(
+                stmt.on_conflict_do_update(
+                    index_elements=["symbol", "ex_date", "subject"],
+                    set_={c: stmt.excluded[c] for c in ("kind", "price_factor", "dividend", "raw")},
+                )
+            )
+    session.commit()
+    return errors
 
 
 def watchlist_benchmarks(session: Session) -> list[tuple[Company, str | None]]:
@@ -228,8 +288,9 @@ def watchlist_benchmarks(session: Session) -> list[tuple[Company, str | None]]:
     ]
 
 
-def compute_moves(session: Session) -> list[str]:
+def compute_moves(session: Session, threshold: float | None = None) -> list[str]:
     """Recompute daily moves for every watchlist stock. Returns warnings (e.g. unknown index)."""
+    threshold = threshold if threshold is not None else get_settings().unusual_threshold
     warnings = []
     known = set(session.scalars(select(IndexDaily.index_name).distinct()))
     nifty = index_returns(session, NIFTY)
@@ -240,7 +301,7 @@ def compute_moves(session: Session) -> list[str]:
         sector_r = index_returns(session, sector) if sector else {}
         history: list[float] = []
         rows = []
-        for d, r in stock_returns(session, company.isin).items():
+        for d, r in stock_returns(session, company.isin, company.nse_symbol).items():
             excess = r - nifty[d] if d in nifty else None
             z = None
             if excess is not None and len(history) >= MIN_HISTORY:
@@ -257,7 +318,7 @@ def compute_moves(session: Session) -> list[str]:
                     "excess_return": excess,
                     "sector_excess_return": r - sector_r[d] if d in sector_r else None,
                     "zscore": z,
-                    "unusual": z is not None and abs(z) >= THRESHOLD,
+                    "unusual": z is not None and abs(z) >= threshold,
                 }
             )
             if excess is not None:

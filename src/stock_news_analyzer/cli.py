@@ -1,7 +1,7 @@
 """Command-line entry point: `sna <command>`."""
 
 import logging
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -10,6 +10,7 @@ import typer
 from sqlalchemy.exc import OperationalError
 
 from stock_news_analyzer import __version__
+from stock_news_analyzer.agents import filings as fl
 from stock_news_analyzer.agents import watchlist as wl
 from stock_news_analyzer.config import get_settings
 from stock_news_analyzer.db import check_database, get_engine, get_session, upgrade_database
@@ -19,7 +20,11 @@ app = typer.Typer(help="Stock news analyzer for Indian stocks and bullion.", no_
 db_app = typer.Typer(help="Database maintenance.", no_args_is_help=True)
 securities_app = typer.Typer(help="Master list of NSE/BSE securities.", no_args_is_help=True)
 watchlist_app = typer.Typer(help="Stocks and bullion you track.", no_args_is_help=True)
+filings_app = typer.Typer(
+    help="Exchange filings (BSE and NSE announcements).", no_args_is_help=True
+)
 app.add_typer(db_app, name="db")
+app.add_typer(filings_app, name="filings")
 app.add_typer(securities_app, name="securities")
 app.add_typer(watchlist_app, name="watchlist")
 
@@ -30,6 +35,8 @@ def main() -> None:
         level=get_settings().log_level,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    # pypdf warns about every small defect in exchange PDFs; real failures are still reported.
+    logging.getLogger("pypdf").setLevel(logging.ERROR)
 
 
 @app.command()
@@ -258,3 +265,138 @@ def watchlist_peers(
         for p in suggestions:
             mcap = f"Rs {p.market_cap_cr:,.0f} cr" if p.market_cap_cr is not None else ""
             typer.echo(f"  {p.nse_symbol or '-':<12} {mcap:>18}  {p.name}")
+
+
+# --- filings -----------------------------------------------------------------
+
+
+def _collector(session, pdf: str) -> fl.FilingsCollector:
+    from stock_news_analyzer.sources.exchange_http import ExchangeClient
+
+    return fl.FilingsCollector(session, ExchangeClient(), get_settings().data_dir, pdf_policy=pdf)
+
+
+def _companies_or_exit(session, symbol: str | None):
+    companies = fl.watchlist_companies(session, symbol)
+    if not companies:
+        typer.echo(f"{symbol} is not on the watchlist" if symbol else "watchlist is empty")
+        raise typer.Exit(1)
+    return companies
+
+
+def _report(result: fl.CollectResult) -> None:
+    typer.echo(
+        f"{result.new} new filings, {result.already_had} already stored, "
+        f"{result.attachments} attachments downloaded"
+    )
+    for err in result.errors:
+        typer.echo(f"error: {err}")
+    if result.errors:
+        raise typer.Exit(1)
+
+
+@filings_app.command("fetch")
+def filings_fetch(
+    symbol: str = typer.Option(None, help="Only this NSE symbol (default: whole watchlist)."),
+    days: int = typer.Option(7, help="How far back to look the first time a company is fetched."),
+    source: str = typer.Option("both", help="bse, nse or both."),
+    pdf: str = typer.Option("all", help="Attachments to download: all, important or none."),
+) -> None:
+    """Fetch new announcements since the last run."""
+    sources = fl.SOURCES if source == "both" else (source,)
+    with get_session() as session:
+        companies = _companies_or_exit(session, symbol)
+        result = _collector(session, pdf).collect(companies, default_days=days, sources=sources)
+    _report(result)
+
+
+@filings_app.command("backfill")
+def filings_backfill(
+    since: str = typer.Option(..., help="Start date, YYYY-MM-DD (e.g. 2023-10-01)."),
+    symbol: str = typer.Option(None, help="Only this NSE symbol (default: whole watchlist)."),
+    source: str = typer.Option("both", help="bse, nse or both."),
+    pdf: str = typer.Option(
+        "important", help="all, important (results, concalls, orders, ratings) or none."
+    ),
+) -> None:
+    """Fetch the full history from a start date. Safe to re-run; stored filings are skipped."""
+    start = datetime.strptime(since, "%Y-%m-%d").date()
+    sources = fl.SOURCES if source == "both" else (source,)
+    with get_session() as session:
+        companies = _companies_or_exit(session, symbol)
+        result = _collector(session, pdf).collect(companies, start=start, sources=sources)
+    _report(result)
+
+
+@filings_app.command("attachments")
+def filings_attachments(
+    symbol: str = typer.Option(None, help="Only this NSE symbol."),
+    pdf: str = typer.Option("all", help="all or important."),
+    limit: int = typer.Option(200, help="Maximum files to download this run."),
+    retry_failed: bool = typer.Option(False, help="Also re-download files whose PDF failed."),
+) -> None:
+    """Download attachments that were skipped or failed earlier."""
+    with get_session() as session:
+        isin = _companies_or_exit(session, symbol)[0].isin if symbol else None
+        count = _collector(session, pdf).fetch_missing_attachments(
+            isin=isin, limit=limit, retry_failed=retry_failed
+        )
+    typer.echo(f"{count} attachments downloaded")
+
+
+@filings_app.command("reclassify")
+def filings_reclassify() -> None:
+    """Recompute filing types and clean titles from the stored raw records (after rule changes)."""
+    with get_session() as session:
+        changed = fl.reclassify(session)
+    typer.echo(f"{changed} filings updated")
+
+
+@filings_app.command("list")
+def filings_list(
+    symbol: str = typer.Argument(None, help="NSE symbol (default: all watchlist companies)."),
+    doc_type: str = typer.Option(
+        None, "--type", help="e.g. order_win, results, concall_transcript"
+    ),
+    limit: int = typer.Option(20, help="How many to show."),
+) -> None:
+    """Show the latest stored filings."""
+    with get_session() as session:
+        isin = _companies_or_exit(session, symbol)[0].isin if symbol else None
+        rows = fl.recent_documents(session, isin=isin, doc_type=doc_type, limit=limit)
+        if not rows:
+            typer.echo("no filings stored yet; run: sna filings fetch")
+            return
+        for doc, company in rows:
+            when = doc.published_at.astimezone(fl.IST).strftime("%Y-%m-%d %H:%M")
+            text = {"ok": "text", "empty": "no text", "failed": "pdf failed"}.get(
+                doc.text_status, "-"
+            )
+            typer.echo(
+                f"{doc.id:>6}  {when}  {doc.source.upper()}  {company.nse_symbol or '-':<11} "
+                f"{doc.doc_type:<21} {text:<10} {doc.title[:70]}"
+            )
+
+
+@filings_app.command("show")
+def filings_show(
+    doc_id: int = typer.Argument(..., help="Filing id from `sna filings list`."),
+    chars: int = typer.Option(1500, help="How much of the extracted text to print."),
+) -> None:
+    """Show one filing: details, file location and the start of its text."""
+    from stock_news_analyzer.models import Document
+
+    with get_session() as session:
+        doc = session.get(Document, doc_id)
+        if doc is None:
+            typer.echo(f"no filing with id {doc_id}")
+            raise typer.Exit(1)
+        typer.echo(f"{doc.title}\n{doc.subject}")
+        typer.echo(f"source     {doc.source.upper()} {doc.source_id}")
+        typer.echo(f"type       {doc.doc_type}")
+        typer.echo(f"published  {doc.published_at.astimezone(fl.IST):%Y-%m-%d %H:%M:%S} IST")
+        typer.echo(f"first seen {doc.first_seen_at.astimezone(fl.IST):%Y-%m-%d %H:%M:%S} IST")
+        typer.echo(f"file       {doc.attachment_path or doc.attachment_url or '-'}")
+        typer.echo(f"text       {doc.text_status}\n")
+        if doc.text:
+            typer.echo(doc.text[:chars])

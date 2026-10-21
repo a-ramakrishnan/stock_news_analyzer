@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from stock_news_analyzer.config import get_settings
 from stock_news_analyzer.db import get_engine, upgrade_database
+from stock_news_analyzer.models import Base
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -67,10 +68,11 @@ def test_database_url():
 
 @pytest.fixture
 def session(test_database_url):
-    """A session on the test database; all tables are emptied after each test."""
+    """A session on the test database; every table is emptied after each test."""
     eng = create_engine(test_database_url)
     with Session(eng) as s:
         yield s
+    tables = ", ".join(t.name for t in Base.metadata.sorted_tables)
     with eng.begin() as conn:
-        conn.execute(text("TRUNCATE company_peers, watchlist, companies CASCADE"))
+        conn.execute(text(f"TRUNCATE {tables} CASCADE"))
     eng.dispose()

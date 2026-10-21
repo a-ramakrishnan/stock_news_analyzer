@@ -14,8 +14,8 @@ Every command block below can be pasted into Terminal as is; explanations are in
 | 1 | Project skeleton: Python package, Postgres + pgvector in Docker, config, health check, CI | done |
 | 2 | Database tables + Watchlist Manager agent | done |
 | 3 | Filings Collector (BSE + NSE announcements) | done |
-| 4 | News Collector (RSS feeds + Google News) | this PR |
-| 5 | Price & Label (NSE bhavcopy) | planned |
+| 4 | News Collector (RSS feeds + Google News) | done |
+| 5 | Price & Label (NSE daily prices, moves, labels) | this PR |
 | 6 | Orchestrator + first daily digest | planned |
 
 ## Run it on a Mac
@@ -110,6 +110,26 @@ uv run sna news list
 
 Articles are matched by company name (without "Limited") and the `aliases` in `config/watchlist.yaml`; `exclude` phrases there (e.g. "L&T Technology") stop look-alike companies from matching.
 
+## Prices, moves and labels
+
+```bash
+uv run sna prices backfill --since 2023-10-01
+make prices
+uv run sna prices moves LT
+uv run sna labels list LT
+```
+
+| Command | What it does |
+| --- | --- |
+| `uv run sna prices backfill --since 2023-10-01` | One-off: load NSE daily prices and index closes for every listed stock (about 2 requests per trading day) |
+| `make prices` | Load new trading days, update daily moves and labels |
+| `uv run sna prices moves LT` | Daily return vs Nifty 50 and the sector index; `!!` marks unusual days |
+| `uv run sna prices moves --unusual --days 250` | Only the unusual days of the last year |
+| `uv run sna prices indices bank` | NSE index names, for `sector_index` in `config/watchlist.yaml` |
+| `uv run sna labels list LT --type order_win` | Each filing or article with the stock's return vs Nifty 50 after 1, 5 and 20 trading days |
+
+A day is unusual when the stock's return minus the Nifty 50's is more than 2 standard deviations of the previous 60 days. Labels start from the first trading day whose close could reflect the news (same day if published before 15:30 IST).
+
 ## Other commands
 
 | Command | What it does |
@@ -135,6 +155,8 @@ src/stock_news_analyzer/   Python package
   agents/watchlist.py      Watchlist Manager (agent 1)
   agents/filings.py        Filings Collector (agent 2)
   agents/news.py           News Collector (agent 3)
+  sources/prices.py        NSE bhavcopy + index close parsing
+  agents/prices.py         Price & Label (agent 5): prices, moves, labels
   cli.py                   `sna` command-line tool
 config/watchlist.yaml      your stocks, bullion and their news aliases
 config/news_feeds.yaml     news feeds to read

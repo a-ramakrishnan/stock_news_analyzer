@@ -75,6 +75,8 @@ class WatchlistItem(Base):
     exclude: Mapped[list[str]] = mapped_column(
         ARRAY(Text), default=list, server_default="{}", nullable=False
     )
+    # NSE sector index used as a second benchmark, e.g. "Nifty Bank" (Nifty 50 is always used).
+    sector_index: Mapped[str | None] = mapped_column(String(64))
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -134,3 +136,94 @@ class DocumentCompany(Base):
         ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True
     )
     isin: Mapped[str] = mapped_column(ForeignKey("companies.isin"), primary_key=True, index=True)
+
+
+class PriceDaily(Base):
+    """One row per NSE symbol, series and trading day, from NSE's full bhavcopy.
+
+    All listed stocks are stored, not just the watchlist, so peers and later models have data.
+    """
+
+    __tablename__ = "prices_daily"
+
+    symbol: Mapped[str] = mapped_column(String(32), primary_key=True)
+    series: Mapped[str] = mapped_column(String(4), primary_key=True)
+    trade_date: Mapped[date] = mapped_column(Date, primary_key=True, index=True)
+    isin: Mapped[str | None] = mapped_column(String(12), index=True)  # main series only
+    prev_close: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))  # adjusted on ex-dates
+    open: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    high: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    low: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    last: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    close: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    avg_price: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    volume: Mapped[int | None] = mapped_column(BigInteger)
+    turnover_lacs: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    trades: Mapped[int | None] = mapped_column(BigInteger)
+    delivery_qty: Mapped[int | None] = mapped_column(BigInteger)
+    delivery_pct: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
+
+
+class IndexDaily(Base):
+    """Daily close of every NSE index (Nifty 50, sector indices), with P/E, P/B and yield."""
+
+    __tablename__ = "index_daily"
+
+    index_name: Mapped[str] = mapped_column(String(64), primary_key=True)
+    trade_date: Mapped[date] = mapped_column(Date, primary_key=True, index=True)
+    open: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    high: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    low: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    close: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    pe: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    pb: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    div_yield: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+
+
+class StockMove(Base):
+    """A watchlist stock's daily return against its benchmarks, and whether it was unusual."""
+
+    __tablename__ = "stock_moves"
+
+    isin: Mapped[str] = mapped_column(ForeignKey("companies.isin"), primary_key=True)
+    trade_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    stock_return: Mapped[float] = mapped_column()
+    nifty_return: Mapped[float | None] = mapped_column()
+    sector_index: Mapped[str | None] = mapped_column(String(64))
+    sector_return: Mapped[float | None] = mapped_column()
+    excess_return: Mapped[float | None] = mapped_column()  # stock minus Nifty 50
+    sector_excess_return: Mapped[float | None] = mapped_column()  # stock minus sector index
+    # Excess return divided by the standard deviation of the previous 60 days' excess returns.
+    zscore: Mapped[float | None] = mapped_column()
+    unusual: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+
+
+class EventLabel(Base):
+    """What a stock did after a filing or article: the training label for a future model.
+
+    `day0` is the first trading day whose close could reflect the news (same day if published
+    before 15:30 IST on a trading day, otherwise the next trading day). Returns are compounded
+    from day0 over 1, 5 and 20 trading days; None until enough days have passed.
+    """
+
+    __tablename__ = "event_labels"
+
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True
+    )
+    isin: Mapped[str] = mapped_column(ForeignKey("companies.isin"), primary_key=True)
+    day0: Mapped[date | None] = mapped_column(Date)
+    return_1d: Mapped[float | None] = mapped_column()
+    return_5d: Mapped[float | None] = mapped_column()
+    return_20d: Mapped[float | None] = mapped_column()
+    excess_1d: Mapped[float | None] = mapped_column()  # vs Nifty 50
+    excess_5d: Mapped[float | None] = mapped_column()
+    excess_20d: Mapped[float | None] = mapped_column()
+    sector_index: Mapped[str | None] = mapped_column(String(64))
+    sector_excess_1d: Mapped[float | None] = mapped_column()
+    sector_excess_5d: Mapped[float | None] = mapped_column()
+    sector_excess_20d: Mapped[float | None] = mapped_column()
+    complete: Mapped[bool] = mapped_column(Boolean, default=False)  # all windows filled
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

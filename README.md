@@ -70,6 +70,8 @@ uv run sna filings list LT                          # latest filings for one com
 uv run sna filings list --type order_win            # filter by type: results, concall_transcript, credit_rating, ...
 uv run sna filings show 42                          # details + extracted text of filing 42
 uv run sna filings attachments --pdf all            # download PDFs skipped earlier
+uv run sna filings attachments --retry-failed       # re-download PDFs that failed to read
+uv run sna filings reclassify                       # re-apply filing-type rules to stored filings
 ```
 
 PDFs are saved under `data/filings/<ISIN>/<bse|nse>/<YYYY-MM>/` and their text is stored in the database.

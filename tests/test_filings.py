@@ -197,3 +197,34 @@ def test_cli_list_and_show(watchlist, tmp_path, test_database_url, monkeypatch):
 
     result = runner.invoke(app, ["filings", "list", "MSUMI"])
     assert result.exit_code == 1 and "not on the watchlist" in result.stdout
+
+
+def test_reclassify_updates_stale_types_and_titles(watchlist, tmp_path):
+    fl.FilingsCollector(watchlist, FakeClient(), tmp_path, pdf_policy="none").collect(
+        fl.watchlist_companies(watchlist, "LT"), start=date(2026, 10, 1), end=date(2026, 10, 21)
+    )
+    doc = watchlist.query(Document).filter_by(source="bse", doc_type="order_win").one()
+    doc.doc_type, doc.title = "other", "old <BR> title"
+    watchlist.commit()
+
+    assert fl.reclassify(watchlist) == 1
+    watchlist.refresh(doc)
+    assert doc.doc_type == "order_win"
+    assert doc.title == "L&T Wins Orders (Large*) in New Delhi and Andhra Pradesh"
+    assert fl.reclassify(watchlist) == 0
+
+
+def test_retry_failed_downloads_again(watchlist, tmp_path):
+    client = FakeClient()
+    collector = fl.FilingsCollector(watchlist, client, tmp_path)
+    collector.collect(
+        fl.watchlist_companies(watchlist, "LT"), start=date(2026, 10, 1), end=date(2026, 10, 21)
+    )
+    doc = watchlist.query(Document).filter_by(source="nse", doc_type="order_win").one()
+    doc.text, doc.text_status = "", "failed"
+    watchlist.commit()
+
+    assert collector.fetch_missing_attachments() == 0  # has a file already; not retried
+    assert collector.fetch_missing_attachments(retry_failed=True) == 1
+    watchlist.refresh(doc)
+    assert doc.text_status == "ok" and doc.text == "Order worth Rs 1240 crore"

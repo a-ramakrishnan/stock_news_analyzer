@@ -29,7 +29,7 @@ So the collector uses `curl_cffi` for both exchanges, waits a second between req
 
 ## Filing types
 
-Keyword rules, checked in order: `concall_transcript`, `concall_audio`, `investor_presentation`, `results`, `concall_schedule`, `order_win`, `credit_rating`, `board_meeting`, `shareholding`, `insider_trading`, `other`. The first four are flagged as concall material for the Concall Analyst (agent 11). The rules are deliberately simple; the Event Extractor (agent 7) will read the text properly.
+Keyword rules, checked in order: `concall_transcript`, `concall_audio`, `newspaper_publication`, `investor_presentation`, `results`, `concall_schedule`, `order_win`, `credit_rating`, `board_meeting`, `shareholding`, `insider_trading`, `other`. The first four are flagged as concall material for the Concall Analyst (agent 11). The rules are deliberately simple; the Event Extractor (agent 7) will read the text properly.
 
 ## Decisions
 
@@ -50,6 +50,20 @@ uv run sna filings show <id>          # pick an order win or results filing
 uv run sna filings backfill --since 2023-10-01
 make test
 ```
+
+## First live run (Mac, 21 Oct 2026)
+
+`make filings` stored 25 filings for the last 7 days and downloaded 25 attachments: today's L&T order win (BSE 09:45:02, NSE 09:46:54), and Karur Vysya Bank's results, investor presentation, call recording and transcript on both exchanges. It also showed what to fix:
+
+| Problem | Fix |
+| --- | --- |
+| NSE's copy of the L&T order win failed to parse. NSE lists it at 3.23 MB (BSE's copy is 3,384,935 bytes), but an earlier download came in at 2,523,136 bytes: the download was cut short | Downloads are checked against Content-Length and, for PDFs, the `%%EOF` end marker; incomplete files are retried up to 3 times |
+| "Link of Recording" classified as `concall_schedule` | Any "recording" now means `concall_audio` |
+| "Newspaper Publication" of results classified as `results` | New `newspaper_publication` type, checked before `results` |
+| `<BR><BR>` and doubled quotes (`Investors''`) in titles | Titles, subjects and categories are cleaned |
+| pypdf printed warnings for minor PDF defects | pypdf logging is limited to errors |
+
+For filings stored before the fix: `sna filings reclassify` re-derives types and titles from the raw records, and `sna filings attachments --retry-failed` re-downloads files that failed to parse.
 
 ## Tweet draft
 

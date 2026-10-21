@@ -35,6 +35,8 @@ def main() -> None:
         level=get_settings().log_level,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    # pypdf warns about every small defect in exchange PDFs; real failures are still reported.
+    logging.getLogger("pypdf").setLevel(logging.ERROR)
 
 
 @app.command()
@@ -331,12 +333,23 @@ def filings_attachments(
     symbol: str = typer.Option(None, help="Only this NSE symbol."),
     pdf: str = typer.Option("all", help="all or important."),
     limit: int = typer.Option(200, help="Maximum files to download this run."),
+    retry_failed: bool = typer.Option(False, help="Also re-download files whose PDF failed."),
 ) -> None:
     """Download attachments that were skipped or failed earlier."""
     with get_session() as session:
         isin = _companies_or_exit(session, symbol)[0].isin if symbol else None
-        count = _collector(session, pdf).fetch_missing_attachments(isin=isin, limit=limit)
+        count = _collector(session, pdf).fetch_missing_attachments(
+            isin=isin, limit=limit, retry_failed=retry_failed
+        )
     typer.echo(f"{count} attachments downloaded")
+
+
+@filings_app.command("reclassify")
+def filings_reclassify() -> None:
+    """Recompute filing types and clean titles from the stored raw records (after rule changes)."""
+    with get_session() as session:
+        changed = fl.reclassify(session)
+    typer.echo(f"{changed} filings updated")
 
 
 @filings_app.command("list")

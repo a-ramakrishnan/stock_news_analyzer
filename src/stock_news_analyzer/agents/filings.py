@@ -14,7 +14,7 @@ from pathlib import Path, PurePosixPath
 from typing import Protocol
 
 from pypdf import PdfReader
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -218,12 +218,18 @@ class FilingsCollector:
         self.session.commit()
         return True
 
-    def fetch_missing_attachments(self, isin: str | None = None, limit: int = 200) -> int:
-        """Download attachments that were skipped or failed earlier (e.g. after a backfill)."""
+    def fetch_missing_attachments(
+        self, isin: str | None = None, limit: int = 200, retry_failed: bool = False
+    ) -> int:
+        """Download attachments skipped earlier (e.g. after a backfill), and optionally re-download
+        ones whose PDF could not be read (often a download that was cut short)."""
+        missing = Document.attachment_path.is_(None)
+        if retry_failed:
+            missing = or_(missing, Document.text_status == "failed")
         query = (
             select(Document, DocumentCompany.isin)
             .join(DocumentCompany, DocumentCompany.document_id == Document.id)
-            .where(Document.attachment_url.is_not(None), Document.attachment_path.is_(None))
+            .where(Document.attachment_url.is_not(None), missing)
             .order_by(Document.published_at.desc())
             .limit(limit)
         )
@@ -234,6 +240,25 @@ class FilingsCollector:
             if self._wants_attachment(doc) and self._fetch_attachment(doc, doc_isin):
                 fetched += 1
         return fetched
+
+
+def reclassify(session: Session) -> int:
+    """Re-derive type, title, subject and category from each stored raw record.
+
+    These are derived fields; the raw record is the source of truth and is never changed.
+    """
+    changed = 0
+    for doc in session.scalars(select(Document)):
+        parsed = parse_bse({"Table": [doc.raw]}) if doc.source == "bse" else parse_nse([doc.raw])
+        if not parsed:
+            continue
+        ann = parsed[0]
+        new = (ann.doc_type, ann.title, ann.subject, ann.category)
+        if new != (doc.doc_type, doc.title, doc.subject, doc.category):
+            doc.doc_type, doc.title, doc.subject, doc.category = new
+            changed += 1
+    session.commit()
+    return changed
 
 
 def recent_documents(

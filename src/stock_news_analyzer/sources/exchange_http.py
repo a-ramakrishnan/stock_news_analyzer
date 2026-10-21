@@ -92,13 +92,31 @@ class ExchangeClient:
         }
         return self._get_json("nse", NSE_ANNOUNCEMENTS_URL, params)
 
-    def download(self, exchange: str, urls: list[str]) -> tuple[str, bytes]:
-        """Download the first URL that returns a file. Returns (url, content)."""
+    def download(self, exchange: str, urls: list[str], attempts: int = 3) -> tuple[str, bytes]:
+        """Download the first URL that returns a complete file. Returns (url, content).
+
+        Large files sometimes arrive cut short; those are retried up to `attempts` times.
+        """
         session = self._session(exchange)
-        last = None
+        last = "no response"
         for url in urls:
-            resp = self._get(session, url, headers=BSE_HEADERS if exchange == "bse" else None)
-            if resp.status_code == 200 and "html" not in resp.headers.get("content-type", ""):
-                return url, resp.content
-            last = resp.status_code
-        raise ExchangeError(f"attachment not found (last HTTP {last}): {urls[0]}")
+            for _ in range(attempts):
+                resp = self._get(session, url, headers=BSE_HEADERS if exchange == "bse" else None)
+                if resp.status_code != 200 or "html" in resp.headers.get("content-type", ""):
+                    last = f"HTTP {resp.status_code}"
+                    break  # not here; try the next URL
+                if is_complete(resp.content, resp.headers):
+                    return url, resp.content
+                last = f"incomplete download ({len(resp.content)} bytes)"
+                log.warning("%s: %s, retrying", url, last)
+        raise ExchangeError(f"attachment not downloaded ({last}): {urls[0]}")
+
+
+def is_complete(content: bytes, headers) -> bool:
+    """False if the body is shorter than Content-Length, or is a PDF missing its end marker."""
+    length = headers.get("content-length")
+    if length and str(length).isdigit() and len(content) < int(length):
+        return False
+    if content.startswith(b"%PDF-") and b"%%EOF" not in content[-8192:]:
+        return False
+    return True

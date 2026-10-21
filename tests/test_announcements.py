@@ -8,6 +8,7 @@ from stock_news_analyzer.sources.announcements import (
     IST,
     bse_total_rows,
     classify,
+    clean,
     parse_bse,
     parse_nse,
 )
@@ -74,3 +75,39 @@ def test_classify(subject, expected):
 
 def test_audio_field_marks_concall_audio():
     assert classify("Company Update", "", None, {"AUDIO_VIDEO_FILE": "x.mp3"}) == "concall_audio"
+
+
+def test_clean_removes_html_and_doubled_quotes():
+    assert clean("Karur Vysya Bank Ltd has informed BSE about : <BR><BR>1. Result") == (
+        "Karur Vysya Bank Ltd has informed BSE about : 1. Result"
+    )
+    assert clean("Schedule of Analyst / Institutional Investors'' Meet") == (
+        "Schedule of Analyst / Institutional Investors' Meet"
+    )
+    assert clean("A &amp; B") == "A & B" and clean(None) == ""
+
+
+@pytest.mark.parametrize(
+    "subject, title, expected",
+    [
+        # Titles seen in the first live run (21 Oct 2026).
+        (
+            "Analysts/Institutional Investor Meet/Con. Call Updates",
+            "Karur Vysya Bank Limited has informed the Exchange about Link of Recording",
+            "concall_audio",
+        ),
+        (
+            "Newspaper Publication",
+            'Karur Vysya Bank Ltd has informed BSE regarding "Newspaper Publication of '
+            'Financial Results"',
+            "newspaper_publication",
+        ),
+        (
+            "Copy of Newspaper Publication",
+            "Karur Vysya Bank Limited has informed the Exchange about Copy of Newspaper",
+            "newspaper_publication",
+        ),
+    ],
+)
+def test_classify_live_titles(subject, title, expected):
+    assert classify(subject, title, None) == expected

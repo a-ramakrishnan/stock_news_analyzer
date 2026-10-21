@@ -3,6 +3,8 @@
 Field names come from the exchanges' live responses (Oct 2026); see tests/fixtures/.
 """
 
+import html
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -31,6 +33,14 @@ class Announcement:
         return classify(self.subject, self.title, self.category, self.raw)
 
 
+def clean(text: str | None) -> str:
+    """Exchange text has stray HTML (<BR>), entities and doubled quotes; make it plain."""
+    if not text:
+        return ""
+    text = re.sub(r"<[^>]+>", " ", html.unescape(text)).replace("''", "'")
+    return " ".join(text.split())
+
+
 def _ist(value: str | None, *formats: str) -> datetime | None:
     if not value:
         return None
@@ -53,16 +63,16 @@ def parse_bse(data: dict) -> list[Announcement]:
         if not row.get("NEWSID") or published is None:
             continue
         name = (row.get("ATTACHMENTNAME") or "").strip()
-        subject = (row.get("NEWSSUB") or "").strip()
+        subject = clean(row.get("NEWSSUB"))
         out.append(
             Announcement(
                 source="bse",
                 source_id=row["NEWSID"],
                 exchange_code=str(row.get("SCRIP_CD")),
                 isin=None,
-                title=(row.get("HEADLINE") or subject).strip(),
+                title=clean(row.get("HEADLINE")) or subject,
                 subject=subject,
-                category=(row.get("SUBCATNAME") or row.get("CATEGORYNAME") or "").strip() or None,
+                category=clean(row.get("SUBCATNAME") or row.get("CATEGORYNAME")) or None,
                 published_at=published,
                 attachment_urls=[u.format(name=name) for u in BSE_ATTACHMENT_URLS] if name else [],
                 attachment_bytes=row.get("Fld_Attachsize"),
@@ -92,9 +102,9 @@ def parse_nse(data: list) -> list[Announcement]:
                 source_id=str(row["seq_id"]),
                 exchange_code=row.get("symbol") or "",
                 isin=row.get("sm_isin") or None,
-                title=(row.get("attchmntText") or row.get("desc") or "").strip(),
-                subject=(row.get("desc") or "").strip(),
-                category=(row.get("desc") or "").strip() or None,
+                title=clean(row.get("attchmntText") or row.get("desc")),
+                subject=clean(row.get("desc")),
+                category=clean(row.get("desc")) or None,
                 published_at=published,
                 attachment_urls=[url] if url and url != "-" else [],
                 raw=row,
@@ -106,7 +116,8 @@ def parse_nse(data: list) -> list[Announcement]:
 # Checked in order: the first rule whose words appear decides the type.
 _RULES = [
     ("concall_transcript", ("transcript",)),
-    ("concall_audio", ("audio recording", "audio/video", "audio of", "recording of")),
+    ("concall_audio", ("audio recording", "audio/video", "audio of", "recording")),
+    ("newspaper_publication", ("newspaper",)),
     ("investor_presentation", ("investor presentation", "presentation")),
     ("results", ("financial result", "results for the quarter", "outcome of board meeting")),
     ("concall_schedule", ("analyst", "investor meet", "earnings call", "conference call")),

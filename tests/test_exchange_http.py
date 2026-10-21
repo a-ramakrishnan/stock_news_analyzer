@@ -31,17 +31,30 @@ def _client(responses):
 
 def test_download_retries_a_truncated_file():
     client, calls = _client([(PDF[:-7], 200, "application/pdf"), (PDF, 200, "application/pdf")])
-    url, content = client.download("nse", ["https://x/a.pdf"])
-    assert content == PDF and len(calls) == 2
+    url, content, complete = client.download("nse", ["https://x/a.pdf"])
+    assert content == PDF and complete and len(calls) == 2
 
 
 def test_download_falls_back_to_next_url_on_404():
     client, calls = _client([(b"<html>", 404, "text/html"), (PDF, 200, "application/pdf")])
-    url, _ = client.download("bse", ["https://x/AttachLive/a.pdf", "https://x/AttachHis/a.pdf"])
+    url, _, _ = client.download("bse", ["https://x/AttachLive/a.pdf", "https://x/AttachHis/a.pdf"])
     assert url.endswith("/AttachHis/a.pdf")
 
 
-def test_download_gives_up_after_repeated_truncation():
-    client, _ = _client([(PDF[:-7], 200, "application/pdf")] * 3)
+def test_download_keeps_a_file_that_is_broken_at_the_source():
+    # NSE served the same 2,523,136-byte truncated PDF on every attempt (21 Oct 2026).
+    client, calls = _client([(PDF[:-7], 200, "application/pdf")] * 3)
+    url, content, complete = client.download("nse", ["https://x/a.pdf"])
+    assert content == PDF[:-7] and not complete and len(calls) == 2
+
+
+def test_download_gives_up_when_truncation_keeps_changing():
+    client, _ = _client(
+        [
+            (PDF[:-7], 200, "application/pdf"),
+            (PDF[:-9], 200, "application/pdf"),
+            (PDF[:-11], 200, "application/pdf"),
+        ]
+    )
     with pytest.raises(ExchangeError, match="incomplete download"):
         client.download("nse", ["https://x/a.pdf"])

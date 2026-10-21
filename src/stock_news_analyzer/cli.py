@@ -20,11 +20,13 @@ app = typer.Typer(help="Stock news analyzer for Indian stocks and bullion.", no_
 db_app = typer.Typer(help="Database maintenance.", no_args_is_help=True)
 securities_app = typer.Typer(help="Master list of NSE/BSE securities.", no_args_is_help=True)
 watchlist_app = typer.Typer(help="Stocks and bullion you track.", no_args_is_help=True)
+news_app = typer.Typer(help="News articles from RSS feeds and Google News.", no_args_is_help=True)
 filings_app = typer.Typer(
     help="Exchange filings (BSE and NSE announcements).", no_args_is_help=True
 )
 app.add_typer(db_app, name="db")
 app.add_typer(filings_app, name="filings")
+app.add_typer(news_app, name="news")
 app.add_typer(securities_app, name="securities")
 app.add_typer(watchlist_app, name="watchlist")
 
@@ -174,6 +176,7 @@ def watchlist_add(
     owned: bool = typer.Option(False, "--owned", help="You hold this stock."),
     quantity: float = typer.Option(None, help="Number of shares (or grams of bullion)."),
     notes: str = typer.Option(None, help="Free-text notes."),
+    alias: list[str] = typer.Option(None, "--alias", help="Other name used in news, e.g. L&T."),
 ) -> None:
     """Add a stock or bullion to the watchlist (or update it if already there)."""
     qty = Decimal(str(quantity)) if quantity is not None else None
@@ -183,7 +186,7 @@ def watchlist_add(
             typer.echo(f"tracking {item.display_name}{' (owned)' if owned else ''}")
             return
         company = _resolve_or_exit(session, name)
-        wl.add_equity(session, company, owned=owned, quantity=qty, notes=notes)
+        wl.add_equity(session, company, owned=owned, quantity=qty, notes=notes, aliases=alias)
         typer.echo(
             f"tracking {company.name}  NSE {company.nse_symbol or '-'}  "
             f"BSE {company.bse_code or '-'}  ISIN {company.isin}"
@@ -369,9 +372,12 @@ def filings_list(
             return
         for doc, company in rows:
             when = doc.published_at.astimezone(fl.IST).strftime("%Y-%m-%d %H:%M")
-            text = {"ok": "text", "empty": "no text", "failed": "pdf failed"}.get(
-                doc.text_status, "-"
-            )
+            text = {
+                "ok": "text",
+                "partial": "partial",
+                "empty": "no text",
+                "failed": "pdf failed",
+            }.get(doc.text_status, "-")
             typer.echo(
                 f"{doc.id:>6}  {when}  {doc.source.upper()}  {company.nse_symbol or '-':<11} "
                 f"{doc.doc_type:<21} {text:<10} {doc.title[:70]}"
@@ -400,3 +406,90 @@ def filings_show(
         typer.echo(f"text       {doc.text_status}\n")
         if doc.text:
             typer.echo(doc.text[:chars])
+
+
+# --- news --------------------------------------------------------------------
+
+FEEDS_FILE = Path("config/news_feeds.yaml")
+
+
+def _news_config(path: Path):
+    from stock_news_analyzer.sources.news import load_feed_config
+
+    return load_feed_config(path)
+
+
+@news_app.command("check-feeds")
+def news_check_feeds(
+    feeds_file: Path = typer.Option(FEEDS_FILE, help="Feed list (YAML)."),
+) -> None:
+    """Fetch every configured feed once and report which work."""
+    from stock_news_analyzer.agents.news import check_feeds
+    from stock_news_analyzer.sources.news import NewsClient
+
+    failed = 0
+    for key, url, items, error in check_feeds(NewsClient(), _news_config(feeds_file)):
+        if error:
+            failed += 1
+            typer.echo(f"FAIL  {key:<24} {error}  {url}")
+        else:
+            typer.echo(f"ok    {key:<24} {items:>3} items")
+    if failed:
+        typer.echo(f"{failed} feed(s) failed; fix or remove them in {feeds_file}")
+        raise typer.Exit(1)
+
+
+@news_app.command("fetch")
+def news_fetch(
+    feed: list[str] = typer.Option(None, "--feed", help="Only these feed keys."),
+    google: bool = typer.Option(True, help="Also search Google News per company."),
+    feeds_file: Path = typer.Option(FEEDS_FILE, help="Feed list (YAML)."),
+) -> None:
+    """Read the feeds and store articles that mention a watchlist company."""
+    from stock_news_analyzer.agents.news import NewsCollector
+    from stock_news_analyzer.sources.news import NewsClient
+
+    with get_session() as session:
+        if not fl.watchlist_companies(session):
+            typer.echo("watchlist is empty")
+            raise typer.Exit(1)
+        result = NewsCollector(session, NewsClient(), _news_config(feeds_file)).collect(
+            feed_keys=feed or None, google=google
+        )
+    typer.echo(
+        f"{result.seen} articles read from {len(result.feeds)} feeds; "
+        f"{result.matched} mention a watchlist company; {result.new} new"
+    )
+    for report in result.errors:
+        typer.echo(f"error: {report.key}: {report.error}")
+
+
+@news_app.command("relink")
+def news_relink() -> None:
+    """Re-match stored articles to companies after changing aliases or exclusions."""
+    from stock_news_analyzer.agents.news import relink
+
+    with get_session() as session:
+        added, removed = relink(session)
+    typer.echo(f"{added} links added, {removed} links removed")
+
+
+@news_app.command("list")
+def news_list(
+    symbol: str = typer.Argument(None, help="NSE symbol (default: all watchlist companies)."),
+    limit: int = typer.Option(20, help="How many to show."),
+) -> None:
+    """Show the latest stored news articles."""
+    with get_session() as session:
+        isin = _companies_or_exit(session, symbol)[0].isin if symbol else None
+        rows = fl.recent_documents(session, isin=isin, doc_type="news", limit=limit)
+        if not rows:
+            typer.echo("no news stored yet; run: sna news fetch")
+            return
+        for doc, company in rows:
+            when = doc.published_at.astimezone(fl.IST).strftime("%Y-%m-%d %H:%M")
+            publisher = (doc.publisher or "-")[:18]
+            typer.echo(
+                f"{doc.id:>6}  {when}  {company.nse_symbol or '-':<11} {publisher:<18} "
+                f"{doc.title[:80]}"
+            )

@@ -40,7 +40,7 @@ IMPORTANT_TYPES = CONCALL_MATERIAL | {"order_win", "credit_rating", "concall_sch
 class Client(Protocol):
     def bse_announcements(self, scrip_code: str, start: date, end: date, page: int = 1): ...
     def nse_announcements(self, symbol: str, start: date, end: date): ...
-    def download(self, exchange: str, urls: list[str]) -> tuple[str, bytes]: ...
+    def download(self, exchange: str, urls: list[str]) -> tuple[str, bytes, bool]: ...
 
 
 @dataclass
@@ -193,7 +193,7 @@ class FilingsCollector:
     def _fetch_attachment(self, doc: Document, isin: str, ann: Announcement | None = None) -> bool:
         urls = ann.attachment_urls if ann else [doc.attachment_url]
         try:
-            url, content = self.client.download(doc.source, urls)
+            url, content, complete = self.client.download(doc.source, urls)
         except ExchangeError as exc:
             log.warning("attachment for document %s: %s", doc.id, exc)
             doc.text_status = "failed"
@@ -213,6 +213,9 @@ class FilingsCollector:
         doc.attachment_bytes = len(content)
         if suffix == ".pdf":
             doc.text, doc.text_status = extract_text(content)
+            if not complete:
+                # Broken at the source: keep whatever text could be recovered.
+                doc.text_status = "partial" if doc.text else "failed"
         else:
             doc.text_status = "skipped"
         self.session.commit()

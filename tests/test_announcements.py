@@ -8,10 +8,10 @@ from stock_news_analyzer.sources.announcements import (
     IST,
     bse_total_rows,
     classify,
-    clean,
     parse_bse,
     parse_nse,
 )
+from stock_news_analyzer.text import clean
 
 
 def _load(name):

@@ -3,13 +3,12 @@
 Field names come from the exchanges' live responses (Oct 2026); see tests/fixtures/.
 """
 
-import html
-import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from stock_news_analyzer.sources.exchange_http import BSE_ATTACHMENT_URLS
+from stock_news_analyzer.text import clean
 
 IST = ZoneInfo("Asia/Kolkata")
 
@@ -31,14 +30,6 @@ class Announcement:
     @property
     def doc_type(self) -> str:
         return classify(self.subject, self.title, self.category, self.raw)
-
-
-def clean(text: str | None) -> str:
-    """Exchange text has stray HTML (<BR>), entities and doubled quotes; make it plain."""
-    if not text:
-        return ""
-    text = re.sub(r"<[^>]+>", " ", html.unescape(text)).replace("''", "'")
-    return " ".join(text.split())
 
 
 def _ist(value: str | None, *formats: str) -> datetime | None:

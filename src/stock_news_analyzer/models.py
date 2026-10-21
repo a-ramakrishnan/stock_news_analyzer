@@ -16,7 +16,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -67,6 +67,14 @@ class WatchlistItem(Base):
     owned: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     quantity: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     notes: Mapped[str | None] = mapped_column(Text)
+    # Other names the news uses for the company, e.g. "L&T". Short ones match case-sensitively.
+    aliases: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), default=list, server_default="{}", nullable=False
+    )
+    # Phrases that look like this company but are another one, e.g. "L&T Technology".
+    exclude: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), default=list, server_default="{}", nullable=False
+    )
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -94,12 +102,14 @@ class Document(Base):
     __table_args__ = (UniqueConstraint("source", "source_id", name="documents_source_id"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    source: Mapped[str] = mapped_column(String(32))  # 'bse', 'nse'
+    source: Mapped[str] = mapped_column(String(64))  # 'bse', 'nse', 'news:<feed key>'
     source_id: Mapped[str] = mapped_column(String(64))
     doc_type: Mapped[str] = mapped_column(String(32), index=True)  # see announcements.classify
     title: Mapped[str] = mapped_column(Text)
     subject: Mapped[str | None] = mapped_column(Text)
     category: Mapped[str | None] = mapped_column(Text)
+    url: Mapped[str | None] = mapped_column(Text)  # the article's web page (news)
+    publisher: Mapped[str | None] = mapped_column(Text)  # e.g. 'Economic Times'
     published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     first_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -109,7 +119,8 @@ class Document(Base):
     attachment_sha256: Mapped[str | None] = mapped_column(String(64), index=True)
     attachment_bytes: Mapped[int | None] = mapped_column(BigInteger)
     text: Mapped[str | None] = mapped_column(Text)
-    # 'pending', 'ok', 'empty' (scanned PDF, no text layer), 'skipped', 'failed'
+    # 'pending', 'ok', 'partial' (source file broken; some text recovered),
+    # 'empty' (scanned PDF, no text layer), 'skipped', 'failed'
     text_status: Mapped[str] = mapped_column(String(16), default="pending")
     raw: Mapped[dict] = mapped_column(JSONB)
 

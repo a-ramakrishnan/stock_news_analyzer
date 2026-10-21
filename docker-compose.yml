@@ -34,5 +34,25 @@ services:
         condition: service_healthy
     command: ["sna", "health"]
 
+  scheduler:
+    # The orchestrator: runs jobs on config/schedule.yaml. Start with `make scheduler`.
+    build: .
+    profiles: ["scheduler"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://sna:sna@db:5432/sna
+      DATA_DIR: /app/data
+      TZ: Asia/Kolkata
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    command: ["sna", "orchestrator", "start"]
+
 volumes:
   pgdata:

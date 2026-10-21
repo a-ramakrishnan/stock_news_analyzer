@@ -6,6 +6,7 @@ instruments (ISIN, NSE symbol, BSE code), stores what you track and own, and sug
 
 import re
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
@@ -319,3 +320,38 @@ def load_file(session: Session, path: Path) -> FileLoadResult:
         )
 
     return FileLoadResult(added=added, problems=problems)
+
+
+def refresh_master(session: Session, data_dir: Path) -> tuple[MasterLoadResult, list[str]]:
+    """Download NSE + BSE lists and update the master list (the scheduled weekly job).
+
+    NSE's equity list is required; the Nifty 500 list (industry) and BSE's list (BSE codes,
+    market cap) are optional, and their failures come back as warnings. Raw copies are kept.
+    """
+    import httpx
+
+    from stock_news_analyzer.sources import securities
+
+    raw_dir = data_dir / "reference" / date.today().isoformat()
+    raw_dir.mkdir(parents=True, exist_ok=True)
+
+    def fetch(url, name, referer=None):
+        text = securities.download(url, referer=referer)
+        (raw_dir / name).write_text(text, encoding="utf-8")
+        return text
+
+    warnings = []
+    nse = securities.parse_nse_equity_list(fetch(securities.NSE_EQUITY_LIST_URL, "EQUITY_L.csv"))
+    try:
+        nifty500 = securities.parse_nifty500(fetch(securities.NIFTY500_URL, "ind_nifty500list.csv"))
+    except httpx.HTTPError as exc:
+        warnings.append(f"Nifty 500 list: {exc}")
+        nifty500 = {}
+    try:
+        bse = securities.parse_bse_scrips(
+            fetch(securities.BSE_SCRIPS_URL, "bse_scrips.json", referer="https://www.bseindia.com/")
+        )
+    except (httpx.HTTPError, ValueError) as exc:
+        warnings.append(f"BSE scrip list: {exc}")
+        bse = []
+    return load_master(session, nse, nifty500, bse), warnings

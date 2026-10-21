@@ -15,8 +15,8 @@ Every command block below can be pasted into Terminal as is; explanations are in
 | 2 | Database tables + Watchlist Manager agent | done |
 | 3 | Filings Collector (BSE + NSE announcements) | done |
 | 4 | News Collector (RSS feeds + Google News) | done |
-| 5 | Price & Label (NSE daily prices, moves, labels) | this PR |
-| 6 | Orchestrator + first daily digest | planned |
+| 5 | Price & Label (NSE daily prices, moves, labels) | done |
+| 6 | Orchestrator + first daily digest | this PR |
 
 ## Run it on a Mac
 
@@ -131,6 +131,30 @@ uv run sna labels list LT
 
 Returns are adjusted for bonus issues, splits and dividends using NSE's corporate actions. A day is unusual when the stock's return minus the Nifty 50's is more than `UNUSUAL_THRESHOLD` (default 2.0, set in `.env`) standard deviations of the previous 60 days. Labels start from the first trading day whose close could reflect the news (same day if published before 15:30 IST).
 
+## Orchestrator and daily digest
+
+The orchestrator runs every job on the schedule in [`config/schedule.yaml`](config/schedule.yaml) (India time) and logs each run.
+
+```bash
+uv run sna orchestrator show
+make run-all
+make digest
+make scheduler
+```
+
+| Command | What it does |
+| --- | --- |
+| `uv run sna orchestrator show` | The schedule and when each job runs next |
+| `make run-all` | Run filings, news, prices and digest once, now |
+| `uv run sna run news` | Run one job now: `filings`, `news`, `prices`, `securities` or `digest` |
+| `uv run sna runs` | Recent runs: when, how long, result, errors |
+| `make digest` | Print the digest covering everything since the last scheduled digest (`--hours 24` for a fixed window) |
+| `make scheduler` | Start the orchestrator in Docker; it keeps running while Docker Desktop is open |
+| `make scheduler-logs` / `make scheduler-stop` | Follow its output / stop it |
+| `uv run sna orchestrator start` | Run the orchestrator in this terminal instead (Ctrl+C to stop) |
+
+Scheduled digests are saved as Markdown under `data/digests/`. While the Mac sleeps nothing runs; a run missed by up to 3 hours happens on wake.
+
 ## Other commands
 
 | Command | What it does |
@@ -158,9 +182,13 @@ src/stock_news_analyzer/   Python package
   agents/news.py           News Collector (agent 3)
   sources/prices.py        NSE bhavcopy + index close parsing
   agents/prices.py         Price & Label (agent 5): prices, moves, labels
+  sources/corporate_actions.py  NSE bonus/split/dividend parsing
+  agents/orchestrator.py   Orchestrator (agent 0): jobs, schedule, run log
+  agents/digest.py         Reporter, basic (agent 16): the daily digest
   cli.py                   `sna` command-line tool
 config/watchlist.yaml      your stocks, bullion and their news aliases
 config/news_feeds.yaml     news feeds to read
+config/schedule.yaml       when each job runs
 tests/                     pytest tests
 docker/postgres/init.sql   enables pgvector when the database is created
 docs/build-log/            what each step added and how to check it

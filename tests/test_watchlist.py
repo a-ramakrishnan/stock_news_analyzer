@@ -32,7 +32,8 @@ def test_master_merges_nse_and_bse_by_isin(master):
     lt = master.get(Company, "INE018A01030")
     assert lt.name == "Larsen & Toubro Limited"  # NSE name kept
     assert (lt.nse_symbol, lt.bse_code) == ("LT", "500510")
-    assert (lt.industry, lt.bse_industry) == ("Construction", "Civil Construction")
+    assert (lt.industry, lt.bse_industry) == ("Construction", None)
+    assert lt.market_cap_cr == Decimal("499683.78")
     assert lt.in_nifty500
     bse_only = master.get(Company, "INE999X01011")
     assert bse_only.nse_symbol is None and bse_only.bse_code == "999901"
@@ -107,12 +108,12 @@ def test_remove_unknown_symbol_leaves_bullion_alone(master):
     assert wl.list_items(master) == []
 
 
-def test_peers_use_bse_industry_and_can_be_approved(master):
+def test_peers_share_nse_industry_largest_first_and_can_be_approved(master):
     kvb = wl.resolve(master, "KARURVYSYA")
-    suggested = {p.nse_symbol for p in wl.suggest_peers(master, kvb)}
-    assert {"CUB", "FEDERALBNK", "KTKBANK"} <= suggested
-    assert "KARURVYSYA" not in suggested
-    assert "LTF" not in suggested  # same broad NSE industry, but not a bank
+    suggested = [p.nse_symbol for p in wl.suggest_peers(master, kvb)]
+    # Same Nifty 500 industry ("Financial Services"), by market cap. KTKBANK is not in the
+    # Nifty 500 sample, so it has no industry and is not suggested.
+    assert suggested == ["FEDERALBNK", "LTF", "CUB"]
 
     wl.approve_peers(master, kvb, [wl.resolve(master, "CUB")])
     wl.approve_peers(master, kvb, [wl.resolve(master, "CUB")])  # no duplicate

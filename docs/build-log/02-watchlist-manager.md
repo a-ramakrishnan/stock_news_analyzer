@@ -27,7 +27,7 @@ No LLM is used. Simple matching is enough here and costs nothing.
 
 - **ISIN is the key** for every company: names change, symbols change, ISINs don't.
 - **BSE codes come from BSE's scrip list.** Step 3 (Filings Collector) needs them to fetch BSE announcements.
-- **Peers use BSE's finer industry** ("Private Sector Bank") when known, because NSE's Nifty 500 industry is broad ("Financial Services" mixes banks, NBFCs and insurers). Suggestions are only suggestions; you approve them.
+- **Peers come from the same NSE industry, largest market cap first.** NSE's Nifty 500 industry is broad ("Financial Services" mixes banks, NBFCs and insurers), so suggestions are only suggestions; you approve them. See the update below.
 - **Raw downloads are kept** under `data/reference/<date>/`, in line with "keep raw data forever".
 - **Manual fallback:** NSE sometimes blocks scripted downloads. Every list can be loaded from a file you saved in a browser (`--nse-file`, `--nifty500-file`, `--bse-file`).
 
@@ -47,6 +47,16 @@ KARURVYSYA   590003   INE036D01028  True          -  Karur Vysya Bank Limited / 
 LT           500510   INE018A01030  True          -  Larsen & Toubro Limited / ...
 MSUMI        543498   INE0FS801015  True          -  Motherson Sumi Wiring India Limited / ...
 ```
+
+## Update after the first live run
+
+The first `make securities` on a Mac loaded 2,608 NSE, 5,113 BSE and 501 Nifty 500 rows, and all three stocks resolved correctly (LT / 500510, KARURVYSYA / 590003, MSUMI / 543498).
+
+It also showed that BSE's scrip list has an `INDUSTRY` field but leaves it empty, so the planned finer BSE industry isn't available from that list. BSE's per-company header endpoints didn't return usable data either. Follow-up change:
+
+- Store BSE's `Mktcap` (market cap in Rs crore) on each company, and rank peer suggestions by it.
+- The test sample now mirrors BSE's real response (`INDUSTRY: null`).
+- Finer industry labels ("Private Sector Bank") are deferred to the Theme & Peer agent (Phase 4), which can classify companies from annual reports and concalls.
 
 ## Tweet draft
 

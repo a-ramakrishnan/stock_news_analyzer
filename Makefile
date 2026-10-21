@@ -1,4 +1,4 @@
-.PHONY: setup up down health test lint format docker-health
+.PHONY: setup up down health migrate securities watchlist test lint format docker-health
 
 setup:          ## Install Python dependencies and create .env
 	uv sync
@@ -13,10 +13,20 @@ down:           ## Stop Docker services (data is kept)
 health:         ## Check config, data folder and database from the laptop
 	uv run sna health
 
+migrate:        ## Create or update database tables
+	uv run sna db upgrade
+
+securities:     ## Download the NSE/BSE lists of listed companies
+	uv run sna securities refresh
+
+watchlist:      ## Load config/watchlist.yaml and show the watchlist
+	uv run sna watchlist load
+	uv run sna watchlist list
+
 docker-health:  ## Run the same check inside the app container
 	docker compose run --rm --build app
 
-test:           ## Run tests (database tests are skipped if Postgres is not running)
+test:           ## Run tests in a separate sna_test database (DB tests skip if Postgres is down)
 	uv run pytest
 
 lint:           ## Check style

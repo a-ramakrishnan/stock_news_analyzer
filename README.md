@@ -9,8 +9,8 @@ A set of small agents that track news, exchange filings and earnings calls for I
 
 | Step | What | Status |
 | --- | --- | --- |
-| 1 | Project skeleton: Python package, Postgres + pgvector in Docker, config, health check, CI | this PR |
-| 2 | Database tables + Watchlist Manager agent | next |
+| 1 | Project skeleton: Python package, Postgres + pgvector in Docker, config, health check, CI | done |
+| 2 | Database tables + Watchlist Manager agent | this PR |
 | 3 | Filings Collector (BSE) | planned |
 | 4 | News Collector (RSS) | planned |
 | 5 | Price & Label (NSE bhavcopy) | planned |
@@ -40,11 +40,32 @@ postgres     ok  16.x
 pgvector     ok  0.8.x
 ```
 
+Then set up your watchlist (edit [`config/watchlist.yaml`](config/watchlist.yaml) first):
+
+```bash
+make migrate      # create the database tables
+make securities   # download the NSE + BSE lists of listed companies
+make watchlist    # load config/watchlist.yaml and show it
+```
+
+If NSE blocks the download, open the link it prints in a browser, save the file, and run
+`uv run sna securities refresh --nse-file ~/Downloads/EQUITY_L.csv`.
+
+Watchlist commands:
+
+| Command | What it does |
+| --- | --- |
+| `uv run sna watchlist add "Karur Vysya Bank" --owned` | Add or update a stock by name, NSE symbol, BSE code or ISIN |
+| `uv run sna watchlist add gold` | Track bullion (gold or silver) |
+| `uv run sna watchlist list` | Show the watchlist with NSE/BSE codes and industry |
+| `uv run sna watchlist remove LT` | Stop tracking |
+| `uv run sna watchlist peers LT` | Suggest same-industry peers; save with `--approve SYMBOL` |
+
 Other commands:
 
 | Command | What it does |
 | --- | --- |
-| `make test` | Run the tests (database tests skip if Postgres is not running) |
+| `make test` | Run the tests in a separate `sna_test` database (skipped if Postgres is not running) |
 | `make lint` / `make format` | Check or fix code style |
 | `make docker-health` | Run the health check inside the app's Docker container |
 | `make down` | Stop Docker (your data is kept in a Docker volume) |
@@ -54,8 +75,13 @@ Other commands:
 ```
 src/stock_news_analyzer/   Python package (agents will live here)
   config.py                settings from environment / .env
-  db.py                    database connection and health check
+  db.py                    database connection, migrations, health check
+  models.py                database tables
+  migrations/              Alembic migrations (one per schema change)
+  sources/securities.py    NSE/BSE security list download + parsing
+  agents/watchlist.py      Watchlist Manager (agent 1)
   cli.py                   `sna` command-line tool
+config/watchlist.yaml      your stocks and bullion
 tests/                     pytest tests
 docker/postgres/init.sql   enables pgvector when the database is created
 docs/build-log/            what each step added and how to check it

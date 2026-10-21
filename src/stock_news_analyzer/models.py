@@ -246,3 +246,17 @@ class CorporateAction(Base):
     price_factor: Mapped[float] = mapped_column(default=1.0)
     dividend: Mapped[Decimal | None] = mapped_column(Numeric(14, 4))
     raw: Mapped[dict] = mapped_column(JSONB)
+
+
+class Run(Base):
+    """One run of a scheduled job (filings, news, prices, digest...), for monitoring."""
+
+    __tablename__ = "runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job: Mapped[str] = mapped_column(String(32), index=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(16))  # 'running', 'ok', 'error'
+    summary: Mapped[str | None] = mapped_column(Text)
+    error: Mapped[str | None] = mapped_column(Text)

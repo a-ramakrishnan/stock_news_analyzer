@@ -241,3 +241,15 @@ def test_relink_removes_links_that_no_longer_match(watchlist):
     assert watchlist.query(DocumentCompany).count() == 0
     assert watchlist.query(Document).count() == 1  # the article itself is kept
     assert nw.relink(watchlist) == (0, 0)
+
+
+@pytest.mark.db
+def test_progress_line_per_feed(watchlist):
+    lines = []
+    nw.NewsCollector(watchlist, FakeClient(failing=("broken",)), CONFIG).collect(
+        google=False, progress=lines.append
+    )
+    assert lines == [
+        "et_stocks: 4 read, 3 about your stocks, 3 new",
+        "broken: FAILED HTTP 403",
+    ]

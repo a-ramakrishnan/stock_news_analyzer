@@ -35,6 +35,8 @@ labels_app = typer.Typer(
 )
 app.add_typer(prices_app, name="prices")
 app.add_typer(labels_app, name="labels")
+orchestrator_app = typer.Typer(help="Run the jobs on a schedule.", no_args_is_help=True)
+app.add_typer(orchestrator_app, name="orchestrator")
 app.add_typer(securities_app, name="securities")
 app.add_typer(watchlist_app, name="watchlist")
 
@@ -475,7 +477,7 @@ def news_fetch(
             typer.echo("watchlist is empty")
             raise typer.Exit(1)
         result = NewsCollector(session, NewsClient(), _news_config(feeds_file)).collect(
-            feed_keys=feed or None, google=google
+            feed_keys=feed or None, google=google, progress=typer.echo
         )
     typer.echo(
         f"{result.seen} articles read from {len(result.feeds)} feeds; "
@@ -727,3 +729,121 @@ def labels_list(
                 f"{doc.doc_type[:14]:<14} {pct(label.excess_1d):>8} {pct(label.excess_5d):>8} "
                 f"{pct(label.excess_20d):>8}  {doc.title[:60]}"
             )
+
+
+# --- orchestrator, runs and digest -------------------------------------------
+
+
+@app.command("run")
+def run(
+    job: str = typer.Argument(..., help="filings, news, prices, securities, digest, or all."),
+) -> None:
+    """Run a job now (as the orchestrator would) and record it in the run log."""
+    from stock_news_analyzer.agents.orchestrator import JOBS, RUN_ALL, run_job
+
+    names = list(RUN_ALL) if job == "all" else [job]
+    unknown = [n for n in names if n not in JOBS]
+    if unknown:
+        typer.echo(f"unknown job '{unknown[0]}'; choose from: {', '.join(JOBS)}, all")
+        raise typer.Exit(2)
+    failed = False
+    for name in names:
+        typer.echo(f"running {name}...")
+        result = run_job(name)
+        typer.echo(f"{name}: {result.status}  {result.summary or ''}")
+        if result.error:
+            typer.echo(f"  error: {result.error}")
+            failed = True
+    if failed:
+        raise typer.Exit(1)
+
+
+@app.command("runs")
+def runs(
+    job: str = typer.Option(None, help="Only this job."),
+    limit: int = typer.Option(20, help="How many to show."),
+) -> None:
+    """Recent job runs: when, how long, result."""
+    from sqlalchemy import select
+
+    from stock_news_analyzer.models import Run
+
+    with get_session() as session:
+        query = select(Run).order_by(Run.started_at.desc()).limit(limit)
+        if job:
+            query = query.where(Run.job == job)
+        rows = session.scalars(query).all()
+    if not rows:
+        typer.echo("no runs yet; try: sna run all")
+        return
+    for r in rows:
+        took = f"{(r.finished_at - r.started_at).total_seconds():.0f}s" if r.finished_at else "-"
+        when = r.started_at.astimezone(fl.IST).strftime("%Y-%m-%d %H:%M")
+        typer.echo(f"{when}  {r.job:<10} {r.status:<7} {took:>6}  {r.summary or ''}")
+        if r.error:
+            typer.echo(f"{'':>36}error: {r.error[:200]}")
+
+
+@orchestrator_app.command("show")
+def orchestrator_show(
+    schedule: Path = typer.Option(Path("config/schedule.yaml"), help="Schedule file."),
+) -> None:
+    """The schedule and when each job runs next (India time)."""
+    from stock_news_analyzer.agents.orchestrator import load_schedule, next_runs
+
+    jobs = load_schedule(schedule)
+    upcoming = next_runs(jobs)
+    for j in jobs:
+        nxt = upcoming.get(j.name)
+        when = nxt.strftime("%a %d %b %H:%M") if nxt else "paused"
+        typer.echo(f"{j.name:<11} {j.cron:<20} next: {when}")
+
+
+@orchestrator_app.command("start")
+def orchestrator_start(
+    schedule: Path = typer.Option(Path("config/schedule.yaml"), help="Schedule file."),
+    run_now: bool = typer.Option(False, help="Run filings and news once before waiting."),
+) -> None:
+    """Run jobs on schedule until stopped (Ctrl+C). Also used by the Docker scheduler."""
+    from stock_news_analyzer.agents.orchestrator import (
+        build_scheduler,
+        load_schedule,
+        next_runs,
+        run_job,
+    )
+
+    logging.getLogger("apscheduler").setLevel(logging.WARNING)
+    jobs = load_schedule(schedule)
+    for name, when in next_runs(jobs).items():
+        typer.echo(f"{name:<11} next run {when:%a %d %b %H:%M} IST")
+    if run_now:
+        for name in ("filings", "news"):
+            run_job(name)
+    typer.echo("orchestrator running; Ctrl+C to stop")
+    try:
+        build_scheduler(jobs).start()
+    except (KeyboardInterrupt, SystemExit):
+        typer.echo("orchestrator stopped")
+
+
+@app.command("digest")
+def digest(
+    hours: int = typer.Option(None, help="Cover the last N hours (default: since last digest)."),
+    save: bool = typer.Option(False, help="Also save it under data/digests/."),
+) -> None:
+    """Print the digest now. Scheduled digests (`sna run digest`) are saved automatically."""
+    from datetime import UTC, timedelta
+
+    from stock_news_analyzer.agents.digest import build_digest, last_digest_time, save_digest
+
+    until = datetime.now(UTC)
+    with get_session() as session:
+        since = (
+            until - timedelta(hours=hours)
+            if hours
+            else last_digest_time(session) or until - timedelta(days=1)
+        )
+        result = build_digest(session, since, until)
+    typer.echo(result.markdown)
+    if save:
+        typer.echo(f"saved to {save_digest(result, get_settings().data_dir)}")

@@ -1,4 +1,4 @@
-.PHONY: setup up down health migrate securities watchlist filings news prices test lint format docker-health
+.PHONY: setup up down health migrate securities watchlist filings news prices digest run-all scheduler scheduler-logs scheduler-stop test lint format docker-health
 
 setup:          ## Install Python dependencies and create .env
 	uv sync
@@ -32,6 +32,21 @@ news:           ## Read news feeds + Google News for the watchlist
 prices:         ## Load new NSE prices, update moves and labels
 	uv run sna prices fetch
 	uv run sna labels update
+
+digest:         ## Print the digest (everything since the last scheduled digest)
+	uv run sna digest
+
+run-all:        ## Run filings, news, prices and digest once, now
+	uv run sna run all
+
+scheduler:      ## Start the orchestrator in Docker (keeps running while Docker is up)
+	docker compose --profile scheduler up -d --build scheduler
+
+scheduler-logs: ## Follow the orchestrator's output
+	docker compose logs -f scheduler
+
+scheduler-stop: ## Stop the orchestrator
+	docker compose stop scheduler
 
 docker-health:  ## Run the same check inside the app container
 	docker compose run --rm --build app

@@ -35,6 +35,8 @@ class Company(Base):
     # Broad NSE industry (from the Nifty 500 list) and finer BSE industry, when known.
     industry: Mapped[str | None] = mapped_column(Text)
     bse_industry: Mapped[str | None] = mapped_column(Text)
+    # Market capitalisation in Rs crore, from BSE's scrip list (as of the last refresh).
+    market_cap_cr: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     in_nifty500: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     listed_on: Mapped[date | None] = mapped_column(Date)
     updated_at: Mapped[datetime] = mapped_column(

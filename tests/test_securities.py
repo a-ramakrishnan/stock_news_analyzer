@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 
 from conftest import FIXTURES
 
@@ -32,11 +33,15 @@ def test_nifty500_maps_isin_to_industry():
 
 
 def test_bse_scrips_reads_codes_and_skips_rows_without_isin():
+    # The fixture's L&T row is copied from BSE's live response (Oct 2026): INDUSTRY is null.
     rows = parse_bse_scrips((FIXTURES / "bse_scrips.json").read_text())
     by_isin = {r.isin: r for r in rows}
     assert "NOISIN" not in {r.symbol for r in rows}
     lt = by_isin["INE018A01030"]
-    assert (lt.code, lt.symbol, lt.industry) == ("500510", "LT", "Civil Construction")
+    assert (lt.code, lt.symbol, lt.name) == ("500510", "LT", "Larsen & Toubro Limited")
+    assert lt.industry is None
+    assert lt.market_cap_cr == Decimal("499683.78")
+    assert by_isin["INE999X01011"].market_cap_cr is None  # blank Mktcap
 
 
 def test_bse_scrips_accepts_wrapped_response():

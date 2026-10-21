@@ -2,7 +2,8 @@
 
 - NSE equity list: every NSE-listed equity with symbol, name, series and ISIN.
 - Nifty 500 constituents: adds a broad industry for the 500 largest companies.
-- BSE scrip list: BSE scrip code (needed to fetch BSE filings) and a finer industry.
+- BSE scrip list: BSE scrip code (needed to fetch BSE filings) and market cap in Rs crore.
+  It has an INDUSTRY field, but BSE leaves it empty; it is read in case that changes.
 """
 
 import csv
@@ -11,6 +12,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 
 import httpx
 
@@ -49,6 +51,7 @@ class BseSecurity:
     name: str
     isin: str
     industry: str | None
+    market_cap_cr: Decimal | None
 
 
 def _rows(text: str) -> list[dict[str, str]]:
@@ -83,6 +86,13 @@ def parse_nifty500(text: str) -> dict[str, str]:
     return {row["ISIN CODE"]: row["INDUSTRY"] for row in _rows(text) if row.get("ISIN CODE")}
 
 
+def _decimal(value) -> Decimal | None:
+    try:
+        return Decimal(str(value).replace(",", "")) if value not in (None, "") else None
+    except InvalidOperation:
+        return None
+
+
 def parse_bse_scrips(text: str) -> list[BseSecurity]:
     data = json.loads(text)
     if isinstance(data, dict):  # some responses wrap the list, e.g. {"Table": [...]}
@@ -101,6 +111,7 @@ def parse_bse_scrips(text: str) -> list[BseSecurity]:
                 name=row.get("ISSUER_NAME") or row.get("SCRIP_NAME") or "",
                 isin=isin,
                 industry=row.get("INDUSTRY") or None,
+                market_cap_cr=_decimal(row.get("MKTCAP")),
             )
         )
     return out

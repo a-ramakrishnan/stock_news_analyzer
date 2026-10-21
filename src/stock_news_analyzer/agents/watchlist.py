@@ -91,6 +91,7 @@ def load_master(
             "bse_code": b.code,
             "bse_symbol": b.symbol,
             "bse_industry": b.industry,
+            "market_cap_cr": b.market_cap_cr,
         }
         # On conflict keep the NSE name; only fill in the BSE fields.
         update = {k: v for k, v in values.items() if k not in ("isin", "name")}
@@ -219,7 +220,10 @@ def list_items(session: Session) -> list[tuple[WatchlistItem, Company | None]]:
 
 
 def suggest_peers(session: Session, company: Company, limit: int = 10) -> list[Company]:
-    """Companies in the same industry (BSE's finer industry if known), larger ones first."""
+    """Companies in the same industry, largest market cap first.
+
+    Uses BSE's industry if it is ever filled in, otherwise NSE's broader Nifty 500 industry.
+    """
     if company.bse_industry:
         same = Company.bse_industry == company.bse_industry
     elif company.industry:
@@ -230,7 +234,7 @@ def suggest_peers(session: Session, company: Company, limit: int = 10) -> list[C
         session.scalars(
             select(Company)
             .where(same, Company.isin != company.isin)
-            .order_by(Company.in_nifty500.desc(), Company.name)
+            .order_by(Company.market_cap_cr.desc().nulls_last(), Company.name)
             .limit(limit)
         )
     )

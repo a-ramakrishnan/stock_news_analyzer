@@ -256,4 +256,5 @@ def watchlist_peers(
             return
         typer.echo("suggested peers (approve with --approve SYMBOL):")
         for p in suggestions:
-            typer.echo(f"  {p.nse_symbol or '-':<12} {p.name}")
+            mcap = f"Rs {p.market_cap_cr:,.0f} cr" if p.market_cap_cr is not None else ""
+            typer.echo(f"  {p.nse_symbol or '-':<12} {mcap:>18}  {p.name}")

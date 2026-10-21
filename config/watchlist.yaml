@@ -3,10 +3,13 @@
 # `owned: true` turns on earnings-call tracking for that stock. `quantity` is optional.
 # `aliases`: other names the news uses. Short or all-capital aliases match case-sensitively.
 # The company name (without "Limited") is always matched, so it needn't be listed.
+# `exclude`: phrases that look like this company but are a different one; text matching them
+# is ignored when deciding whether an article is about this company.
 stocks:
   - name: Larsen & Toubro
     owned: true
     aliases: ["L&T"]
+    exclude: ["L&T Technology", "L&T Tech", "L&T Finance", "L&T Realty", "L&T Infotech", "LTIMindtree", "LTTS"]
   - name: Karur Vysya Bank
     owned: true
     aliases: ["KVB"]

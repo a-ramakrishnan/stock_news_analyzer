@@ -106,8 +106,9 @@ uv run sna news list
 | `make news` | Read all feeds + a Google News search per company; keep articles that mention a watchlist company |
 | `uv run sna news fetch --no-google` | Feeds only, no Google News |
 | `uv run sna news list KARURVYSYA` | Latest articles for one company |
+| `uv run sna news relink` | Re-match stored articles after editing `aliases` or `exclude` |
 
-Articles are matched by company name (without "Limited") and the `aliases` in `config/watchlist.yaml`.
+Articles are matched by company name (without "Limited") and the `aliases` in `config/watchlist.yaml`; `exclude` phrases there (e.g. "L&T Technology") stop look-alike companies from matching.
 
 ## Other commands
 

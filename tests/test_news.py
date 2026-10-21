@@ -8,6 +8,7 @@ from stock_news_analyzer.agents import news as nw
 from stock_news_analyzer.agents import watchlist as wl
 from stock_news_analyzer.models import Company, Document, DocumentCompany, WatchlistItem
 from stock_news_analyzer.sources.news import (
+    Article,
     Feed,
     FeedConfig,
     NewsError,
@@ -143,8 +144,9 @@ def watchlist(session):
 
 @pytest.mark.db
 def test_watchlist_file_aliases_are_loaded(watchlist):
-    aliases = {i.display_name: i.aliases for i in watchlist.query(WatchlistItem)}
-    assert aliases["Larsen & Toubro Limited"] == ["L&T"]
+    items = {i.display_name: i for i in watchlist.query(WatchlistItem)}
+    assert items["Larsen & Toubro Limited"].aliases == ["L&T"]
+    assert "L&T Technology" in items["Larsen & Toubro Limited"].exclude
 
 
 @pytest.mark.db
@@ -196,3 +198,46 @@ def test_cli_news_list(watchlist, test_database_url, monkeypatch):
     result = CliRunner().invoke(app, ["news", "list", "KARURVYSYA"])
     assert result.exit_code == 0, result.stdout
     assert "KARURVYSYA" in result.stdout and "KVB and City Union Bank rally" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        # Headlines from the first live run (21 Oct 2026).
+        ("Why L&T Technology shares jumped 11% to hit the Rs 4,000 level after Q2 results", []),
+        ("IT stocks on fire, rally up to 15% today; check performance of TCS, L&T Technology", []),
+        ("L&T wins large orders for Central Secretariat, Amaravati office towers", ["LT"]),
+        ("L&T and L&T Finance shares rise", ["LT"]),  # L&T itself is still mentioned
+        ("LTIMindtree, LTTS lead IT gains", []),
+    ],
+)
+def test_matcher_exclusions(text, expected):
+    lt = Company(isin="A", name="Larsen & Toubro Limited", nse_symbol="LT")
+    exclude = ["L&T Technology", "L&T Tech", "L&T Finance", "LTIMindtree", "LTTS"]
+    matcher = nw.CompanyMatcher([(lt, ["L&T"], exclude)])
+    assert [c.nse_symbol for c in matcher.match(text)] == expected
+
+
+@pytest.mark.db
+def test_relink_removes_links_that_no_longer_match(watchlist):
+    item = watchlist.query(WatchlistItem).filter_by(display_name="Larsen & Toubro Limited").one()
+    item.exclude = []
+    watchlist.commit()
+    lt_tech = Article(
+        source="news:mint_markets",
+        source_id="a" * 40,
+        title="Why L&T Technology shares jumped 11%",
+        summary="",
+        url="https://example.com/ltts",
+        publisher="Mint",
+        published_at=datetime(2026, 10, 21, 4, 22, tzinfo=UTC),
+    )
+    collector = nw.NewsCollector(watchlist, FakeClient(), CONFIG)
+    collector._store(lt_tech, nw.watchlist_matcher(watchlist).match(lt_tech.title))
+    assert watchlist.query(DocumentCompany).count() == 1
+
+    wl.load_file(watchlist, REPO / "config" / "watchlist.yaml")  # brings the exclusions back
+    assert nw.relink(watchlist) == (0, 1)
+    assert watchlist.query(DocumentCompany).count() == 0
+    assert watchlist.query(Document).count() == 1  # the article itself is kept
+    assert nw.relink(watchlist) == (0, 0)

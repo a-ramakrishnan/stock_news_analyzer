@@ -32,12 +32,10 @@ feeds:
   - key: businessline_companies
     name: Hindu BusinessLine - Companies
     url: https://www.thehindubusinessline.com/companies/feeder/default.rss
-  - key: fe_market
-    name: Financial Express - Market
-    url: https://www.financialexpress.com/market/feed/
 
 # Google News: one search per watchlist company, by its main name, for the last 7 days.
-# Picks up outlets not listed above (CNBC-TV18, NDTV Profit, regional papers).
+# Picks up outlets not listed above (Financial Express, NDTV Profit, PSU Connect, regional papers).
+# (Financial Express's own feed was removed in Oct 2026: its XML is malformed and unreadable.)
 google_news:
   enabled: true
   days: 7

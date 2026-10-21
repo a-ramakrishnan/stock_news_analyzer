@@ -10,7 +10,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -60,23 +60,35 @@ def _pattern(alias: str) -> re.Pattern:
 class CompanyMatcher:
     """Finds which watchlist companies a piece of text mentions."""
 
-    def __init__(self, companies: Iterable[tuple[Company, list[str]]]):
+    def __init__(
+        self, companies: Iterable[tuple[Company, list[str]] | tuple[Company, list[str], list[str]]]
+    ):
         self.entries = []
-        for company, extra in companies:
+        for company, extra, *rest in companies:
             aliases = default_aliases(company) + [a for a in extra if a.strip()]
-            self.entries.append((company, [_pattern(a) for a in aliases]))
+            exclude = [_pattern(e) for e in (rest[0] if rest else []) if e.strip()]
+            self.entries.append((company, [_pattern(a) for a in aliases], exclude))
 
     def match(self, text: str) -> list[Company]:
-        return [c for c, patterns in self.entries if any(p.search(text) for p in patterns)]
+        found = []
+        for company, patterns, exclude in self.entries:
+            checked = text
+            for pattern in exclude:  # "L&T Technology" is not L&T
+                checked = pattern.sub(" ", checked)
+            if any(p.search(checked) for p in patterns):
+                found.append(company)
+        return found
 
 
 def watchlist_matcher(session: Session) -> CompanyMatcher:
     rows = session.execute(
-        select(Company, WatchlistItem.aliases).join(
+        select(Company, WatchlistItem.aliases, WatchlistItem.exclude).join(
             WatchlistItem, WatchlistItem.isin == Company.isin
         )
     ).all()
-    return CompanyMatcher((company, list(aliases or [])) for company, aliases in rows)
+    return CompanyMatcher(
+        (company, list(aliases or []), list(exclude or [])) for company, aliases, exclude in rows
+    )
 
 
 @dataclass
@@ -113,7 +125,7 @@ class NewsCollector:
             self._read(f"news:{feed.key}", feed.key, feed.url, feed.name, matcher, result)
 
         if google and self.config.google_news and not feed_keys:
-            for company, _ in matcher.entries:
+            for company, *_ in matcher.entries:
                 query = f'"{default_aliases(company)[0]}"'
                 url = google_news_url(query, self.config.google_days)
                 key = f"google:{company.nse_symbol or company.isin}"
@@ -173,6 +185,33 @@ class NewsCollector:
             )
         self.session.commit()
         return is_new
+
+
+def relink(session: Session) -> tuple[int, int]:
+    """Re-match every stored news article to the watchlist with the current names, aliases and
+    exclusions. Returns (links added, links removed). Articles themselves are never deleted."""
+    matcher = watchlist_matcher(session)
+    watched = {c.isin for c, *_ in matcher.entries}
+    added = removed = 0
+    for doc in session.scalars(select(Document).where(Document.doc_type == "news")):
+        wanted = {c.isin for c in matcher.match(f"{doc.title}\n{doc.text or ''}")}
+        current = set(
+            session.scalars(
+                select(DocumentCompany.isin).where(DocumentCompany.document_id == doc.id)
+            )
+        )
+        for isin in (current & watched) - wanted:
+            session.execute(
+                delete(DocumentCompany).where(
+                    DocumentCompany.document_id == doc.id, DocumentCompany.isin == isin
+                )
+            )
+            removed += 1
+        for isin in wanted - current:
+            session.add(DocumentCompany(document_id=doc.id, isin=isin))
+            added += 1
+    session.commit()
+    return added, removed
 
 
 def check_feeds(client: Client, config: FeedConfig) -> list[tuple[str, str, int, str | None]]:

@@ -6,12 +6,14 @@
 
 | Piece | Why |
 | --- | --- |
-| `config/news_feeds.yaml` | The feeds to read (Economic Times, Moneycontrol, Business Standard, Mint, Hindu BusinessLine, Financial Express), editable without code changes |
+| `config/news_feeds.yaml` | The 10 feeds to read (Economic Times, Moneycontrol, Business Standard, Mint, Hindu BusinessLine), editable without code changes |
 | `sna news check-feeds` | Fetches every feed once and reports which work, so dead or moved feeds are easy to spot |
 | `sources/news.py` | Fetches feeds with the same browser-like client as the filings, parses RSS/Atom with `feedparser`, builds Google News search URLs |
 | `agents/news.py` | Matches each article to watchlist companies, stores it once, links it to every company it mentions |
 | Migration 0004 | `documents.url` and `documents.publisher` for articles; `watchlist.aliases` for other names the press uses |
 | `aliases` in `config/watchlist.yaml` | "L&T", "KVB", "MSWIL" |
+| `exclude` in `config/watchlist.yaml` (migration 0005) | Phrases that look like the company but aren't: "L&T Technology", "L&T Finance", "LTIMindtree", ... |
+| `sna news relink` | Re-matches stored articles after aliases or exclusions change |
 | `sna news fetch / list`, `make news` | Daily use and checking what came in |
 
 ## How articles are matched to companies
@@ -21,7 +23,7 @@
 3. "&" also matches "and", so "Larsen and Toubro" matches "Larsen & Toubro".
 4. Only articles that mention at least one watchlist company are stored. One article can be linked to several companies ("L&T, Karur Vysya Bank among top gainers").
 
-Known limitation: "L&T" also matches "L&T Finance" and "L&T Technology Services", which are different companies. The Triage agent (step 6) will sort these out; until then a few extra L&T articles may appear.
+5. Text matching an `exclude` phrase is ignored for that company, so "Why L&T Technology shares jumped 11%" is not an L&T article, while "L&T and L&T Finance shares rise" still is.
 
 ## Decisions
 
@@ -36,6 +38,18 @@ Known limitation: "L&T" also matches "L&T Finance" and "L&T Technology Services"
 `sna news check-feeds`: 10 of 11 feeds worked (384 items in total; ET 50+50, Moneycontrol 15+4, Business Standard 35+35, Mint 35+35, BusinessLine 60+60). Financial Express failed with "not well-formed (invalid token)": malformed XML, typically an unescaped `&` or a control character.
 
 Fix: when a feed is malformed, the parser now repairs control characters and bare `&` and reparses. Testing this showed a second problem: feedparser's lenient fallback silently turns "L&T" into "L&T;", which would break alias matching. So the repaired document is preferred for any malformed feed, not only for unreadable ones.
+
+## First live fetch (Mac, 21 Oct 2026)
+
+`make news`: 485 articles read from 14 sources (10 feeds + 3 Google News searches + the failed FE feed); 90 mentioned a watchlist company. Today's L&T order win appeared from 10:01 (Business Upturn) through 15:52 (LatestLY); BSE had the filing at 09:45. Google News added NDTV Profit, PSU Connect, Moneylife, Equitypandit and others.
+
+Fixes from that run:
+
+| Problem | Fix |
+| --- | --- |
+| Financial Express feed still unreadable after the XML repair | Removed; FE articles arrive via Google News anyway |
+| "Why L&T Technology shares jumped 11%" and an IT-stocks roundup linked to L&T | `exclude` phrases per company; `sna news relink` fixes stored articles |
+| NSE's broken PDF: kept, but no text recoverable (`could not read PDF`) | Stays marked failed; BSE's copy of the same filing has the full text |
 
 ## Also in this PR
 
@@ -57,4 +71,4 @@ uv run sna news list
 
 ## Tweet draft
 
-> Agent #3: News Collector. 11 Indian business feeds + a Google News search per stock, every article matched to my watchlist by name and nickname ("L&T", "KVB"), stored with its publish time. Headlines and summaries only for now: enough to answer "why did it move?". #BuildInPublic
+> Agent #3: News Collector. 10 Indian business feeds + a Google News search per stock, every article matched to my watchlist by name and nickname ("L&T", "KVB"), stored with its publish time. Headlines and summaries only for now: enough to answer "why did it move?". #BuildInPublic

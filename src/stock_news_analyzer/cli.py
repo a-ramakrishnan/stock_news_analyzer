@@ -464,6 +464,16 @@ def news_fetch(
         typer.echo(f"error: {report.key}: {report.error}")
 
 
+@news_app.command("relink")
+def news_relink() -> None:
+    """Re-match stored articles to companies after changing aliases or exclusions."""
+    from stock_news_analyzer.agents.news import relink
+
+    with get_session() as session:
+        added, removed = relink(session)
+    typer.echo(f"{added} links added, {removed} links removed")
+
+
 @news_app.command("list")
 def news_list(
     symbol: str = typer.Argument(None, help="NSE symbol (default: all watchlist companies)."),

@@ -71,6 +71,10 @@ class WatchlistItem(Base):
     aliases: Mapped[list[str]] = mapped_column(
         ARRAY(Text), default=list, server_default="{}", nullable=False
     )
+    # Phrases that look like this company but are another one, e.g. "L&T Technology".
+    exclude: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), default=list, server_default="{}", nullable=False
+    )
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

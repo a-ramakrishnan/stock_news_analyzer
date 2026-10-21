@@ -1,0 +1,17 @@
+# Your watchlist. Load or re-load it with: sna watchlist load
+# Each stock needs a name; add `symbol:` (NSE symbol) if the name matches more than one company.
+# `owned: true` turns on earnings-call tracking for that stock. `quantity` is optional.
+stocks:
+  - name: Larsen & Toubro
+    owned: true
+  - name: Karur Vysya Bank
+    owned: true
+  - name: Motherson Sumi Wiring
+    owned: true
+
+# Bullion to track: gold and/or silver, e.g.
+# bullion:
+#   - gold
+#   - name: silver
+#     owned: true
+bullion: []

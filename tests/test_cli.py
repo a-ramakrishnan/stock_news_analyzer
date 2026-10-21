@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from typer.testing import CliRunner
 
@@ -29,3 +31,35 @@ def test_health_passes_against_running_database(engine, monkeypatch, tmp_path):
     result = runner.invoke(app, ["health"])
     assert result.exit_code == 0, result.stdout
     assert "pgvector     ok" in result.stdout
+
+
+@pytest.mark.db
+def test_refresh_load_and_list_from_downloaded_files(session, test_database_url, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", test_database_url)
+    fixtures = Path(__file__).parent / "fixtures"
+    result = runner.invoke(
+        app,
+        [
+            "securities",
+            "refresh",
+            "--nse-file",
+            str(fixtures / "EQUITY_L.csv"),
+            "--nifty500-file",
+            str(fixtures / "ind_nifty500list.csv"),
+            "--bse-file",
+            str(fixtures / "bse_scrips.json"),
+        ],
+    )
+    assert result.exit_code == 0, result.stdout
+    assert "loaded 9 NSE, 8 BSE, 8 Nifty 500 rows" in result.stdout
+
+    result = runner.invoke(app, ["watchlist", "load", "config/watchlist.yaml"])
+    assert result.exit_code == 0, result.stdout
+
+    result = runner.invoke(app, ["watchlist", "list"])
+    assert result.exit_code == 0
+    assert "543498" in result.stdout and "Motherson Sumi Wiring India Limited" in result.stdout
+
+    result = runner.invoke(app, ["watchlist", "add", "Bank"])
+    assert result.exit_code == 1
+    assert "could match more than one company" in result.stdout

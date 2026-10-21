@@ -1,0 +1,11 @@
+[
+ {"SCRIP_CD":"500510","Scrip_Name":"Larsen & Toubro Ltd.","Status":"Active","GROUP":"A ","FACE_VALUE":"2.00","ISIN_NUMBER":"INE018A01030","INDUSTRY":"Civil Construction","scrip_id":"LT","Segment":"Equity","Issuer_Name":"Larsen & Toubro Ltd."},
+ {"SCRIP_CD":"590003","Scrip_Name":"Karur Vysya Bank Ltd.","Status":"Active","GROUP":"A ","FACE_VALUE":"2.00","ISIN_NUMBER":"INE036D01028","INDUSTRY":"Private Sector Bank","scrip_id":"KARURVYSYA","Segment":"Equity","Issuer_Name":"Karur Vysya Bank Ltd."},
+ {"SCRIP_CD":"532210","Scrip_Name":"City Union Bank Ltd.","Status":"Active","GROUP":"A ","FACE_VALUE":"1.00","ISIN_NUMBER":"INE491A01021","INDUSTRY":"Private Sector Bank","scrip_id":"CUB","Segment":"Equity","Issuer_Name":"City Union Bank Ltd."},
+ {"SCRIP_CD":"500469","Scrip_Name":"Federal Bank Ltd.","Status":"Active","GROUP":"A ","FACE_VALUE":"2.00","ISIN_NUMBER":"INE171A01029","INDUSTRY":"Private Sector Bank","scrip_id":"FEDERALBNK","Segment":"Equity","Issuer_Name":"The Federal Bank Ltd."},
+ {"SCRIP_CD":"532652","Scrip_Name":"Karnataka Bank Ltd.","Status":"Active","GROUP":"A ","FACE_VALUE":"10.00","ISIN_NUMBER":"INE614B01018","INDUSTRY":"Private Sector Bank","scrip_id":"KTKBANK","Segment":"Equity","Issuer_Name":"The Karnataka Bank Ltd."},
+ {"SCRIP_CD":"543498","Scrip_Name":"Motherson Sumi Wiring India Ltd.","Status":"Active","GROUP":"A ","FACE_VALUE":"1.00","ISIN_NUMBER":"INE0FS801015","INDUSTRY":"Auto Components & Equipments","scrip_id":"MSUMI","Segment":"Equity","Issuer_Name":"Motherson Sumi Wiring India Ltd."},
+ {"SCRIP_CD":"517334","Scrip_Name":"Samvardhana Motherson International Ltd.","Status":"Active","GROUP":"A ","FACE_VALUE":"1.00","ISIN_NUMBER":"INE775A01035","INDUSTRY":"Auto Components & Equipments","scrip_id":"MOTHERSON","Segment":"Equity","Issuer_Name":"Samvardhana Motherson International Ltd."},
+ {"SCRIP_CD":"999901","Scrip_Name":"Example BSE Only Ltd.","Status":"Active","GROUP":"X ","FACE_VALUE":"10.00","ISIN_NUMBER":"INE999X01011","INDUSTRY":"Private Sector Bank","scrip_id":"EXBSE","Segment":"Equity","Issuer_Name":"Example BSE Only Ltd."},
+ {"SCRIP_CD":"999902","Scrip_Name":"No ISIN Ltd.","Status":"Active","ISIN_NUMBER":"","INDUSTRY":"","scrip_id":"NOISIN"}
+]

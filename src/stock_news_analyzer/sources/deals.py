@@ -89,6 +89,11 @@ def _number(text) -> Decimal | None:
         return None
 
 
+def _text(value) -> str:
+    """A cell as text; JSON nulls are empty, not the word 'None'."""
+    return "" if value is None else str(value).strip()
+
+
 def records(content: bytes | str) -> list[dict]:
     """Rows of a JSON response ({"data": [...]} or a list) or of a CSV file."""
     text = content.decode("utf-8-sig") if isinstance(content, bytes) else content
@@ -119,8 +124,8 @@ def parse_deals(content: bytes | str, kind: str) -> list[Deal]:
         symbol = str(row.get(cols["symbol"], "")).strip().upper()
         if not day or not symbol or quantity is None or side not in ("BUY", "SELL"):
             continue
-        name = str(row.get(cols["name"], "")).strip() if "name" in cols else None
-        remarks = str(row.get(cols["remarks"], "")).strip() if "remarks" in cols else None
+        name = _text(row.get(cols["name"])) if "name" in cols else None
+        remarks = _text(row.get(cols["remarks"])) if "remarks" in cols else None
         deals.append(
             Deal(
                 kind=kind,

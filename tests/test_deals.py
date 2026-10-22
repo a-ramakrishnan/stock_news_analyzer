@@ -24,7 +24,23 @@ def test_parse_api_json():
     assert first.security_name == "Motherson Sumi Wiring India Ltd"  # not the client's name
     assert first.client == "EXAMPLE GROWTH FUND" and str(first.price) == "41.25"
     assert deals[1].client == "SAMPLE PROMOTER HOLDINGS"  # spacing tidied
-    assert first.remarks is None  # "-" means none
+    assert first.remarks is None and deals[1].remarks is None  # "-" and null both mean none
+
+
+def test_parse_snapshot_of_todays_deals():
+    # NSE's "large deals" snapshot: different names again, and numbers as text.
+    content = (
+        b'{"as_on_date": "22-Oct-2026", "BULK_DEALS_DATA": [], "data": [{"buySell": "SELL",'
+        b' "clientName": "A BROKER", "date": "22-Oct-2026", "name": "Kheria Autocomp Limited",'
+        b' "qty": "28800", "remarks": "-", "symbol": "KHERIAAUTO", "watp": "97.51"}]}'
+    )
+    (deal,) = parse_deals(content, "bulk")
+    assert (deal.symbol, deal.security_name, deal.quantity, str(deal.price)) == (
+        "KHERIAAUTO",
+        "Kheria Autocomp Limited",
+        28800,
+        "97.51",
+    )
 
 
 def test_parse_csv_download():

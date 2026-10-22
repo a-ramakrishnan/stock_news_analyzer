@@ -58,3 +58,32 @@ def test_download_gives_up_when_truncation_keeps_changing():
     )
     with pytest.raises(ExchangeError, match="incomplete download"):
         client.download("nse", ["https://x/a.pdf"])
+
+
+def test_deals_request_opens_the_report_page_once_and_sends_it_as_referer():
+    from datetime import date
+
+    client = ExchangeClient(delay=0)
+    session = object()
+    client._session = lambda exchange: session
+    calls = []
+
+    def fake_get(s, url, **kwargs):
+        calls.append((url, kwargs.get("params"), (kwargs.get("headers") or {}).get("Referer")))
+        if "report-detail" in url:
+            return SimpleNamespace(status_code=200, headers={"content-type": "text/html"})
+        return SimpleNamespace(
+            status_code=200,
+            headers={"content-type": "application/json"},
+            json=lambda: {"data": [{"BD_SYMBOL": "LT"}]},
+        )
+
+    client._get = fake_get
+    body = client.nse_deals("bulk", date(2026, 10, 15), date(2026, 10, 22))
+    client.nse_deals("block", date(2026, 10, 15), date(2026, 10, 22))
+    assert b'"BD_SYMBOL": "LT"' in body
+    page, bulk, block = calls  # the report page only once for the session
+    assert page[0].endswith("/report-detail/display-bulk-and-block-deals")
+    assert bulk[0].endswith("/api/historicalOR/bulk-block-short-deals")
+    assert bulk[1] == {"optionType": "bulk_deals", "from": "15-10-2026", "to": "22-10-2026"}
+    assert block[1]["optionType"] == "block_deals" and bulk[2] == page[0]

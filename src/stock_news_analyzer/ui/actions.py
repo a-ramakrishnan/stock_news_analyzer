@@ -71,15 +71,20 @@ def tracked_stocks(session: Session) -> list[dict]:
             "owned": bool(i.owned),
             "sector_index": i.sector_index or "",
             "aliases": ", ".join(i.aliases or []),
+            "peers": ", ".join(p.nse_symbol for p in wl.approved_peers(session, c) if p.nse_symbol),
             "remove": False,
         }
         for i, c in rows
     ]
 
 
-def save_changes(session: Session, rows: list[dict]) -> tuple[int, int]:
-    """Apply edited rows (owned, sector index, aliases, remove). Returns (updated, removed)."""
+def save_changes(session: Session, rows: list[dict]) -> tuple[int, int, list[str]]:
+    """Apply edited rows (owned, sector index, aliases, peers, remove).
+
+    Returns (updated, removed, peer symbols that matched no NSE-listed company).
+    """
     updated = removed = 0
+    unknown: list[str] = []
     for row in rows:
         item = session.scalar(select(WatchlistItem).where(WatchlistItem.isin == row["isin"]))
         if item is None:
@@ -90,15 +95,22 @@ def save_changes(session: Session, rows: list[dict]) -> tuple[int, int]:
             continue
         aliases = _aliases(row.get("aliases") or "")
         sector = (row.get("sector_index") or "").strip() or None
-        if (bool(row["owned"]), sector, aliases) != (
+        changed = (bool(row["owned"]), sector, aliases) != (
             bool(item.owned),
             item.sector_index,
             list(item.aliases or []),
-        ):
-            item.owned, item.sector_index, item.aliases = bool(row["owned"]), sector, aliases
-            updated += 1
+        )
+        item.owned, item.sector_index, item.aliases = bool(row["owned"]), sector, aliases
+        if "peers" in row:
+            company = session.get(Company, row["isin"])
+            wanted = _aliases((row.get("peers") or "").upper())
+            current = [p.nse_symbol for p in wl.approved_peers(session, company) if p.nse_symbol]
+            if sorted(wanted) != sorted(current):
+                unknown += wl.set_peers(session, company, wanted)
+                changed = True
+        updated += changed
     session.commit()
-    return updated, removed
+    return updated, removed, unknown
 
 
 def load_history(

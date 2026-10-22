@@ -254,9 +254,37 @@ def stock_page_body() -> None:
             f"previous 60 days. Diamonds mark key filings."
         )
 
-    unusual_tab, filings_tab, news_tab, reactions_tab, actions_tab = st.tabs(
-        ["Unusual days", "Filings", "News", "How it reacted", "Corporate actions"]
+    unusual_tab, filings_tab, news_tab, deals_tab, reactions_tab, actions_tab = st.tabs(
+        [
+            "Unusual days",
+            "Filings",
+            "News",
+            "Bulk/block deals",
+            "How it reacted",
+            "Corporate actions",
+        ]
     )
+    with deals_tab:
+        deals = load("deals", isin=s["isin"])
+        if deals.empty:
+            no_data("No bulk or block deals stored for this stock.")
+        else:
+            shown = deals.copy()
+            shown["of_volume"] = shown["of_volume"] * 100
+            st.dataframe(
+                shown,
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    "date": st.column_config.DateColumn("Day", format="DD MMM YYYY"),
+                    "quantity": st.column_config.NumberColumn("Shares", format="localized"),
+                    "price": st.column_config.NumberColumn("Price", format="₹%.2f"),
+                    "of_volume": st.column_config.NumberColumn(
+                        "% of day's volume", format="%.1f%%"
+                    ),
+                    "client": st.column_config.TextColumn("Client", width="large"),
+                },
+            )
     with unusual_tab:
         days = load("unusual_days", isin=s["isin"])
         if days.empty:
@@ -596,21 +624,28 @@ def edit_stocks(session: Session) -> None:
         hide_index=True,
         width="stretch",
         disabled=["symbol", "name"],
-        column_order=["symbol", "name", "owned", "sector_index", "aliases", "remove"],
+        column_order=["symbol", "name", "owned", "sector_index", "aliases", "peers", "remove"],
         column_config={
             "symbol": st.column_config.TextColumn("Symbol", width="small"),
             "name": st.column_config.TextColumn("Company"),
             "owned": st.column_config.CheckboxColumn("I own it", width="small"),
             "sector_index": st.column_config.SelectboxColumn("Sector benchmark", options=indices),
             "aliases": st.column_config.TextColumn("Other names in the news"),
+            "peers": st.column_config.TextColumn(
+                "Peers",
+                help="NSE symbols to compare with, comma-separated. Empty: the largest "
+                "companies in the same NSE industry, when known.",
+            ),
             "remove": st.column_config.CheckboxColumn("Remove", width="small"),
         },
         key="edit-stocks",
     )
     if st.button("Save changes", icon=":material/save:"):
-        updated, removed = actions.save_changes(session, edited.to_dict("records"))
+        updated, removed, unknown = actions.save_changes(session, edited.to_dict("records"))
         load.clear()
         st.success(f"{updated} updated, {removed} removed.", icon=":material/check:")
+        if unknown:
+            st.warning(f"Not NSE symbols, left out of peers: {', '.join(unknown)}")
         st.rerun()
 
 

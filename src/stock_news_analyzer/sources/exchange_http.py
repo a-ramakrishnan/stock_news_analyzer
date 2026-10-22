@@ -5,6 +5,7 @@ announcement APIs. `curl_cffi` presents the same TLS fingerprint as Chrome, whic
 Each session first loads an exchange web page to pick up cookies, as a browser would.
 """
 
+import json
 import logging
 import time
 from datetime import date
@@ -25,6 +26,7 @@ NSE_WARMUP_URL = "https://www.nseindia.com/companies-listing/corporate-filings-a
 NSE_ARCHIVES = "https://nsearchives.nseindia.com"
 NSE_ANNOUNCEMENTS_URL = "https://www.nseindia.com/api/corporate-announcements"
 NSE_CORPORATE_ACTIONS_URL = "https://www.nseindia.com/api/corporates-corporateActions"
+NSE_DEALS_URL = "https://www.nseindia.com/api/historical/{kind}-deals"
 
 
 class ExchangeError(Exception):
@@ -103,6 +105,12 @@ class ExchangeClient:
         }
         data = self._get_json("nse", NSE_CORPORATE_ACTIONS_URL, params)
         return data if isinstance(data, list) else data.get("data", [])
+
+    def nse_deals(self, kind: str, start: date, end: date) -> bytes:
+        """NSE's bulk or block deals for a date range, as the raw JSON response."""
+        params = {"from": start.strftime("%d-%m-%Y"), "to": end.strftime("%d-%m-%Y")}
+        data = self._get_json("nse", NSE_DEALS_URL.format(kind=kind), params)
+        return json.dumps(data).encode()
 
     def nse_file(self, url: str) -> bytes | None:
         """An NSE archive file, or None if NSE has none for that day (HTTP 404: a holiday)."""

@@ -276,6 +276,35 @@ def approved_peers(session: Session, company: Company) -> list[Company]:
     )
 
 
+def peers_for(session: Session, company: Company, limit: int = 5) -> tuple[list[Company], str]:
+    """Peers to compare a stock with: the approved ones, else the largest in its industry.
+
+    Returns (peers, 'approved' | 'industry' | 'none'). Only NSE-listed peers, as their daily
+    prices come from NSE.
+    """
+    approved = [p for p in approved_peers(session, company) if p.nse_symbol]
+    if approved:
+        return approved[:limit], "approved"
+    suggested = [p for p in suggest_peers(session, company, limit=limit * 3) if p.nse_symbol]
+    return (suggested[:limit], "industry") if suggested else ([], "none")
+
+
+def set_peers(session: Session, company: Company, symbols: list[str]) -> list[str]:
+    """Replace a company's approved peers with these NSE symbols. Returns unknown symbols."""
+    wanted = [s.strip().upper() for s in symbols if s.strip()]
+    found = {
+        c.nse_symbol: c
+        for c in session.scalars(select(Company).where(Company.nse_symbol.in_(wanted)))
+    }
+    session.query(CompanyPeer).filter(CompanyPeer.isin == company.isin).delete()
+    for symbol in wanted:
+        peer = found.get(symbol)
+        if peer and peer.isin != company.isin:
+            session.add(CompanyPeer(isin=company.isin, peer_isin=peer.isin, source="manual"))
+    session.commit()
+    return [s for s in wanted if s not in found]
+
+
 # --- watchlist file ----------------------------------------------------------
 
 

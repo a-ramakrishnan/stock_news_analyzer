@@ -10,6 +10,8 @@ jobs:
     cron: "25 6-23 * * *"
   prices:        # NSE prices (published around 18:00), corporate actions, moves and labels
     cron: "30 19,21 * * 1-5"
+  deals:         # NSE bulk and block deals (published in the evening)
+    cron: "0 19,22 * * 1-5"
   explain:       # LLM (Sonnet): likely cause of each unusual day, before the morning digest
     cron: "45 7 * * *"
   securities:    # NSE/BSE company lists (new listings, symbol changes, market caps)

@@ -951,7 +951,8 @@ def triage_run(
             raise typer.Exit(1) from exc
         spent = month_spend(session)
     typer.echo(
-        f"{result.triaged} articles triaged, {result.duplicates} duplicates, "
+        f"{result.triaged} articles triaged ({result.same_story} linked to an earlier report "
+        f"of the same event), {result.duplicates} near-identical headlines, "
         f"{result.calls} LLM calls, ${result.cost_usd:.4f} (this month ${spent:.2f} of "
         f"${get_settings().llm_monthly_budget_usd:.2f})"
     )
@@ -994,11 +995,35 @@ def triage_list(
             return
         for t, doc, sym in rows:
             when = doc.published_at.astimezone(fl.IST).strftime("%d %b %H:%M")
+            tag = (
+                "  [off-topic]"
+                if not t.relevant
+                else f"  [repeat of {t.duplicate_of}]"
+                if t.duplicate_of
+                else ""
+            )
             typer.echo(
                 f"{'*' * t.importance:<5} {when}  {sym or '-':<11} {t.topic:<16} "
-                f"{t.sentiment:<8} {doc.title[:90]}"
+                f"{t.sentiment:<8} #{doc.id} {doc.title[:90]}{tag}"
             )
-            typer.echo(f"      {t.summary}")
+            if not t.duplicate_of:
+                typer.echo(f"      {t.summary}")
+
+
+@triage_app.command("reset")
+def triage_reset(
+    symbol: str = typer.Option(None, help="Only this NSE symbol (default: every stock)."),
+    yes: bool = typer.Option(False, "--yes", help="Don't ask for confirmation."),
+) -> None:
+    """Forget triage results so the next `sna triage run` judges those articles again."""
+    from stock_news_analyzer.agents.triage import reset
+
+    what = f"{symbol}'s" if symbol else "all"
+    if not yes and not typer.confirm(f"Forget {what} triage results?"):
+        raise typer.Exit(1)
+    with get_session() as session:
+        count = reset(session, symbol)
+    typer.echo(f"{count} triage results removed; run `sna triage run` to triage them again")
 
 
 @llm_app.command("usage")

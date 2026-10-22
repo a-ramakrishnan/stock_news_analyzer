@@ -23,6 +23,18 @@
 
 Article text is treated as data: the instructions say so, and the model only returns the fixed fields.
 
+## First real run, and what changed
+
+Triaging the first 30 articles on the Mac showed good judgement (results beats ★★★★★, routine hires ★, water polo and YouTube videos named "Eternal" marked off-topic) and three problems:
+
+- **The same event, many times.** The KVB results came three times, the CCI approval of the IDFC merger six, the sale of IDFC First Bank's BKC office seven: different papers, different headlines, so the headline check missed them, and copies of one story got different scores. Claude now also answers `same_story_as`: the id of an earlier article reporting the same event, from the same batch or from a list of reports already triaged in the previous three days. Links to a later article or to an id it was not shown are ignored. Copies take the first report's triage.
+- **Wordy summaries** ("per BusinessLine", "the headline gives no further details"): the instructions now ask for the fact only, in at most 25 words.
+- **Repeats not visible in `sna triage list --all`**: lines now carry `[repeat of #id]` or `[off-topic]`.
+
+`sna triage reset` forgets results so they can be triaged again after a change to the instructions.
+
+Older Google News items carry a date but no time, so they are stored at 12:30 IST; their 1/5/20-day labels start that same day.
+
 ## Cost
 
 Haiku 5.5 costs $0.10 per million input tokens and $0.50 per million output. A batch of 15 articles is about 5,000 tokens in and 1,500 out, roughly a tenth of a cent, so the three-year backlog of a few thousand articles costs around a dollar and daily triage a few cents.

@@ -116,7 +116,7 @@ Articles are matched by company name (without "Limited") and the `aliases` in `c
 
 ## News triage (Phase 2, LLM)
 
-Claude Haiku reads each new article about a watchlist stock and records whether it is really about that company, its topic (results, order win, guidance, management, corporate action, deal, capacity, regulatory, rating, market, sector), the sentiment for a shareholder, an importance from 1 (noise) to 5 (could move the stock) and a one-line summary. Repeats of the same story are found without the LLM and reuse the first article's triage.
+Claude Haiku reads each new article about a watchlist stock and records whether it is really about that company, its topic (results, order win, guidance, management, corporate action, deal, capacity, regulatory, rating, market, sector), the sentiment for a shareholder, an importance from 1 (noise) to 5 (could move the stock) and a one-line summary. Several papers report the same event in different words: near-identical headlines are caught without the LLM, and Claude links the rest to the first report of the same event. Repeats reuse the first report's triage and are hidden from the digest and dashboard.
 
 Put your key from [console.anthropic.com](https://console.anthropic.com) in `.env` as `ANTHROPIC_API_KEY=...` (never commit it), then:
 
@@ -132,6 +132,7 @@ uv run sna llm usage
 | `make triage` | Triage every article not triaged yet (the first run also covers the history, about $1 for a few thousand articles) |
 | `uv run sna triage run --symbol LT --since 2026-10-01` | Only one stock, or only recent articles |
 | `uv run sna triage list LT` | Last 7 days, importance 3 and up, most important first (`--min-importance 1 --all` shows everything) |
+| `uv run sna triage reset --symbol LT` | Forget triage results (one stock, or all without `--symbol`) so the next run judges them again |
 | `uv run sna llm usage` | This month's LLM calls and cost by task and model, against the budget |
 
 The scheduler runs the triage every hour at :25, ten minutes after the news. The digest, the News page and the Stock page then hide off-topic articles and repeats and sort the rest by importance.

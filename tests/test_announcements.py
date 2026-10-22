@@ -84,6 +84,7 @@ def test_clean_removes_html_and_doubled_quotes():
     assert clean("Schedule of Analyst / Institutional Investors'' Meet") == (
         "Schedule of Analyst / Institutional Investors' Meet"
     )
+    assert clean("Outcome of\x00 Board Meeting") == "Outcome of Board Meeting"
     assert clean("A &amp; B") == "A & B" and clean(None) == ""
 
 

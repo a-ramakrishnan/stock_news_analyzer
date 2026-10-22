@@ -506,9 +506,13 @@ def add_stock_form(session: Session) -> None:
         )
         if st.button("Load history now", icon=":material/download:"):
             with st.status("Loading history...", expanded=True) as status:
-                errors = actions.load_history(
-                    session, added, get_settings().data_dir, progress=status.write
-                )
+                try:
+                    errors = actions.load_history(
+                        session, added, get_settings().data_dir, progress=status.write
+                    )
+                except Exception as exc:  # show it here; what was stored so far is kept
+                    session.rollback()
+                    errors = [f"stopped: {type(exc).__name__}: {exc}"[:500]]
                 for err in errors:
                     status.write(f"⚠️ {err}")
                 status.update(

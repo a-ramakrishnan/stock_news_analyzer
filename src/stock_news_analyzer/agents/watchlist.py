@@ -150,6 +150,11 @@ def resolve(session: Session, query: str) -> Company:
     if not matches:
         raise NotFound(query, [])
     top = matches[0]
+    # A name written in full ("Zinka Logistics Solutions") beats longer names containing it.
+    wanted = _normalise(query)
+    same = [m for m in matches if _normalise(m.company.name) == wanted]
+    if len(same) == 1:
+        return same[0].company
     if len(matches) == 1 and top.score >= AUTO_PICK_SCORE:
         return top.company
     if top.score >= AUTO_PICK_SCORE and top.score - matches[1].score >= AUTO_PICK_GAP:

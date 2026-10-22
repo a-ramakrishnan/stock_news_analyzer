@@ -67,6 +67,21 @@ def test_resolve_reports_candidates_when_ambiguous(master):
     assert len(exc.value.candidates) > 1
 
 
+def test_resolve_prefers_the_name_written_in_full(master):
+    from stock_news_analyzer.models import Company
+
+    master.add_all(
+        [
+            Company(isin="INE0ZINKA001", name="Zinka Logistics Solutions Limited"),
+            Company(isin="INE0ZINKA002", name="Zinka Logistics Solutions India Limited"),
+        ]
+    )
+    master.flush()
+    assert wl.resolve(master, "Zinka Logistics Solutions").isin == "INE0ZINKA001"
+    with pytest.raises(wl.Ambiguous):
+        wl.resolve(master, "Zinka Logistics")  # neither is named exactly that
+
+
 def test_resolve_reports_not_found(master):
     with pytest.raises(wl.NotFound):
         wl.resolve(master, "Zzyzx Quantum Holdings")

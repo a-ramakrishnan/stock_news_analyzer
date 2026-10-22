@@ -79,7 +79,8 @@ def job_triage(session: Session) -> str:
         return "skipped: ANTHROPIC_API_KEY is not set in .env"
     result = triage_news(session, LLM(session), limit=TRIAGE_LIMIT)
     summary = (
-        f"{result.triaged} articles triaged, {result.duplicates} duplicates, "
+        f"{result.triaged} articles triaged ({result.same_story} same event as an earlier "
+        f"report), {result.duplicates} near-identical headlines, "
         f"{result.calls} LLM calls, ${result.cost_usd:.4f}"
     )
     if result.errors:

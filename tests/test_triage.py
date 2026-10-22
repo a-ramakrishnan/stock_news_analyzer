@@ -185,3 +185,84 @@ def test_cli_and_scheduled_job_without_an_api_key(news, test_database_url, monke
     assert result.exit_code == 0 and "order_win" in result.stdout and "About: L&T" in result.stdout
     result = runner.invoke(app, ["llm", "usage"])
     assert result.exit_code == 0 and "triage" in result.stdout and "2 calls" in result.stdout
+
+
+def link_to_first(kwargs, story=None):
+    """A fake model that says every later article reports the same event as the first one."""
+    reply = answer_each(kwargs)
+    first = reply.parsed_output.articles[0].id
+    for item in reply.parsed_output.articles[1:]:
+        item.same_story_as = story if story is not None else first
+    return reply
+
+
+@pytest.mark.db
+def test_llm_links_reports_of_the_same_event(news):
+    llm, _ = _llm(news, link_to_first)
+    result = tr.triage_news(news, llm)
+    assert (result.triaged, result.same_story, result.calls) == (4, 2, 2)
+    for isin in (LT, KVB):
+        rows = news.query(NewsTriage).filter_by(isin=isin).order_by(NewsTriage.document_id).all()
+        first = next(r for r in rows if r.duplicate_of is None)
+        copy = [r for r in rows if r.duplicate_of]
+        assert len(copy) == 1 and copy[0].duplicate_of == first.document_id
+        assert (copy[0].topic, copy[0].summary) == (first.topic, first.summary)  # one judgement
+
+
+@pytest.mark.db
+def test_links_to_earlier_reports_from_previous_runs(news):
+    llm, _ = _llm(news)
+    tr.triage_news(news, llm, symbol="LT")
+    first = news.query(Document).filter(Document.title.like("L&T bags%")).one()
+    later = Document(
+        source="news:google",
+        source_id="later-1",
+        doc_type="news",
+        title="Larsen wins two big contracts in Delhi, Andhra",
+        published_at=first.published_at + timedelta(days=1),
+        raw={},
+    )
+    news.add(later)
+    news.flush()
+    news.add(DocumentCompany(document_id=later.id, isin=LT))
+    news.commit()
+
+    def link_to_earlier(kwargs):
+        prompt = kwargs["messages"][0]["content"]
+        assert "<earlier>" in prompt and f"id {first.id} (21 Oct): L&T bags" in prompt
+        return _single_link(kwargs, first.id)
+
+    llm, _ = _llm(news, link_to_earlier)
+    result = tr.triage_news(news, llm, symbol="LT")
+    assert result.same_story == 1
+    assert news.get(NewsTriage, (later.id, LT)).duplicate_of == first.id
+
+
+def _single_link(kwargs, story):
+    reply = answer_each(kwargs)
+    for item in reply.parsed_output.articles:
+        item.same_story_as = story
+    return reply
+
+
+@pytest.mark.db
+def test_invalid_links_are_ignored(news):
+    def bad_links(kwargs):
+        reply = answer_each(kwargs)
+        items = reply.parsed_output.articles
+        items[0].same_story_as = items[-1].id  # a later article: not allowed
+        items[-1].same_story_as = 999_999  # an id never shown
+        return reply
+
+    llm, _ = _llm(news, bad_links)
+    result = tr.triage_news(news, llm)
+    assert result.same_story == 0
+    assert news.query(NewsTriage).filter(NewsTriage.duplicate_of.is_not(None)).count() == 0
+
+
+@pytest.mark.db
+def test_reset_forgets_results_for_one_stock_or_all(news):
+    llm, _ = _llm(news)
+    tr.triage_news(news, llm)
+    assert tr.reset(news, "LT") == 2 and len(tr.pending(news)) == 2
+    assert tr.reset(news) == 2 and len(tr.pending(news)) == 4

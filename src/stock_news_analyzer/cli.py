@@ -39,6 +39,12 @@ orchestrator_app = typer.Typer(help="Run the jobs on a schedule.", no_args_is_he
 app.add_typer(orchestrator_app, name="orchestrator")
 app.add_typer(securities_app, name="securities")
 app.add_typer(watchlist_app, name="watchlist")
+triage_app = typer.Typer(
+    help="News triage (LLM): relevance, topic, sentiment, importance.", no_args_is_help=True
+)
+llm_app = typer.Typer(help="LLM usage and spending.", no_args_is_help=True)
+app.add_typer(triage_app, name="triage")
+app.add_typer(llm_app, name="llm")
 
 
 @app.callback()
@@ -914,3 +920,117 @@ def ui(
         raise typer.Exit(subprocess.call(cmd))
     except KeyboardInterrupt:
         typer.echo("dashboard stopped")
+
+
+# --- news triage and LLM usage (Phase 2) -------------------------------------
+
+
+@triage_app.command("run")
+def triage_run(
+    symbol: str = typer.Option(None, help="Only this NSE symbol."),
+    since: str = typer.Option(None, help="Only articles published from YYYY-MM-DD."),
+    limit: int = typer.Option(None, help="At most this many articles (default: all pending)."),
+) -> None:
+    """Triage news not triaged yet (Haiku by default; LLM_MODEL_TRIAGE in .env)."""
+    from stock_news_analyzer.agents.triage import triage_news
+    from stock_news_analyzer.llm import LLM, LLMNotConfigured, month_spend
+
+    start = datetime.strptime(since, "%Y-%m-%d").replace(tzinfo=fl.IST) if since else None
+    with get_session() as session:
+        try:
+            result = triage_news(
+                session,
+                LLM(session),
+                symbol=symbol,
+                since=start,
+                limit=limit,
+                progress=typer.echo,
+            )
+        except LLMNotConfigured as exc:
+            typer.echo(f"{exc}: add ANTHROPIC_API_KEY=... to .env (see .env.example)")
+            raise typer.Exit(1) from exc
+        spent = month_spend(session)
+    typer.echo(
+        f"{result.triaged} articles triaged, {result.duplicates} duplicates, "
+        f"{result.calls} LLM calls, ${result.cost_usd:.4f} (this month ${spent:.2f} of "
+        f"${get_settings().llm_monthly_budget_usd:.2f})"
+    )
+    for err in result.errors:
+        typer.echo(f"error: {err}")
+    if result.errors:
+        raise typer.Exit(1)
+
+
+@triage_app.command("list")
+def triage_list(
+    symbol: str = typer.Argument(None, help="NSE symbol (default: all watchlist stocks)."),
+    days: int = typer.Option(7, help="How many days back."),
+    min_importance: int = typer.Option(3, help="Only articles at least this important (1-5)."),
+    all_: bool = typer.Option(False, "--all", help="Include off-topic and repeated articles."),
+) -> None:
+    """Triaged news, most important first."""
+    from datetime import UTC, timedelta
+
+    from sqlalchemy import select
+
+    from stock_news_analyzer.models import Company, Document, NewsTriage
+
+    since = datetime.now(UTC) - timedelta(days=days)
+    query = (
+        select(NewsTriage, Document, Company.nse_symbol)
+        .join(Document, Document.id == NewsTriage.document_id)
+        .join(Company, Company.isin == NewsTriage.isin)
+        .where(Document.published_at >= since, NewsTriage.importance >= min_importance)
+        .order_by(NewsTriage.importance.desc(), Document.published_at.desc())
+    )
+    if symbol:
+        query = query.where(Company.nse_symbol == symbol.upper())
+    if not all_:
+        query = query.where(NewsTriage.relevant, NewsTriage.duplicate_of.is_(None))
+    with get_session() as session:
+        rows = session.execute(query).all()
+        if not rows:
+            typer.echo("nothing triaged in that window; run: sna triage run")
+            return
+        for t, doc, sym in rows:
+            when = doc.published_at.astimezone(fl.IST).strftime("%d %b %H:%M")
+            typer.echo(
+                f"{'*' * t.importance:<5} {when}  {sym or '-':<11} {t.topic:<16} "
+                f"{t.sentiment:<8} {doc.title[:90]}"
+            )
+            typer.echo(f"      {t.summary}")
+
+
+@llm_app.command("usage")
+def llm_usage() -> None:
+    """This month's LLM calls and cost, by task and model, against the budget."""
+    from sqlalchemy import func, select
+
+    from stock_news_analyzer.llm import month_spend
+    from stock_news_analyzer.models import LlmCall
+
+    now = datetime.now(fl.IST)
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    with get_session() as session:
+        rows = session.execute(
+            select(
+                LlmCall.task,
+                LlmCall.model,
+                func.count(),
+                func.sum(LlmCall.input_tokens),
+                func.sum(LlmCall.output_tokens),
+                func.sum(LlmCall.cost_usd),
+                func.count().filter(~LlmCall.ok),
+            )
+            .where(LlmCall.at >= start)
+            .group_by(LlmCall.task, LlmCall.model)
+            .order_by(LlmCall.task)
+        ).all()
+        spent = month_spend(session)
+    budget = get_settings().llm_monthly_budget_usd
+    typer.echo(f"{now:%B %Y}: ${spent:.2f} of ${budget:.2f} budget")
+    for task, model, calls, tin, tout, usd, failed in rows:
+        typer.echo(
+            f"  {task:<10} {model:<20} {calls:>5} calls ({failed} failed)  "
+            f"{tin or 0:>9,} in  {tout or 0:>8,} out  ${usd or 0:.4f}"
+        )

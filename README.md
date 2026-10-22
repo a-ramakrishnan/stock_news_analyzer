@@ -18,7 +18,8 @@ Every command block below can be pasted into Terminal as is; explanations are in
 | 5 | Price & Label (NSE daily prices, moves, labels) | done |
 | 6 | Orchestrator + first daily digest | done |
 | 7 | Dashboard: Phase 1 output in the browser | done |
-| 8 | History since Oct 2023: news backfill + `make backfill` | this PR |
+| 8 | History since Oct 2023: news backfill + `make backfill` | done |
+| 9 | Phase 2 starts: News Triage agent (Claude Haiku), LLM cost log and budget | this PR |
 
 ## Run it on a Mac
 
@@ -112,6 +113,36 @@ uv run sna news list
 | `uv run sna news relink` | Re-match stored articles after editing `aliases` or `exclude` |
 
 Articles are matched by company name (without "Limited") and the `aliases` in `config/watchlist.yaml`; `exclude` phrases there (e.g. "L&T Technology") stop look-alike companies from matching.
+
+## News triage (Phase 2, LLM)
+
+Claude Haiku reads each new article about a watchlist stock and records whether it is really about that company, its topic (results, order win, guidance, management, corporate action, deal, capacity, regulatory, rating, market, sector), the sentiment for a shareholder, an importance from 1 (noise) to 5 (could move the stock) and a one-line summary. Repeats of the same story are found without the LLM and reuse the first article's triage.
+
+Put your key from [console.anthropic.com](https://console.anthropic.com) in `.env` as `ANTHROPIC_API_KEY=...` (never commit it), then:
+
+```bash
+make migrate
+make triage
+uv run sna triage list
+uv run sna llm usage
+```
+
+| Command | What it does |
+| --- | --- |
+| `make triage` | Triage every article not triaged yet (the first run also covers the history, about $1 for a few thousand articles) |
+| `uv run sna triage run --symbol LT --since 2026-10-01` | Only one stock, or only recent articles |
+| `uv run sna triage list LT` | Last 7 days, importance 3 and up, most important first (`--min-importance 1 --all` shows everything) |
+| `uv run sna llm usage` | This month's LLM calls and cost by task and model, against the budget |
+
+The scheduler runs the triage every hour at :25, ten minutes after the news. The digest, the News page and the Stock page then hide off-topic articles and repeats and sort the rest by importance.
+
+| Setting in `.env` | Default | Meaning |
+| --- | --- | --- |
+| `LLM_MODEL_TRIAGE` | `claude-haiku-5-5` | Model for high-volume work such as triage |
+| `LLM_MODEL_ANALYSIS` | `claude-sonnet-5-5` | Model for judgement work (coming next: move explanations, order extraction, earnings calls) |
+| `LLM_MONTHLY_BUDGET_USD` | `20` | LLM calls stop for the rest of the month (India time) once this much is spent |
+
+Every call is logged with its tokens and cost (the `llm_calls` table, `sna llm usage`, and the dashboard's System page).
 
 ## Prices, moves and labels
 
@@ -226,6 +257,8 @@ src/stock_news_analyzer/   Python package
   sources/corporate_actions.py  NSE bonus/split/dividend parsing
   agents/orchestrator.py   Orchestrator (agent 0): jobs, schedule, run log
   agents/digest.py         Reporter, basic (agent 16): the daily digest
+  llm.py                   the one place that calls Claude: structured answers, cost log, budget
+  agents/triage.py         News Triage (agent 6): relevance, topic, sentiment, importance
   ui/queries.py            dashboard: read-only queries
   ui/charts.py             dashboard: charts
   ui/app.py                dashboard: the Streamlit pages

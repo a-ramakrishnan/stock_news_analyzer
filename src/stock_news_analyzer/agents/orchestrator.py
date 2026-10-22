@@ -1,7 +1,8 @@
 """Orchestrator (agent 0).
 
-Runs the collectors and the digest on a schedule (config/schedule.yaml, in India time), one job
-at a time, and records every run in the `runs` table. No LLM: the order of work is fixed.
+Runs the collectors, the triage and the digest on a schedule (config/schedule.yaml, in India
+time), one job at a time, and records every run in the `runs` table. The order of work is fixed
+code, not an LLM decision.
 """
 
 import logging
@@ -66,6 +67,26 @@ def job_news(session: Session) -> str:
     return summary
 
 
+# The scheduled run triages at most this many articles; `sna triage run` has no limit.
+TRIAGE_LIMIT = 500
+
+
+def job_triage(session: Session) -> str:
+    from stock_news_analyzer.agents.triage import triage_news
+    from stock_news_analyzer.llm import LLM
+
+    if not get_settings().anthropic_api_key:
+        return "skipped: ANTHROPIC_API_KEY is not set in .env"
+    result = triage_news(session, LLM(session), limit=TRIAGE_LIMIT)
+    summary = (
+        f"{result.triaged} articles triaged, {result.duplicates} duplicates, "
+        f"{result.calls} LLM calls, ${result.cost_usd:.4f}"
+    )
+    if result.errors:
+        raise JobError(summary, result.errors)
+    return summary
+
+
 def job_prices(session: Session) -> str:
     from stock_news_analyzer.agents.prices import (
         PriceCollector,
@@ -115,12 +136,13 @@ def job_digest(session: Session) -> str:
 JOBS: dict[str, Callable[[Session], str]] = {
     "filings": job_filings,
     "news": job_news,
+    "triage": job_triage,
     "prices": job_prices,
     "securities": job_securities,
     "digest": job_digest,
 }
-# `sna run all`: collect, then measure, then report.
-RUN_ALL = ("filings", "news", "prices", "digest")
+# `sna run all`: collect, then judge, then measure, then report.
+RUN_ALL = ("filings", "news", "triage", "prices", "digest")
 
 
 # --- running and recording ---------------------------------------------------

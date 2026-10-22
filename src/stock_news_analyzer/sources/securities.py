@@ -19,6 +19,8 @@ import httpx
 log = logging.getLogger(__name__)
 
 NSE_EQUITY_LIST_URL = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
+# Companies on NSE Emerge, the SME platform (not in EQUITY_L.csv); same columns.
+NSE_SME_LIST_URL = "https://nsearchives.nseindia.com/emerge/corporates/content/SME_EQUITY_L.csv"
 NIFTY500_URL = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
 BSE_SCRIPS_URL = (
     "https://api.bseindia.com/BseIndiaAPI/api/ListofScripData/w"
@@ -55,9 +57,12 @@ class BseSecurity:
 
 
 def _rows(text: str) -> list[dict[str, str]]:
-    """CSV rows with header names upper-cased and stripped (NSE headers have stray spaces)."""
+    """CSV rows with header names upper-cased and stripped (NSE headers have stray spaces).
+
+    Underscores count as spaces, so "NAME_OF_COMPANY" and "NAME OF COMPANY" read the same.
+    """
     reader = csv.reader(io.StringIO(text.removeprefix("\ufeff")))
-    header = [h.strip().upper() for h in next(reader)]
+    header = [h.strip().upper().replace("_", " ") for h in next(reader)]
     return [{k: v.strip() for k, v in zip(header, row, strict=False)} for row in reader if any(row)]
 
 

@@ -70,7 +70,7 @@ make watchlist
 | `uv run sna watchlist remove LT` | Stop tracking |
 | `uv run sna watchlist peers LT` | Suggest same-industry peers; save with `--approve SYMBOL` |
 
-If NSE blocks the download, open the link `make securities` prints in a browser, save the file, and run `uv run sna securities refresh --nse-file ~/Downloads/EQUITY_L.csv`.
+`make securities` also reads NSE's SME (Emerge) list, so SME stocks such as Sathlokhar can be tracked. If NSE blocks a download, open the link `make securities` prints in a browser, save the file, and pass it with `--nse-file ~/Downloads/EQUITY_L.csv` or `--nse-sme-file ~/Downloads/SME_EQUITY_L.csv`.
 
 ## Filings (exchange announcements)
 

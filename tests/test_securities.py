@@ -49,3 +49,9 @@ def test_bse_scrips_accepts_wrapped_response():
     rows = parse_bse_scrips(text)
     assert rows[0].code == "500510"
     assert rows[0].name == "L&T"
+
+
+def test_parse_nse_sme_list_with_underscore_headers():
+    rows = parse_nse_equity_list((FIXTURES / "SME_EQUITY_L.csv").read_text())
+    assert [(r.symbol, r.isin, r.series) for r in rows] == [("SSEGL", "INE0RFP01011", "SM")]
+    assert rows[0].name == "Sathlokhar Synergys E&C Global Limited" and rows[0].listed_on is None

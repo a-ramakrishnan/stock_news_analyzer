@@ -43,6 +43,10 @@ triage_app = typer.Typer(
     help="News triage (LLM): relevance, topic, sentiment, importance.", no_args_is_help=True
 )
 llm_app = typer.Typer(help="LLM usage and spending.", no_args_is_help=True)
+explain_app = typer.Typer(
+    help="Move Explainer (LLM): the likely cause of each unusual day.", no_args_is_help=True
+)
+app.add_typer(explain_app, name="explain")
 app.add_typer(triage_app, name="triage")
 app.add_typer(llm_app, name="llm")
 
@@ -781,7 +785,9 @@ def labels_list(
 
 @app.command("run")
 def run(
-    job: str = typer.Argument(..., help="filings, news, prices, securities, digest, or all."),
+    job: str = typer.Argument(
+        ..., help="filings, news, triage, prices, explain, securities, digest, or all."
+    ),
 ) -> None:
     """Run a job now (as the orchestrator would) and record it in the run log."""
     from stock_news_analyzer.agents.orchestrator import JOBS, RUN_ALL, run_job
@@ -1059,3 +1065,111 @@ def llm_usage() -> None:
             f"  {task:<10} {model:<20} {calls:>5} calls ({failed} failed)  "
             f"{tin or 0:>9,} in  {tout or 0:>8,} out  ${usd or 0:.4f}"
         )
+
+
+@explain_app.command("run")
+def explain_run(
+    symbol: str = typer.Option(None, help="Only this NSE symbol."),
+    since: str = typer.Option(None, help="Only unusual days from YYYY-MM-DD."),
+    until: str = typer.Option(
+        None, help="Only unusual days up to YYYY-MM-DD (default: yesterday)."
+    ),
+    limit: int = typer.Option(None, help="At most this many days (newest first)."),
+) -> None:
+    """Explain unusual days not explained yet (Sonnet by default; LLM_MODEL_ANALYSIS)."""
+    from datetime import timedelta
+
+    from stock_news_analyzer.agents.explain import explain_moves, pending
+    from stock_news_analyzer.llm import LLM, LLMNotConfigured, month_spend
+
+    start = datetime.strptime(since, "%Y-%m-%d").date() if since else None
+    end = (
+        datetime.strptime(until, "%Y-%m-%d").date()
+        if until
+        else datetime.now(fl.IST).date() - timedelta(days=1)
+    )
+    with get_session() as session:
+        waiting = len(pending(session, start, end, symbol))
+        n = min(waiting, limit) if limit else waiting
+        typer.echo(f"{n} unusual days to explain (roughly ${0.02 * n:.2f} with Sonnet)")
+        try:
+            result = explain_moves(
+                session,
+                LLM(session),
+                since=start,
+                until=end,
+                symbol=symbol,
+                limit=limit,
+                progress=typer.echo,
+            )
+        except LLMNotConfigured as exc:
+            typer.echo(f"{exc}: add ANTHROPIC_API_KEY=... to .env (see .env.example)")
+            raise typer.Exit(1) from exc
+        spent = month_spend(session)
+    typer.echo(
+        f"{result.explained} explained, {result.calls} LLM calls, ${result.cost_usd:.4f} "
+        f"(this month ${spent:.2f} of ${get_settings().llm_monthly_budget_usd:.2f})"
+    )
+    for err in result.errors:
+        typer.echo(f"error: {err}")
+    if result.errors:
+        raise typer.Exit(1)
+
+
+@explain_app.command("list")
+def explain_list(
+    symbol: str = typer.Argument(None, help="NSE symbol (default: all watchlist stocks)."),
+    days: int = typer.Option(90, help="How many days back."),
+) -> None:
+    """Explained unusual days, newest first, with the documents they rest on."""
+    from datetime import timedelta
+
+    from sqlalchemy import select
+
+    from stock_news_analyzer.models import Company, Document, MoveExplanation, StockMove
+
+    since = datetime.now(fl.IST).date() - timedelta(days=days)
+    query = (
+        select(MoveExplanation, StockMove, Company.nse_symbol)
+        .join(
+            StockMove,
+            (StockMove.isin == MoveExplanation.isin)
+            & (StockMove.trade_date == MoveExplanation.trade_date),
+        )
+        .join(Company, Company.isin == MoveExplanation.isin)
+        .where(MoveExplanation.trade_date >= since)
+        .order_by(MoveExplanation.trade_date.desc())
+    )
+    if symbol:
+        query = query.where(Company.nse_symbol == symbol.upper())
+    with get_session() as session:
+        rows = session.execute(query).all()
+        if not rows:
+            typer.echo("nothing explained in that window; run: sna explain run")
+            return
+        for e, m, sym in rows:
+            typer.echo(
+                f"{e.trade_date:%d %b %Y}  {sym or '-':<11} {m.stock_return:+.2%} "
+                f"({m.excess_return:+.2%} vs Nifty)  {e.cause}, {e.confidence} confidence"
+            )
+            typer.echo(f"      {e.explanation}")
+            for doc_id in e.evidence:
+                doc = session.get(Document, doc_id)
+                if doc:
+                    typer.echo(f"      - #{doc.id} {doc.title[:100]}")
+
+
+@explain_app.command("reset")
+def explain_reset(
+    symbol: str = typer.Option(None, help="Only this NSE symbol (default: every stock)."),
+    yes: bool = typer.Option(False, "--yes", help="Don't ask for confirmation."),
+) -> None:
+    """Forget explanations so the next `sna explain run` explains those days again."""
+    from stock_news_analyzer.agents.explain import reset
+
+    what = f"{symbol}'s" if symbol else "all"
+    if not yes and not typer.confirm(f"Forget {what} move explanations?"):
+        raise typer.Exit(1)
+    with get_session() as session:
+        count = reset(session, symbol)
+    typer.echo(f"{count} explanations removed; run `sna explain run` to explain them again")

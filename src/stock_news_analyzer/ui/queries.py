@@ -18,6 +18,7 @@ from stock_news_analyzer.models import (
     EventLabel,
     IndexDaily,
     LlmCall,
+    MoveExplanation,
     NewsTriage,
     PriceDaily,
     Run,
@@ -51,6 +52,11 @@ def watchlist(session: Session) -> list[dict]:
             .order_by(StockMove.trade_date.desc())
             .limit(1)
         ).first()
+        why = (
+            session.get(MoveExplanation, (latest.isin, latest.trade_date))
+            if latest and latest.unusual
+            else None
+        )
         close = session.scalar(
             select(PriceDaily.close)
             .where(PriceDaily.isin == company.isin)
@@ -79,6 +85,7 @@ def watchlist(session: Session) -> list[dict]:
                 "sector_excess_return": latest.sector_excess_return if latest else None,
                 "zscore": latest.zscore if latest else None,
                 "unusual": bool(latest and latest.unusual),
+                "cause": why.cause if why else None,
                 "filings_7d": count(Document.doc_type != "news"),
                 "news_7d": count(Document.doc_type == "news"),
             }
@@ -101,11 +108,17 @@ def performance(session: Session, isin: str, start: date) -> pd.DataFrame:
 
     Built from the adjusted daily returns, so bonus issues and dividends don't show as drops.
     """
-    moves = session.scalars(
-        select(StockMove)
+    rows = session.execute(
+        select(StockMove, MoveExplanation)
+        .outerjoin(
+            MoveExplanation,
+            (MoveExplanation.isin == StockMove.isin)
+            & (MoveExplanation.trade_date == StockMove.trade_date),
+        )
         .where(StockMove.isin == isin, StockMove.trade_date >= start)
         .order_by(StockMove.trade_date)
     ).all()
+    moves = [m for m, _ in rows]
     if not moves:
         return pd.DataFrame(columns=["date", "stock", "nifty", "sector"])
     df = pd.DataFrame(
@@ -117,6 +130,8 @@ def performance(session: Session, isin: str, start: date) -> pd.DataFrame:
             "excess": [m.excess_return for m in moves],
             "zscore": [m.zscore for m in moves],
             "unusual": [m.unusual for m in moves],
+            "cause": [e.cause if e else None for _, e in rows],
+            "explanation": [e.explanation if e else None for _, e in rows],
         }
     )
     for col in ("stock", "nifty", "sector"):
@@ -416,6 +431,51 @@ def event_study(session: Session, isin: str | None = None) -> pd.DataFrame:
     return out
 
 
+def unusual_days(session: Session, isin: str) -> pd.DataFrame:
+    """Every unusual day of a stock, newest first, with its explanation when there is one."""
+    rows = session.execute(
+        select(StockMove, MoveExplanation)
+        .outerjoin(
+            MoveExplanation,
+            (MoveExplanation.isin == StockMove.isin)
+            & (MoveExplanation.trade_date == StockMove.trade_date),
+        )
+        .where(StockMove.isin == isin, StockMove.unusual)
+        .order_by(StockMove.trade_date.desc())
+    ).all()
+    titles = {}
+    ids = {i for _, e in rows if e for i in e.evidence}
+    if ids:
+        titles = dict(
+            session.execute(select(Document.id, Document.title).where(Document.id.in_(ids))).all()
+        )
+    return pd.DataFrame(
+        [
+            {
+                "date": m.trade_date,
+                "stock": m.stock_return,
+                "vs_nifty": m.excess_return,
+                "zscore": m.zscore,
+                "cause": e.cause if e else None,
+                "confidence": e.confidence if e else None,
+                "explanation": e.explanation if e else None,
+                "evidence": " | ".join(titles[i] for i in e.evidence if i in titles) if e else None,
+            }
+            for m, e in rows
+        ],
+        columns=[
+            "date",
+            "stock",
+            "vs_nifty",
+            "zscore",
+            "cause",
+            "confidence",
+            "explanation",
+            "evidence",
+        ],
+    )
+
+
 def corporate_actions(session: Session, symbol: str) -> pd.DataFrame:
     rows = session.scalars(
         select(CorporateAction)
@@ -459,7 +519,7 @@ def runs(session: Session, limit: int = 100) -> pd.DataFrame:
 
 def last_runs(session: Session) -> dict[str, dict]:
     out = {}
-    for job in ("filings", "news", "triage", "prices", "securities", "digest"):
+    for job in ("filings", "news", "triage", "prices", "explain", "securities", "digest"):
         r = session.scalars(
             select(Run).where(Run.job == job).order_by(Run.started_at.desc()).limit(1)
         ).first()

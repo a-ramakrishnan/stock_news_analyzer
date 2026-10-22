@@ -303,3 +303,19 @@ class NewsTriage(Base):
     )
     model: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class MoveExplanation(Base):
+    """Move Explainer (agent 7): the likely reason for one unusual day of one stock."""
+
+    __tablename__ = "move_explanations"
+
+    isin: Mapped[str] = mapped_column(ForeignKey("companies.isin"), primary_key=True)
+    trade_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    # results, order, company_news, sector, market, corporate_action, flows, unexplained
+    cause: Mapped[str] = mapped_column(String(32), index=True)
+    confidence: Mapped[str] = mapped_column(String(8))  # low / medium / high
+    explanation: Mapped[str] = mapped_column(Text)
+    evidence: Mapped[list[int]] = mapped_column(ARRAY(BigInteger), default=list)  # document ids
+    model: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

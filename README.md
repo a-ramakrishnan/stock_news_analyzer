@@ -19,7 +19,8 @@ Every command block below can be pasted into Terminal as is; explanations are in
 | 6 | Orchestrator + first daily digest | done |
 | 7 | Dashboard: Phase 1 output in the browser | done |
 | 8 | History since Oct 2023: news backfill + `make backfill` | done |
-| 9 | Phase 2 starts: News Triage agent (Claude Haiku), LLM cost log and budget | this PR |
+| 9 | Phase 2 starts: News Triage agent (Claude Haiku), LLM cost log and budget | done |
+| 10 | Move Explainer agent (Claude Sonnet): the likely cause of each unusual day | this PR |
 
 ## Run it on a Mac
 
@@ -145,6 +146,24 @@ The scheduler runs the triage every hour at :25, ten minutes after the news. The
 
 Every call is logged with its tokens and cost (the `llm_calls` table, `sna llm usage`, and the dashboard's System page).
 
+## Move explainer (Phase 2, LLM)
+
+For each unusual day, Claude Sonnet reads the day's numbers (stock, Nifty 50, sector index, z-score, the days before), corporate actions with that ex-date, and the filings and triaged news from two sessions before to the next morning. It records the likely cause (results, order, company news, sector, market, corporate action, flows, or unexplained), its confidence, two or three sentences, and the documents it relied on.
+
+```bash
+uv run sna explain run --since 2025-10-01
+uv run sna explain list LT
+```
+
+| Command | What it does |
+| --- | --- |
+| `uv run sna explain run --since 2025-10-01` | Explain unusual days not explained yet, from a date (prints the count and a rough cost first, about $0.02 a day) |
+| `make explain` | All unusual days not explained yet, up to yesterday |
+| `uv run sna explain list LT --days 365` | Explanations with their cause, confidence and the documents behind them |
+| `uv run sna explain reset --symbol LT` | Forget explanations so they are written again |
+
+The scheduler explains the last two weeks' unusual days at 07:45, before the 08:00 digest: a day is explained the morning after, once the papers have said why it moved. Explanations appear in the digest, on the Stock page (chart hover and an **Unusual days** tab) and on the Today cards.
+
 ## Prices, moves and labels
 
 ```bash
@@ -260,6 +279,7 @@ src/stock_news_analyzer/   Python package
   agents/digest.py         Reporter, basic (agent 16): the daily digest
   llm.py                   the one place that calls Claude: structured answers, cost log, budget
   agents/triage.py         News Triage (agent 6): relevance, topic, sentiment, importance
+  agents/explain.py        Move Explainer (agent 7): likely cause of each unusual day
   ui/queries.py            dashboard: read-only queries
   ui/charts.py             dashboard: charts
   ui/app.py                dashboard: the Streamlit pages

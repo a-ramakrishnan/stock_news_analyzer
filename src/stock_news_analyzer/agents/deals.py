@@ -21,6 +21,8 @@ log = logging.getLogger(__name__)
 
 CHUNK_DAYS = 30  # one request covers this many days
 OVERLAP_DAYS = 3  # re-read the last few days: NSE sometimes adds deals late
+# NSE's JSON answers stopped at this many rows; a response of exactly this size is suspect.
+SUSPECT_ROWS = 70
 
 
 @dataclass
@@ -96,7 +98,16 @@ def collect(
             new = store(session, deals)
             result.seen += len(deals)
             result.new += new
-            say(f"{label}: {len(deals)} read, {new} new")
+            if len(deals) == SUSPECT_ROWS:
+                result.errors.append(f"{label}: exactly {SUSPECT_ROWS} rows, possibly cut short")
+            say(
+                f"{label}: {len(deals)} read, {new} new"
+                + (
+                    f" (exactly {SUSPECT_ROWS} rows: NSE may have cut it short)"
+                    if len(deals) == SUSPECT_ROWS
+                    else ""
+                )
+            )
         lo = hi + timedelta(days=1)
     return result
 

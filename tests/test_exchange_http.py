@@ -60,30 +60,51 @@ def test_download_gives_up_when_truncation_keeps_changing():
         client.download("nse", ["https://x/a.pdf"])
 
 
-def test_deals_request_opens_the_report_page_once_and_sends_it_as_referer():
+def test_deals_request_asks_for_the_csv_after_opening_the_report_page_once():
     from datetime import date
 
     client = ExchangeClient(delay=0)
     session = object()
     client._session = lambda exchange: session
     calls = []
+    csv_body = b'"Date ","Symbol "\n"21-OCT-2026","LT"\n'
 
     def fake_get(s, url, **kwargs):
         calls.append((url, kwargs.get("params"), (kwargs.get("headers") or {}).get("Referer")))
         if "report-detail" in url:
             return SimpleNamespace(status_code=200, headers={"content-type": "text/html"})
         return SimpleNamespace(
-            status_code=200,
-            headers={"content-type": "application/json"},
-            json=lambda: {"data": [{"BD_SYMBOL": "LT"}]},
+            status_code=200, headers={"content-type": "text/csv"}, content=csv_body
         )
 
     client._get = fake_get
-    body = client.nse_deals("bulk", date(2026, 10, 15), date(2026, 10, 22))
+    assert client.nse_deals("bulk", date(2026, 10, 15), date(2026, 10, 22)) == csv_body
     client.nse_deals("block", date(2026, 10, 15), date(2026, 10, 22))
-    assert b'"BD_SYMBOL": "LT"' in body
     page, bulk, block = calls  # the report page only once for the session
     assert page[0].endswith("/report-detail/display-bulk-and-block-deals")
     assert bulk[0].endswith("/api/historicalOR/bulk-block-short-deals")
-    assert bulk[1] == {"optionType": "bulk_deals", "from": "15-10-2026", "to": "22-10-2026"}
+    assert bulk[1] == {
+        "optionType": "bulk_deals",
+        "from": "15-10-2026",
+        "to": "22-10-2026",
+        "csv": "true",
+    }
     assert block[1]["optionType"] == "block_deals" and bulk[2] == page[0]
+
+
+def test_deals_request_refreshes_cookies_once_on_403():
+    from datetime import date
+
+    client = ExchangeClient(delay=0)
+    sessions = iter([object(), object()])
+    client._session = lambda exchange: client._sessions.setdefault("nse", next(sessions))
+    answers = iter(
+        [
+            SimpleNamespace(status_code=200, headers={"content-type": "text/html"}),
+            SimpleNamespace(status_code=403, headers={"content-type": "text/html"}),
+            SimpleNamespace(status_code=200, headers={"content-type": "text/html"}),
+            SimpleNamespace(status_code=200, headers={"content-type": "text/csv"}, content=b"x"),
+        ]
+    )
+    client._get = lambda s, url, **kw: next(answers)
+    assert client.nse_deals("bulk", date(2026, 10, 1), date(2026, 10, 2)) == b"x"

@@ -16,6 +16,11 @@
 | `sna explain run --redo-unexplained` | Tries the "unexplained" days again with the new evidence |
 | Digest, Stock page | Bulk/block deals listed per stock; a new Bulk/block deals tab |
 
+## Two surprises from NSE
+
+- The first address (`/api/historical/bulk-deals`) answered HTTP 503. A probe of candidates on the Mac found the one behind NSE's report page: `/api/historicalOR/bulk-block-short-deals?optionType=bulk_deals`, which answers once that page has been opened.
+- Its JSON stops at **70 rows** per request. The first backfill stored 5,053 deals over three years, exactly 70 bulk deals per monthly request, all from one day. The same request with `csv=true` (the page's "Download (.csv)") returns every row: 134 bulk deals for 21 Oct 2026 where the JSON gave 70, and 2,167 for 1-21 Oct in one request. The collector now uses the CSV, and a response of exactly 70 rows is reported as possibly cut short.
+
 ## Bulk vs block deals
 
 - **Bulk deal:** one client trades more than 0.5% of a company's shares in a day, in the normal market. Reported by the broker after the close.

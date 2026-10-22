@@ -123,6 +123,8 @@ def stock_card(s: dict) -> None:
                 color="red",
                 help=f"Move vs Nifty 50 beyond {threshold}σ of the last 60 days",
             )
+            if s.get("cause"):
+                st.caption(f"Likely cause: {s['cause'].replace('_', ' ')}")
         spark = load("performance", isin=s["isin"], start=date.today() - timedelta(days=91))
         st.metric(
             f"Close {s['date']:%d %b}" if s["date"] else "Close",
@@ -252,9 +254,39 @@ def stock_page_body() -> None:
             f"previous 60 days. Diamonds mark key filings."
         )
 
-    filings_tab, news_tab, reactions_tab, actions_tab = st.tabs(
-        ["Filings", "News", "How it reacted", "Corporate actions"]
+    unusual_tab, filings_tab, news_tab, reactions_tab, actions_tab = st.tabs(
+        ["Unusual days", "Filings", "News", "How it reacted", "Corporate actions"]
     )
+    with unusual_tab:
+        days = load("unusual_days", isin=s["isin"])
+        if days.empty:
+            no_data("No unusual days yet.")
+        else:
+            missing = int(days["cause"].isna().sum())
+            shown = days.copy()
+            for col in ("stock", "vs_nifty"):
+                shown[col] = shown[col] * 100
+            st.dataframe(
+                shown,
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    "date": st.column_config.DateColumn("Day", format="DD MMM YYYY"),
+                    "stock": st.column_config.NumberColumn("Stock", format="%+.2f%%"),
+                    "vs_nifty": st.column_config.NumberColumn("vs Nifty 50", format="%+.2f%%"),
+                    "zscore": st.column_config.NumberColumn("z", format="%+.1f"),
+                    "cause": st.column_config.TextColumn("Likely cause"),
+                    "confidence": st.column_config.TextColumn("Confidence"),
+                    "explanation": st.column_config.TextColumn("Explanation", width="large"),
+                    "evidence": st.column_config.TextColumn("Based on", width="medium"),
+                },
+            )
+            if missing:
+                st.caption(
+                    f"{missing} days not explained yet: the scheduler explains recent days each "
+                    "morning; `sna explain run --symbol "
+                    f"{s['symbol']}` explains the rest."
+                )
     with filings_tab:
         filings_table(load("filings", isin=s["isin"], dedupe=True, limit=200), key="stock")
     with news_tab:

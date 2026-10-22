@@ -74,7 +74,9 @@ SYSTEM = """You triage Indian stock-market news for a private investor.
 
 For each article you get, about one listed company, decide:
 - relevant: true only if the article is really about this company. False when it is about a
-  different company with a similar name, or the company only appears in a list or in passing.
+  different company with a similar name, or the company only appears in a list or in passing:
+  "hot stocks", "stocks to watch", "top gainers" and analyst-recommendation roundups naming
+  several companies are not relevant, even if this company is one of them.
 - topic, one of:
   results (quarterly or annual results, earnings), order_win (new orders or contracts),
   guidance (outlook, targets, management commentary on growth), management (appointments,
@@ -89,11 +91,14 @@ For each article you get, about one listed company, decide:
 - importance, 1 to 5:
   5 = likely to move the share price materially (results surprise, order large for the
   company's size, fraud, major regulatory action); 4 = significant company-specific news;
+  judge size against the company: an order worth 1% of a large company's revenue is routine
+  for it, the same order could be big for a small one;
   3 = moderately useful company news; 2 = minor or routine; 1 = noise (listicles, passing
   mentions, off-topic). Not relevant articles are 1.
 - summary: one factual sentence of at most 25 words stating what happened, using only what
-  the article says. Do not invent numbers. Do not name the publisher ("per Mint") and do not
-  say what the article leaves out ("no further details").
+  the article says. Do not invent numbers. State the fact itself: do not name the publisher
+  or the source ("per Mint", "according to CNBC TV18", "Moneycontrol reports") and do not say
+  what the article leaves out ("no further details").
 - same_story_as: several papers often report the same event in different words. If an
   article reports the same event as an earlier article (one listed under <earlier> or an
   earlier article in this batch), give that earlier article's id; otherwise null. Same event

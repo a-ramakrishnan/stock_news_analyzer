@@ -1,4 +1,4 @@
-.PHONY: setup up down health migrate securities watchlist filings news triage prices digest backfill run-all scheduler scheduler-logs scheduler-stop ui ui-docker ui-stop test lint format docker-health
+.PHONY: setup up down health migrate securities watchlist filings news triage explain prices digest backfill run-all scheduler scheduler-logs scheduler-stop ui ui-docker ui-stop test lint format docker-health
 
 setup:          ## Install Python dependencies and create .env
 	uv sync
@@ -31,6 +31,9 @@ news:           ## Read news feeds + Google News for the watchlist
 
 triage:         ## LLM triage of new articles: relevance, topic, sentiment, importance
 	uv run sna triage run
+
+explain:        ## LLM explanation of unusual days not explained yet (up to yesterday)
+	uv run sna explain run
 
 prices:         ## Load new NSE prices, update moves and labels
 	uv run sna prices fetch

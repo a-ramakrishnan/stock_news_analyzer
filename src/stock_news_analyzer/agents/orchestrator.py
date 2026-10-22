@@ -88,6 +88,32 @@ def job_triage(session: Session) -> str:
     return summary
 
 
+# The scheduled run explains unusual days of the last two weeks, at most this many.
+EXPLAIN_LIMIT = 30
+EXPLAIN_DAYS = 14
+
+
+def job_explain(session: Session) -> str:
+    from stock_news_analyzer.agents.explain import explain_moves
+    from stock_news_analyzer.llm import LLM
+
+    if not get_settings().anthropic_api_key:
+        return "skipped: ANTHROPIC_API_KEY is not set in .env"
+    today = datetime.now(IST).date()
+    # Up to yesterday: the morning's news often says why a stock moved the day before.
+    result = explain_moves(
+        session,
+        LLM(session),
+        since=today - timedelta(days=EXPLAIN_DAYS),
+        until=today - timedelta(days=1),
+        limit=EXPLAIN_LIMIT,
+    )
+    summary = f"{result.explained} unusual days explained, ${result.cost_usd:.4f}"
+    if result.errors:
+        raise JobError(summary, result.errors)
+    return summary
+
+
 def job_prices(session: Session) -> str:
     from stock_news_analyzer.agents.prices import (
         PriceCollector,
@@ -139,11 +165,12 @@ JOBS: dict[str, Callable[[Session], str]] = {
     "news": job_news,
     "triage": job_triage,
     "prices": job_prices,
+    "explain": job_explain,
     "securities": job_securities,
     "digest": job_digest,
 }
 # `sna run all`: collect, then judge, then measure, then report.
-RUN_ALL = ("filings", "news", "triage", "prices", "digest")
+RUN_ALL = ("filings", "news", "triage", "prices", "explain", "digest")
 
 
 # --- running and recording ---------------------------------------------------

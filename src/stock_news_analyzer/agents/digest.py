@@ -19,6 +19,7 @@ from stock_news_analyzer.models import (
     DocumentCompany,
     EventLabel,
     IndexDaily,
+    MoveExplanation,
     NewsTriage,
     Run,
     StockMove,
@@ -198,12 +199,20 @@ def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
             total_unusual += len(unusual)
             lines += ["", "**Unusual days:**"]
             for m in unusual:
+                why = session.get(MoveExplanation, (m.isin, m.trade_date))
+                reason = (
+                    f"  \n  Likely cause ({why.cause}, {why.confidence} confidence): "
+                    f"{why.explanation}"
+                    if why
+                    else ""
+                )
                 lines.append(
                     f"- {m.trade_date:%d %b}: {pct(m.stock_return)} "
-                    f"({pct(m.excess_return)} vs Nifty 50, z {m.zscore:+.1f})"
+                    f"({pct(m.excess_return)} vs Nifty 50, z {m.zscore:+.1f}){reason}"
                 )
                 unusual_summary.append(
                     f"- {symbol} {m.trade_date:%d %b}: {pct(m.excess_return)} vs Nifty 50"
+                    + (f" ({why.cause})" if why else " (not explained yet)")
                 )
 
         filings = _dedupe_filings(_documents(session, company.isin, since, until, news=False))
@@ -264,7 +273,7 @@ def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
                     f"{pct(label.excess_5d)} | {pct(label.excess_20d)} | {doc.title[:70]} |"
                 )
 
-    lines += ["", "## Unusual moves to explain", ""]
+    lines += ["", "## Unusual moves", ""]
     lines += unusual_summary or ["None in this period."]
 
     lines += [
@@ -274,7 +283,7 @@ def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
         "| Job | Last run | Status | Result |",
         "| --- | --- | --- | --- |",
     ]
-    for job in ("filings", "news", "triage", "prices", "securities"):
+    for job in ("filings", "news", "triage", "prices", "explain", "securities"):
         run = session.scalars(
             select(Run).where(Run.job == job).order_by(Run.started_at.desc()).limit(1)
         ).first()

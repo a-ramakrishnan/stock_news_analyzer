@@ -86,6 +86,13 @@ def _layout(fig: go.Figure, t: Theme, height: int) -> go.Figure:
     return fig
 
 
+def _wrap(text: str, width: int = 60) -> str:
+    """Break a long hover text into lines (Plotly does not wrap)."""
+    import textwrap
+
+    return "<br>".join(textwrap.wrap(text, width))
+
+
 def performance_chart(
     perf: pd.DataFrame,
     symbol: str,
@@ -117,8 +124,14 @@ def performance_chart(
         )
     level = perf.set_index("date")["stock"]
 
-    unusual = perf[perf["unusual"]]
+    unusual = perf[perf["unusual"]].copy()
     if not unusual.empty:
+        if "explanation" not in unusual:
+            unusual["cause"] = unusual["explanation"] = None
+        why = [
+            f"<br>{c}: {_wrap(e)}" if isinstance(e, str) and e else "<br>not explained yet"
+            for c, e in zip(unusual["cause"], unusual["explanation"], strict=False)
+        ]
         fig.add_trace(
             go.Scatter(
                 x=unusual["date"],
@@ -126,9 +139,9 @@ def performance_chart(
                 name="Unusual day",
                 mode="markers",
                 marker=dict(size=11, color="rgba(0,0,0,0)", line=dict(color=t.down, width=2)),
-                customdata=unusual[["excess", "zscore"]].to_numpy(),
+                customdata=list(zip(unusual["excess"], unusual["zscore"], why, strict=False)),
                 hovertemplate="Unusual: %{customdata[0]:+.2%} vs Nifty "
-                "(z %{customdata[1]:.1f})<extra></extra>",
+                "(z %{customdata[1]:.1f})%{customdata[2]}<extra></extra>",
             )
         )
     if events is not None and not events.empty:

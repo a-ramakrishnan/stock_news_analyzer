@@ -65,7 +65,7 @@ def watchlist(session):
         parse_nse_equity_list((FIXTURES / "EQUITY_L.csv").read_text(encoding="utf-8")),
         bse=parse_bse_scrips((FIXTURES / "bse_scrips.json").read_text()),
     )
-    wl.load_file(session, REPO / "config" / "watchlist.yaml")
+    wl.load_file(session, FIXTURES / "watchlist.yaml")
     return session
 
 

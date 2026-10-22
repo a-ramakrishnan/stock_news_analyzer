@@ -21,6 +21,42 @@ stocks:
     owned: true
     aliases: ["MSWIL"]
     sector_index: Nifty Auto
+  - name: Knowledge Marine & Engineering Works
+    owned: true
+    aliases: ["Knowledge Marine", "KMEW"]
+    sector_index: Nifty Infrastructure
+  - name: Zinka Logistics Solutions
+    owned: true
+    aliases: ["BlackBuck", "Zinka Logistics"]
+    sector_index: Nifty Services Sector
+  - name: Diamond Power Infrastructure
+    owned: true
+    aliases: ["Diamond Power"]
+    sector_index: Nifty Infrastructure
+  - name: Gaudium IVF and Women Health
+    owned: true
+    aliases: ["Gaudium IVF", "Gaudium"]
+    sector_index: Nifty Healthcare Index
+  - name: Gravita India
+    owned: true
+    aliases: ["Gravita"]
+    sector_index: Nifty Metal
+  - name: Ujjivan Small Finance Bank
+    owned: true
+    aliases: ["Ujjivan SFB", "Ujjivan"]
+    sector_index: Nifty Financial Services
+  - name: Sathlokhar Synergys E&C Global
+    owned: true
+    aliases: ["Sathlokhar"]
+    sector_index: Nifty Infrastructure
+  - name: Shaily Engineering Plastics
+    owned: true
+    aliases: ["Shaily"]
+    sector_index: Nifty Smallcap 250
+  - name: Mrs. Bectors Food Specialities
+    owned: false
+    aliases: ["Mrs Bectors", "Bectors"]
+    sector_index: Nifty FMCG
 
 # Bullion to track: gold and/or silver, e.g.
 # bullion:

@@ -140,7 +140,7 @@ def watchlist(session):
         parse_nse_equity_list((FIXTURES / "EQUITY_L.csv").read_text(encoding="utf-8")),
         bse=parse_bse_scrips((FIXTURES / "bse_scrips.json").read_text()),
     )
-    wl.load_file(session, REPO / "config" / "watchlist.yaml")
+    wl.load_file(session, FIXTURES / "watchlist.yaml")
     return session
 
 
@@ -238,7 +238,7 @@ def test_relink_removes_links_that_no_longer_match(watchlist):
     collector._store(lt_tech, nw.watchlist_matcher(watchlist).match(lt_tech.title))
     assert watchlist.query(DocumentCompany).count() == 1
 
-    wl.load_file(watchlist, REPO / "config" / "watchlist.yaml")  # brings the exclusions back
+    wl.load_file(watchlist, FIXTURES / "watchlist.yaml")  # brings the exclusions back
     assert nw.relink(watchlist) == (0, 1)
     assert watchlist.query(DocumentCompany).count() == 0
     assert watchlist.query(Document).count() == 1  # the article itself is kept

@@ -121,7 +121,7 @@ def loaded(session, tmp_path):
         parse_nse_equity_list((FIXTURES / "EQUITY_L.csv").read_text(encoding="utf-8")),
         bse=parse_bse_scrips((FIXTURES / "bse_scrips.json").read_text()),
     )
-    wl.load_file(session, REPO / "config" / "watchlist.yaml")
+    wl.load_file(session, FIXTURES / "watchlist.yaml")
     pr.PriceCollector(session, FakeNSE(), tmp_path).collect(date(2026, 10, 16), date(2026, 10, 21))
     pr.compute_moves(session)
     fl.FilingsCollector(session, FakeExchange(), tmp_path, pdf_policy="none").collect(

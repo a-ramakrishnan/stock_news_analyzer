@@ -53,7 +53,7 @@ def test_refresh_load_and_list_from_downloaded_files(session, test_database_url,
     assert result.exit_code == 0, result.stdout
     assert "loaded 9 NSE, 9 BSE, 8 Nifty 500 rows" in result.stdout
 
-    result = runner.invoke(app, ["watchlist", "load", "config/watchlist.yaml"])
+    result = runner.invoke(app, ["watchlist", "load", str(fixtures / "watchlist.yaml")])
     assert result.exit_code == 0, result.stdout
 
     result = runner.invoke(app, ["watchlist", "list"])

@@ -15,6 +15,7 @@ from stock_news_analyzer.sources.securities import (
 pytestmark = pytest.mark.db
 
 REPO_WATCHLIST = Path(__file__).parent.parent / "config" / "watchlist.yaml"
+TEST_WATCHLIST = Path(__file__).parent / "fixtures" / "watchlist.yaml"
 
 
 @pytest.fixture
@@ -81,8 +82,8 @@ def test_add_equity_updates_existing_item(master):
     assert item.owned and item.quantity == Decimal("25") and company.isin == lt.isin
 
 
-def test_load_repo_watchlist_file(master):
-    result = wl.load_file(master, REPO_WATCHLIST)
+def test_load_watchlist_file(master):
+    result = wl.load_file(master, TEST_WATCHLIST)
     assert not result.problems
     tracked = {c.nse_symbol: (i.owned, c.bse_code) for i, c in wl.list_items(master)}
     assert tracked == {
@@ -90,6 +91,21 @@ def test_load_repo_watchlist_file(master):
         "KARURVYSYA": (True, "590003"),
         "MSUMI": (True, "543498"),
     }
+
+
+def test_repo_watchlist_file_is_well_formed(master):
+    """Your own config/watchlist.yaml: every entry has a name, and loading it never crashes.
+
+    The test master list holds only a few companies, so names outside it are reported, not
+    loaded; on your Mac the full NSE/BSE list resolves them.
+    """
+    import yaml
+
+    data = yaml.safe_load(REPO_WATCHLIST.read_text())
+    assert all(str(entry.get("name") or "").strip() for entry in data["stocks"])
+    result = wl.load_file(master, REPO_WATCHLIST)
+    assert all(isinstance(p, wl.ResolveError) for p in result.problems)
+    assert {"LT", "KARURVYSYA", "MSUMI"} <= {c.nse_symbol for _, c in wl.list_items(master)}
 
 
 def test_load_file_reports_unresolved_names(master, tmp_path):

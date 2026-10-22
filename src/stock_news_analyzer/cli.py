@@ -222,8 +222,8 @@ def watchlist_load(
         result = wl.load_file(session, path)
         for item in result.added:
             typer.echo(f"tracking {item.display_name}{'  (owned)' if item.owned else ''}")
-    for problem in result.problems:
-        _print_candidates(problem)
+        for problem in result.problems:  # inside the session: candidates are read from it
+            _print_candidates(problem)
     if result.problems:
         typer.echo("Add `symbol: <NSE SYMBOL>` to those entries in the file and run again.")
         raise typer.Exit(1)

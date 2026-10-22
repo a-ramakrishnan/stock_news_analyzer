@@ -63,3 +63,24 @@ def test_refresh_load_and_list_from_downloaded_files(session, test_database_url,
     result = runner.invoke(app, ["watchlist", "add", "Bank"])
     assert result.exit_code == 1
     assert "could match more than one company" in result.stdout
+
+
+@pytest.mark.db
+def test_load_lists_candidates_for_ambiguous_entries(
+    session, test_database_url, monkeypatch, tmp_path
+):
+    from stock_news_analyzer.agents import watchlist as wl
+    from stock_news_analyzer.sources.securities import parse_nse_equity_list
+
+    fixtures = Path(__file__).parent / "fixtures"
+    wl.load_master(session, parse_nse_equity_list((fixtures / "EQUITY_L.csv").read_text()))
+    session.commit()
+    monkeypatch.setenv("DATABASE_URL", test_database_url)
+    f = tmp_path / "w.yaml"
+    f.write_text("stocks:\n  - name: Bank\n  - name: LT\n")
+    result = runner.invoke(app, ["watchlist", "load", str(f)])
+    # Exit code 1 with the candidates listed; it used to crash after the session closed.
+    assert result.exit_code == 1 and isinstance(result.exception, SystemExit), result.exception
+    assert "tracking Larsen & Toubro Limited" in result.stdout
+    assert "'Bank' could match more than one company" in result.stdout
+    assert "KARURVYSYA" in result.stdout and "Add `symbol: <NSE SYMBOL>`" in result.stdout

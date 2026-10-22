@@ -330,8 +330,9 @@ def load_file(session: Session, path: Path) -> FileLoadResult:
 def refresh_master(session: Session, data_dir: Path) -> tuple[MasterLoadResult, list[str]]:
     """Download NSE + BSE lists and update the master list (the scheduled weekly job).
 
-    NSE's equity list is required; the Nifty 500 list (industry) and BSE's list (BSE codes,
-    market cap) are optional, and their failures come back as warnings. Raw copies are kept.
+    NSE's equity list is required; the NSE SME list, the Nifty 500 list (industry) and BSE's
+    list (BSE codes, market cap) are optional, and their failures come back as warnings.
+    Raw copies are kept.
     """
     import httpx
 
@@ -347,6 +348,12 @@ def refresh_master(session: Session, data_dir: Path) -> tuple[MasterLoadResult, 
 
     warnings = []
     nse = securities.parse_nse_equity_list(fetch(securities.NSE_EQUITY_LIST_URL, "EQUITY_L.csv"))
+    try:
+        nse += securities.parse_nse_equity_list(
+            fetch(securities.NSE_SME_LIST_URL, "SME_EQUITY_L.csv")
+        )
+    except httpx.HTTPError as exc:
+        warnings.append(f"NSE SME list: {exc}")
     try:
         nifty500 = securities.parse_nifty500(fetch(securities.NIFTY500_URL, "ind_nifty500list.csv"))
     except httpx.HTTPError as exc:

@@ -110,6 +110,7 @@ def _read_or_download(file: Path | None, url: str, save_as: str, referer: str | 
 @securities_app.command("refresh")
 def securities_refresh(
     nse_file: Path = typer.Option(None, help="Use a downloaded copy of NSE's EQUITY_L.csv."),
+    nse_sme_file: Path = typer.Option(None, help="Use a downloaded SME_EQUITY_L.csv (NSE Emerge)."),
     nifty500_file: Path = typer.Option(None, help="Use a downloaded ind_nifty500list.csv."),
     bse_file: Path = typer.Option(None, help="Use a saved copy of BSE's scrip list (JSON)."),
     skip_bse: bool = typer.Option(False, help="Don't fetch BSE codes this time."),
@@ -124,6 +125,15 @@ def securities_refresh(
         typer.echo(f"Download it in a browser from {securities.NSE_EQUITY_LIST_URL}")
         typer.echo("then run: sna securities refresh --nse-file ~/Downloads/EQUITY_L.csv")
         raise typer.Exit(1) from exc
+
+    try:
+        nse += securities.parse_nse_equity_list(
+            _read_or_download(nse_sme_file, securities.NSE_SME_LIST_URL, "SME_EQUITY_L.csv")
+        )
+    except httpx.HTTPError as exc:
+        typer.echo(f"warning: NSE SME list download failed ({exc}); SME companies left out")
+        typer.echo(f"Download it in a browser from {securities.NSE_SME_LIST_URL}")
+        typer.echo("and add: --nse-sme-file ~/Downloads/SME_EQUITY_L.csv")
 
     try:
         nifty500 = securities.parse_nifty500(

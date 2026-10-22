@@ -44,6 +44,8 @@ def test_refresh_load_and_list_from_downloaded_files(session, test_database_url,
             "refresh",
             "--nse-file",
             str(fixtures / "EQUITY_L.csv"),
+            "--nse-sme-file",
+            str(fixtures / "SME_EQUITY_L.csv"),
             "--nifty500-file",
             str(fixtures / "ind_nifty500list.csv"),
             "--bse-file",
@@ -51,7 +53,10 @@ def test_refresh_load_and_list_from_downloaded_files(session, test_database_url,
         ],
     )
     assert result.exit_code == 0, result.stdout
-    assert "loaded 9 NSE, 9 BSE, 8 Nifty 500 rows" in result.stdout
+    assert "loaded 10 NSE, 9 BSE, 8 Nifty 500 rows" in result.stdout
+
+    result = runner.invoke(app, ["watchlist", "add", "SSEGL", "--owned"])
+    assert result.exit_code == 0 and "Sathlokhar Synergys E&C Global Limited" in result.stdout
 
     result = runner.invoke(app, ["watchlist", "load", str(fixtures / "watchlist.yaml")])
     assert result.exit_code == 0, result.stdout

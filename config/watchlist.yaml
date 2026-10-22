@@ -25,9 +25,10 @@ stocks:
     owned: true
     aliases: ["Knowledge Marine", "KMEW"]
     sector_index: Nifty Infrastructure
-  - name: Zinka Logistics Solutions
+  - name: BlackBuck
+    symbol: BLACKBUCK
     owned: true
-    aliases: ["BlackBuck", "Zinka Logistics"]
+    aliases: ["Zinka Logistics"]
     sector_index: Nifty Services Sector
   - name: Diamond Power Infrastructure
     owned: true
@@ -46,6 +47,7 @@ stocks:
     aliases: ["Ujjivan SFB", "Ujjivan"]
     sector_index: Nifty Financial Services
   - name: Sathlokhar Synergys E&C Global
+    symbol: SSEGL
     owned: true
     aliases: ["Sathlokhar"]
     sector_index: Nifty Infrastructure

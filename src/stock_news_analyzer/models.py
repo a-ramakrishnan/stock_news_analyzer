@@ -260,3 +260,46 @@ class Run(Base):
     status: Mapped[str] = mapped_column(String(16))  # 'running', 'ok', 'error'
     summary: Mapped[str | None] = mapped_column(Text)
     error: Mapped[str | None] = mapped_column(Text)
+
+
+class LlmCall(Base):
+    """One call to an LLM: what it was for, tokens used and what it cost (for the budget)."""
+
+    __tablename__ = "llm_calls"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    task: Mapped[str] = mapped_column(String(32), index=True)  # e.g. 'triage'
+    model: Mapped[str] = mapped_column(String(64))
+    input_tokens: Mapped[int] = mapped_column(default=0)
+    output_tokens: Mapped[int] = mapped_column(default=0)
+    cache_read_tokens: Mapped[int] = mapped_column(default=0)
+    cache_write_tokens: Mapped[int] = mapped_column(default=0)
+    cost_usd: Mapped[Decimal] = mapped_column(Numeric(10, 5), default=0)
+    ok: Mapped[bool] = mapped_column(Boolean, default=True)
+    error: Mapped[str | None] = mapped_column(Text)
+
+
+class NewsTriage(Base):
+    """News Triage (agent 6): what one article means for one watchlist company.
+
+    Copies of the same story (near-identical headline within a few days) point to the first
+    article with `duplicate_of` and reuse its triage; `model` is empty for those.
+    """
+
+    __tablename__ = "news_triage"
+
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True
+    )
+    isin: Mapped[str] = mapped_column(ForeignKey("companies.isin"), primary_key=True)
+    relevant: Mapped[bool] = mapped_column(Boolean)  # really about this company?
+    topic: Mapped[str] = mapped_column(String(32), index=True)
+    sentiment: Mapped[str] = mapped_column(String(16))  # positive/negative/neutral/mixed
+    importance: Mapped[int] = mapped_column()  # 1 (noise) .. 5 (could move the stock)
+    summary: Mapped[str] = mapped_column(Text)
+    duplicate_of: Mapped[int | None] = mapped_column(
+        ForeignKey("documents.id", ondelete="SET NULL"), index=True
+    )
+    model: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

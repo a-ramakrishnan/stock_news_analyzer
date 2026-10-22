@@ -17,6 +17,8 @@ from stock_news_analyzer.models import (
     DocumentCompany,
     EventLabel,
     IndexDaily,
+    LlmCall,
+    NewsTriage,
     PriceDaily,
     Run,
     StockMove,
@@ -209,11 +211,23 @@ def news(
     search: str | None = None,
     since: date | None = None,
     limit: int = 500,
+    hide_noise: bool = False,
+    min_importance: int = 1,
+    topics: list[str] | None = None,
 ) -> pd.DataFrame:
+    """Articles with their triage (empty until `sna triage run` has seen them).
+
+    `hide_noise` leaves out articles triaged as off-topic or as a repeat of an earlier story;
+    `min_importance` and `topics` filter on the triage, so they also leave out untriaged ones.
+    """
     query = (
-        select(Document, Company.nse_symbol)
+        select(Document, Company.nse_symbol, NewsTriage)
         .join(DocumentCompany, DocumentCompany.document_id == Document.id)
         .join(Company, Company.isin == DocumentCompany.isin)
+        .outerjoin(
+            NewsTriage,
+            (NewsTriage.document_id == Document.id) & (NewsTriage.isin == DocumentCompany.isin),
+        )
         .where(Document.doc_type == "news")
         .order_by(Document.published_at.desc())
         .limit(limit)
@@ -226,19 +240,105 @@ def news(
         )
     if search:
         query = query.where(Document.title.ilike(f"%{search}%"))
+    if hide_noise:
+        query = query.where(
+            NewsTriage.document_id.is_(None)
+            | (NewsTriage.relevant & NewsTriage.duplicate_of.is_(None))
+        )
+    if min_importance > 1:
+        query = query.where(NewsTriage.importance >= min_importance)
+    if topics:
+        query = query.where(NewsTriage.topic.in_(topics))
     return pd.DataFrame(
         [
             {
                 "published": d.published_at.astimezone(IST).replace(tzinfo=None),
                 "symbol": s,
-                "publisher": d.publisher,
+                "importance": t.importance if t else None,
+                "topic": t.topic if t else None,
+                "sentiment": t.sentiment if t else None,
                 "title": d.title,
+                "summary": t.summary if t else None,
+                "publisher": d.publisher,
                 "url": d.url,
             }
-            for d, s in session.execute(query).all()
+            for d, s, t in session.execute(query).all()
         ],
-        columns=["published", "symbol", "publisher", "title", "url"],
+        columns=[
+            "published",
+            "symbol",
+            "importance",
+            "topic",
+            "sentiment",
+            "title",
+            "summary",
+            "publisher",
+            "url",
+        ],
     )
+
+
+def llm_usage(session: Session) -> dict:
+    """This month's LLM spend against the budget, by task and model."""
+    from stock_news_analyzer.config import get_settings
+    from stock_news_analyzer.llm import month_spend
+
+    now = datetime.now(IST)
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    rows = session.execute(
+        select(
+            LlmCall.task,
+            LlmCall.model,
+            func.count(),
+            func.count().filter(~LlmCall.ok),
+            func.sum(LlmCall.input_tokens),
+            func.sum(LlmCall.output_tokens),
+            func.sum(LlmCall.cost_usd),
+        )
+        .where(LlmCall.at >= start)
+        .group_by(LlmCall.task, LlmCall.model)
+        .order_by(LlmCall.task)
+    ).all()
+    return {
+        "month": f"{now:%B %Y}",
+        "spent": float(month_spend(session)),
+        "budget": get_settings().llm_monthly_budget_usd,
+        "pending_triage": session.scalar(
+            select(func.count())
+            .select_from(DocumentCompany)
+            .join(Document, Document.id == DocumentCompany.document_id)
+            .join(WatchlistItem, WatchlistItem.isin == DocumentCompany.isin)
+            .outerjoin(
+                NewsTriage,
+                (NewsTriage.document_id == DocumentCompany.document_id)
+                & (NewsTriage.isin == DocumentCompany.isin),
+            )
+            .where(Document.doc_type == "news", NewsTriage.document_id.is_(None))
+        ),
+        "by_task": pd.DataFrame(
+            [
+                {
+                    "task": task,
+                    "model": model,
+                    "calls": calls,
+                    "failed": failed,
+                    "input tokens": tin or 0,
+                    "output tokens": tout or 0,
+                    "cost $": float(usd or 0),
+                }
+                for task, model, calls, failed, tin, tout, usd in rows
+            ],
+            columns=[
+                "task",
+                "model",
+                "calls",
+                "failed",
+                "input tokens",
+                "output tokens",
+                "cost $",
+            ],
+        ),
+    }
 
 
 def labels(session: Session, isin: str | None = None, news_too: bool = False) -> pd.DataFrame:
@@ -359,7 +459,7 @@ def runs(session: Session, limit: int = 100) -> pd.DataFrame:
 
 def last_runs(session: Session) -> dict[str, dict]:
     out = {}
-    for job in ("filings", "news", "prices", "securities", "digest"):
+    for job in ("filings", "news", "triage", "prices", "securities", "digest"):
         r = session.scalars(
             select(Run).where(Run.job == job).order_by(Run.started_at.desc()).limit(1)
         ).first()

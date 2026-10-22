@@ -12,6 +12,7 @@ import streamlit as st
 from sqlalchemy.orm import Session
 
 from stock_news_analyzer.agents.orchestrator import SCHEDULE_FILE, load_schedule, next_runs
+from stock_news_analyzer.agents.triage import TOPICS
 from stock_news_analyzer.config import get_settings
 from stock_news_analyzer.db import get_engine
 from stock_news_analyzer.sources.announcements import IST
@@ -257,7 +258,7 @@ def stock_page_body() -> None:
     with filings_tab:
         filings_table(load("filings", isin=s["isin"], dedupe=True, limit=200), key="stock")
     with news_tab:
-        news_table(load("news", isin=s["isin"], limit=200))
+        news_table(load("news", isin=s["isin"], limit=200, hide_noise=True))
     with reactions_tab:
         reactions_table(load("labels", isin=s["isin"], news_too=True))
     with actions_tab:
@@ -320,7 +321,13 @@ def news_table(df: pd.DataFrame) -> None:
             "published": st.column_config.DatetimeColumn(
                 "Published (IST)", format="DD MMM YYYY HH:mm"
             ),
+            "importance": st.column_config.NumberColumn(
+                "★", help="Importance from the triage, 1 (noise) to 5 (could move the stock)"
+            ),
+            "topic": st.column_config.TextColumn("Topic"),
+            "sentiment": st.column_config.TextColumn("For shareholders"),
             "title": st.column_config.TextColumn("Headline", width="large"),
+            "summary": st.column_config.TextColumn("Summary", width="large"),
             "url": st.column_config.LinkColumn("Link", display_text="read"),
         },
     )
@@ -391,8 +398,31 @@ def news_page() -> None:
         since = st.date_input(
             "Since", date.today() - timedelta(days=30), format="DD/MM/YYYY", key="news-since"
         )
-    df = load("news", isin=s["isin"] if s else None, search=search or None, since=since)
-    st.caption(f"{len(df)} articles")
+    d, e, f = st.columns([1, 1, 2], vertical_alignment="bottom")
+    with d:
+        hide = st.toggle(
+            "Hide off-topic and repeats",
+            value=True,
+            help="Uses the triage; articles not triaged yet are still shown.",
+        )
+    with e:
+        min_importance = st.select_slider("Importance at least", [1, 2, 3, 4, 5], value=1)
+    with f:
+        topics = st.multiselect("Topic", list(TOPICS))
+    df = load(
+        "news",
+        isin=s["isin"] if s else None,
+        search=search or None,
+        since=since,
+        hide_noise=hide,
+        min_importance=min_importance,
+        topics=topics or None,
+    )
+    untriaged = int(df["importance"].isna().sum()) if not df.empty else 0
+    st.caption(
+        f"{len(df)} articles"
+        + (f", {untriaged} not triaged yet (`sna triage run`)" if untriaged else "")
+    )
     news_table(df)
 
 
@@ -585,6 +615,26 @@ def system_page() -> None:
             pd.DataFrame({"what": list(counts), "count": [str(v) for v in counts.values()]}),
             hide_index=True,
             width="stretch",
+        )
+    st.subheader("AI usage")
+    usage = load("llm_usage")
+    a, b, c = st.columns(3)
+    a.metric(f"Spent in {usage['month']}", f"${usage['spent']:.2f}")
+    b.metric(
+        "Monthly budget",
+        f"${usage['budget']:.2f}",
+        help="LLM_MONTHLY_BUDGET_USD in .env; calls stop for the month when reached.",
+    )
+    c.metric("Articles waiting for triage", usage["pending_triage"])
+    st.progress(min(1.0, usage["spent"] / usage["budget"]) if usage["budget"] else 1.0)
+    if usage["by_task"].empty:
+        st.caption("No LLM calls this month yet.")
+    else:
+        st.dataframe(
+            usage["by_task"],
+            hide_index=True,
+            width="stretch",
+            column_config={"cost $": st.column_config.NumberColumn(format="$%.4f")},
         )
     st.subheader("Recent runs")
     runs = load("runs", limit=200)

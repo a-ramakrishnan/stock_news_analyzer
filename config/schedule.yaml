@@ -6,6 +6,8 @@ jobs:
     cron: "*/30 7-23 * * *"
   news:          # news feeds + Google News
     cron: "15 6-23 * * *"
+  triage:        # LLM (Haiku): relevance, topic, sentiment, importance of new articles
+    cron: "25 6-23 * * *"
   prices:        # NSE prices (published around 18:00), corporate actions, moves and labels
     cron: "30 19,21 * * 1-5"
   securities:    # NSE/BSE company lists (new listings, symbol changes, market caps)

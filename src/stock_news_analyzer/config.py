@@ -24,6 +24,14 @@ class Settings(BaseSettings):
     # deviations of the previous 60 trading days. 2.0 flags about 5% of days.
     unusual_threshold: float = 2.0
 
+    # Phase 2 (LLM agents). The key comes from console.anthropic.com; keep it in .env only.
+    anthropic_api_key: str | None = None
+    # High-volume work (news triage) and judgement work (explanations, extraction, calls).
+    llm_model_triage: str = "claude-haiku-5-5"
+    llm_model_analysis: str = "claude-sonnet-5-5"
+    # LLM calls stop for the rest of the month (India time) once this much has been spent.
+    llm_monthly_budget_usd: float = 20.0
+
 
 @lru_cache
 def get_settings() -> Settings:

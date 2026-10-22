@@ -19,6 +19,7 @@ from stock_news_analyzer.models import (
     DocumentCompany,
     EventLabel,
     IndexDaily,
+    NewsTriage,
     Run,
     StockMove,
     WatchlistItem,
@@ -120,6 +121,29 @@ def _dedupe_news(docs: list[Document]) -> list[Document]:
     return kept
 
 
+def _triaged_news(session: Session, isin: str, docs: list[Document]):
+    """Articles with their triage, most important first; off-topic and repeated ones left out.
+
+    Articles not triaged yet (no API key, or triage hasn't run) are kept, after the triaged
+    ones. Returns ([(document, triage or None)], number hidden).
+    """
+    triage = {
+        t.document_id: t
+        for t in session.scalars(
+            select(NewsTriage).where(
+                NewsTriage.isin == isin, NewsTriage.document_id.in_([d.id for d in docs])
+            )
+        )
+    }
+    kept = [
+        (d, triage.get(d.id))
+        for d in docs
+        if d.id not in triage or (triage[d.id].relevant and triage[d.id].duplicate_of is None)
+    ]
+    kept.sort(key=lambda pair: -(pair[1].importance if pair[1] else 0))  # stable: newest first
+    return kept, len(docs) - len(kept)
+
+
 def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
     lines = [
         f"# Daily digest, {until.astimezone(IST):%d %b %Y %H:%M} IST",
@@ -192,14 +216,27 @@ def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
         if len(filings) > MAX_FILINGS:
             lines.append(f"- … and {len(filings) - MAX_FILINGS} more (`sna filings list {symbol}`)")
 
-        news = _dedupe_news(_documents(session, company.isin, since, until, news=True))
+        news, hidden = _triaged_news(
+            session,
+            company.isin,
+            _dedupe_news(_documents(session, company.isin, since, until, True)),
+        )
         total_news += len(news)
         lines += ["", f"**News ({len(news)}):**" if news else "No news."]
-        for doc in news[:MAX_NEWS]:
+        for doc, triage in news[:MAX_NEWS]:
             title = f"[{doc.title}]({doc.url})" if doc.url else doc.title
-            lines.append(f"- {_when(doc.published_at)} {doc.publisher or ''}: {title}")
+            if triage:
+                lines.append(
+                    f"- {'★' * triage.importance} {triage.topic}, {triage.sentiment} · "
+                    f"{_when(doc.published_at)} {doc.publisher or ''}: {title}  \n"
+                    f"  {triage.summary}"
+                )
+            else:
+                lines.append(f"- {_when(doc.published_at)} {doc.publisher or ''}: {title}")
         if len(news) > MAX_NEWS:
-            lines.append(f"- … and {len(news) - MAX_NEWS} more (`sna news list {symbol}`)")
+            lines.append(f"- … and {len(news) - MAX_NEWS} more (`sna triage list {symbol}`)")
+        if hidden:
+            lines.append(f"- {hidden} off-topic or repeated articles hidden")
 
         labelled = session.execute(
             select(EventLabel, Document)
@@ -237,7 +274,7 @@ def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
         "| Job | Last run | Status | Result |",
         "| --- | --- | --- | --- |",
     ]
-    for job in ("filings", "news", "prices", "securities"):
+    for job in ("filings", "news", "triage", "prices", "securities"):
         run = session.scalars(
             select(Run).where(Run.job == job).order_by(Run.started_at.desc()).limit(1)
         ).first()

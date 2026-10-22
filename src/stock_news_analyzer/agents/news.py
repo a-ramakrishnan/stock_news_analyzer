@@ -155,7 +155,7 @@ class NewsCollector:
         self,
         start: date,
         end: date,
-        symbol: str | None = None,
+        symbol: str | None = None,  # NSE symbol or ISIN
         window_days: int = 30,
         progress: Callable[[str], None] | None = None,
     ) -> NewsResult:
@@ -168,7 +168,7 @@ class NewsCollector:
         matcher = watchlist_matcher(self.session)
         result = NewsResult()
         for company, *_ in matcher.entries:
-            if symbol and company.nse_symbol != symbol:
+            if symbol and symbol not in (company.nse_symbol, company.isin):
                 continue
             query = f'"{default_aliases(company)[0]}"'
             for lo, hi in month_windows(start, end, window_days):

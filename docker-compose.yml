@@ -55,7 +55,7 @@ services:
     command: ["sna", "orchestrator", "start"]
 
   ui:
-    # The dashboard (read-only). Start with `make ui-docker`, open http://localhost:8501.
+    # The dashboard. Start with `make ui-docker`, open http://localhost:8501.
     build: .
     profiles: ["ui"]
     env_file:
@@ -68,7 +68,8 @@ services:
     ports:
       - "8501:8501"
     volumes:
-      - ./data:/app/data:ro
+      # Writable: "Load history" on Manage stocks saves filing PDFs here.
+      - ./data:/app/data
       - ./config:/app/config:ro
     depends_on:
       db:

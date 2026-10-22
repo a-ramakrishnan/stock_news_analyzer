@@ -238,11 +238,16 @@ def stock_returns(session: Session, isin: str, symbol: str | None = None) -> dic
     return {d: r for d, (_, r) in sorted(best.items())}
 
 
-def refresh_corporate_actions(session: Session, client, start: date, end: date) -> list[str]:
-    """Fetch NSE corporate actions for every watchlist stock. Returns error messages."""
+def refresh_corporate_actions(
+    session: Session, client, start: date, end: date, isins: set[str] | None = None
+) -> list[str]:
+    """Fetch NSE corporate actions for every watchlist stock (or only `isins`).
+
+    Returns error messages.
+    """
     errors = []
     for company, _ in watchlist_benchmarks(session):
-        if not company.nse_symbol:
+        if not company.nse_symbol or (isins is not None and company.isin not in isins):
             continue
         try:
             actions = parse_corporate_actions(

@@ -51,7 +51,7 @@ pgvector     ok  0.8.x
 
 ## Watchlist
 
-Edit [`config/watchlist.yaml`](config/watchlist.yaml) first, then:
+Add stocks on the dashboard's **Manage stocks** page, or edit [`config/watchlist.yaml`](config/watchlist.yaml) and load it. Running `make watchlist` re-applies the file, so a stock listed there comes back as the file says.
 
 ```bash
 make migrate
@@ -175,7 +175,7 @@ Scheduled digests are saved as Markdown under `data/digests/`. While the Mac sle
 
 ## Dashboard
 
-A local web page over everything collected. It only reads the database.
+A local web page over everything collected. Every page only reads, except **Manage stocks**, where you add, edit and remove stocks.
 
 ```bash
 make ui
@@ -188,11 +188,12 @@ make ui
 
 | Page | What it shows |
 | --- | --- |
-| Today | Indices, a card per stock (move vs Nifty 50 and sector, unusual badge, 3-month sparkline), the latest digest, job health |
+| Today | Indices, then **Stocks I own** and **Watchlist** as separate groups of cards (move vs Nifty 50 and sector, unusual badge, 3-month sparkline), the latest digest, job health |
 | Stock | Stock vs sector vs Nifty 50 indexed to 100, key filings and unusual days marked; its filings, news, reactions and corporate actions |
 | Filings | Search by stock, type, words and date; read a filing's extracted text |
 | News | Search headlines; links to the articles |
 | What moves the stock | Average return vs Nifty 50 after each kind of filing, 1, 5 and 20 trading days later |
+| Manage stocks | Search any listed company and add it to Stocks I own or Watchlist, with news aliases and a sector benchmark; edit or remove stocks; **Load history now** fetches a new stock's filings, news and moves since Oct 2023 |
 | System | Schedule, stored data, recent runs and errors |
 
 ## Other commands

@@ -116,7 +116,15 @@ def test_charts_build(loaded):  # noqa: F811
 @pytest.mark.db
 @pytest.mark.parametrize(
     "page",
-    ["today_page", "stock_page_body", "filings_page", "news_page", "moves_page", "system_page"],
+    [
+        "today_page",
+        "stock_page_body",
+        "filings_page",
+        "news_page",
+        "moves_page",
+        "manage_page",
+        "system_page",
+    ],
 )
 def test_every_page_renders(loaded, test_database_url, monkeypatch, tmp_path, page):  # noqa: F811
     from streamlit.testing.v1 import AppTest
@@ -138,6 +146,7 @@ def test_every_page_renders(loaded, test_database_url, monkeypatch, tmp_path, pa
         "Filings",
         "News",
         "What moves the stock",
+        "Manage stocks",
         "System",
     }
 
@@ -154,4 +163,4 @@ def test_main_registers_every_page():
         "st.markdown(str(len(nav.call_args.args[0])))\n"
     )
     at.run()
-    assert not at.exception and at.markdown[-1].value == "6"
+    assert not at.exception and at.markdown[-1].value == "7"

@@ -45,10 +45,11 @@ digest:         ## Print the digest (everything since the last scheduled digest)
 SINCE ?= 2023-10-01
 
 # A part that reports errors does not stop the rest ("-"); re-run to retry what failed.
-backfill:       ## Load history since SINCE (default 2023-10-01): prices, filings, news, labels
+backfill:       ## Load history since SINCE (default 2023-10-01): prices, filings, news, deals, labels
 	-uv run sna prices backfill --since $(SINCE)
 	-uv run sna filings backfill --since $(SINCE)
 	-uv run sna news backfill --since $(SINCE)
+	-uv run sna deals backfill --since $(SINCE)
 	uv run sna labels update
 
 run-all:        ## Run filings, news, prices and digest once, now

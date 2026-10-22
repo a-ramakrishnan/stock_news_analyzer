@@ -319,3 +319,34 @@ class MoveExplanation(Base):
     evidence: Mapped[list[int]] = mapped_column(ARRAY(BigInteger), default=list)  # document ids
     model: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Deal(Base):
+    """An NSE bulk or block deal: who bought or sold how many shares at what price."""
+
+    __tablename__ = "deals"
+    __table_args__ = (
+        UniqueConstraint(
+            "kind",
+            "trade_date",
+            "symbol",
+            "client",
+            "side",
+            "quantity",
+            "price",
+            name="deals_key",
+            postgresql_nulls_not_distinct=True,  # a deal without a price is still one deal
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(8))  # 'bulk' or 'block'
+    trade_date: Mapped[date] = mapped_column(Date, index=True)
+    symbol: Mapped[str] = mapped_column(String(32), index=True)
+    isin: Mapped[str | None] = mapped_column(String(12), index=True)
+    security_name: Mapped[str | None] = mapped_column(Text)
+    client: Mapped[str] = mapped_column(Text)
+    side: Mapped[str] = mapped_column(String(4))  # BUY / SELL
+    quantity: Mapped[int] = mapped_column(BigInteger)
+    price: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    remarks: Mapped[str | None] = mapped_column(Text)

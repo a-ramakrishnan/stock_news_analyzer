@@ -25,6 +25,10 @@ class FakeExchange(FakeFilings, FakeActions):
         return super().nse_corporate_actions(symbol, start, end)
 
 
+def rows_after(session):
+    return {r["symbol"]: r for r in actions.tracked_stocks(session)}
+
+
 @pytest.mark.db
 def test_search_marks_tracked_companies(loaded):  # noqa: F811
     hits = {h["symbol"]: h for h in actions.search(loaded, "City Union")}
@@ -47,17 +51,20 @@ def test_add_edit_and_remove_from_the_dashboard(loaded):  # noqa: F811
         "owned": False,
         "sector_index": "Nifty Bank",
         "aliases": "CUB, City Union",
+        "peers": "",
         "remove": False,
     }
     assert list(rows)[:3] != ["CUB"]  # owned stocks are listed first
 
     rows["CUB"].update(owned=True, aliases="CUB", sector_index="")
+    rows["LT"]["peers"] = "ltf, LTTS, NOSUCH"
     rows["KARURVYSYA"]["remove"] = True
-    assert actions.save_changes(loaded, list(rows.values())) == (1, 1)
+    assert actions.save_changes(loaded, list(rows.values())) == (2, 1, ["NOSUCH"])
+    assert rows_after(loaded)["LT"]["peers"] == "LTF, LTTS"
     cub = loaded.query(WatchlistItem).filter_by(isin=CUB).one()
     assert cub.owned and cub.aliases == ["CUB"] and cub.sector_index is None
     assert {r["symbol"] for r in actions.tracked_stocks(loaded)} == {"LT", "MSUMI", "CUB"}
-    assert actions.save_changes(loaded, actions.tracked_stocks(loaded)) == (0, 0)  # no changes
+    assert actions.save_changes(loaded, actions.tracked_stocks(loaded)) == (0, 0, [])  # no change
 
     with pytest.raises(ValueError, match="unknown ISIN"):
         actions.add_stock(loaded, "INE000000000", owned=True)

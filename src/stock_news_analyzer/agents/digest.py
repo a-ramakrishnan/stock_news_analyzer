@@ -13,6 +13,7 @@ from pathlib import Path
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from stock_news_analyzer.agents.deals import watchlist_deals
 from stock_news_analyzer.agents.prices import NIFTY, watchlist_benchmarks
 from stock_news_analyzer.models import (
     Document,
@@ -225,6 +226,19 @@ def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
         if len(filings) > MAX_FILINGS:
             lines.append(f"- … and {len(filings) - MAX_FILINGS} more (`sna filings list {symbol}`)")
 
+        deals = watchlist_deals(
+            session, company.isin, since.astimezone(IST).date(), until.astimezone(IST).date()
+        )
+        if deals:
+            lines += ["", f"**Bulk/block deals ({len(deals)}):**"]
+            for deal, share in deals:
+                price = f" at Rs {deal.price:,.2f}" if deal.price is not None else ""
+                of_volume = f" ({share:.1%} of the day's volume)" if share is not None else ""
+                lines.append(
+                    f"- {deal.trade_date:%d %b} {deal.kind}: {deal.client} "
+                    f"{deal.side.lower()}s {deal.quantity:,} shares{price}{of_volume}"
+                )
+
         news, hidden = _triaged_news(
             session,
             company.isin,
@@ -283,7 +297,7 @@ def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
         "| Job | Last run | Status | Result |",
         "| --- | --- | --- | --- |",
     ]
-    for job in ("filings", "news", "triage", "prices", "explain", "securities"):
+    for job in ("filings", "news", "triage", "deals", "prices", "explain", "securities"):
         run = session.scalars(
             select(Run).where(Run.job == job).order_by(Run.started_at.desc()).limit(1)
         ).first()

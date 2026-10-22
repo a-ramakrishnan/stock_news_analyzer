@@ -138,6 +138,17 @@ def job_prices(session: Session) -> str:
     return summary
 
 
+def job_deals(session: Session) -> str:
+    from stock_news_analyzer.agents import deals as dl
+    from stock_news_analyzer.sources.exchange_http import ExchangeClient
+
+    result = dl.collect(session, ExchangeClient(), dl.resume_date(session))
+    summary = f"{result.new} new bulk/block deals ({result.seen} read)"
+    if result.errors:
+        raise JobError(summary, result.errors)
+    return summary
+
+
 def job_securities(session: Session) -> str:
     from stock_news_analyzer.agents.watchlist import refresh_master
 
@@ -164,13 +175,14 @@ JOBS: dict[str, Callable[[Session], str]] = {
     "filings": job_filings,
     "news": job_news,
     "triage": job_triage,
+    "deals": job_deals,
     "prices": job_prices,
     "explain": job_explain,
     "securities": job_securities,
     "digest": job_digest,
 }
 # `sna run all`: collect, then judge, then measure, then report.
-RUN_ALL = ("filings", "news", "triage", "prices", "explain", "digest")
+RUN_ALL = ("filings", "news", "triage", "deals", "prices", "explain", "digest")
 
 
 # --- running and recording ---------------------------------------------------

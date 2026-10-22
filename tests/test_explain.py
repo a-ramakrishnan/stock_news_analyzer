@@ -162,3 +162,52 @@ def test_chart_hover_and_scheduled_job(unusual, test_database_url, monkeypatch):
     get_settings.cache_clear()
     run = run_job("explain")
     assert run.status == "ok" and run.summary.startswith("skipped")
+
+
+@pytest.mark.db
+def test_prompt_has_deals_and_peer_moves(unusual):
+    from datetime import datetime
+
+    from test_deals import FakeNSE
+
+    from stock_news_analyzer.agents import deals as dl
+    from stock_news_analyzer.agents import watchlist as wl
+    from stock_news_analyzer.agents.digest import build_digest
+    from stock_news_analyzer.models import Company
+    from stock_news_analyzer.sources.announcements import IST
+
+    dl.collect(unusual, FakeNSE(), date(2026, 10, 1), date(2026, 10, 21))
+    lt = unusual.get(Company, LT)
+    llm, client = _llm(unusual, reply_with())
+
+    # Without approved peers: the largest companies in L&T's NSE industry, if any traded.
+    ex.explain_moves(unusual, llm)
+    prompt = client.requests[0]["messages"][0]["content"]
+    assert "Bulk and block deals (1, from two sessions before to the day):" in prompt
+    assert "(on the day) block: EXAMPLE PENSION FUND buys 1,500,000 shares at Rs 3,640.00" in prompt
+    assert "of the day's volume" in prompt and "Peers on the day" in prompt
+
+    # Peers with prices in the test files (in real use you would pick construction companies).
+    assert wl.set_peers(unusual, lt, ["KARURVYSYA", "MSUMI", "NOSUCH"]) == ["NOSUCH"]
+    peers, source = wl.peers_for(unusual, lt)
+    assert source == "approved" and {p.nse_symbol for p in peers} == {"KARURVYSYA", "MSUMI"}
+    ex.reset(unusual)
+    ex.explain_moves(unusual, llm)
+    prompt = client.requests[1]["messages"][0]["content"]
+    assert "Peers on the day (you chose): KARURVYSYA " in prompt and "; average " in prompt
+
+    md = build_digest(
+        unusual, datetime(2026, 10, 15, tzinfo=IST), datetime(2026, 10, 22, 8, tzinfo=IST)
+    ).markdown
+    assert "**Bulk/block deals (1):**" in md and "EXAMPLE PENSION FUND buys 1,500,000" in md
+
+
+@pytest.mark.db
+def test_redo_only_unexplained_days(unusual):
+    llm, _ = _llm(unusual, reply_with(cause="unexplained", confidence="low"))
+    ex.explain_moves(unusual, llm)
+    assert ex.reset(unusual, only_unexplained=True, since=date(2026, 10, 22)) == 0  # outside
+    assert ex.reset(unusual, only_unexplained=True) == 1
+    llm, _ = _llm(unusual, reply_with())
+    ex.explain_moves(unusual, llm)
+    assert ex.reset(unusual, only_unexplained=True) == 0  # now explained: kept

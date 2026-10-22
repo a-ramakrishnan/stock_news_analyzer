@@ -476,6 +476,30 @@ def unusual_days(session: Session, isin: str) -> pd.DataFrame:
     )
 
 
+def deals(session: Session, isin: str) -> pd.DataFrame:
+    """A stock's bulk and block deals, newest first, with their share of the day's volume."""
+    from stock_news_analyzer.agents.deals import watchlist_deals
+
+    rows = watchlist_deals(session, isin, date(2000, 1, 1), date.today())
+    return pd.DataFrame(
+        [
+            {
+                "date": d.trade_date,
+                "kind": d.kind,
+                "side": d.side,
+                "quantity": d.quantity,
+                "price": float(d.price) if d.price is not None else None,
+                "of_volume": share,
+                "client": d.client,
+            }
+            for d, share in sorted(
+                rows, key=lambda r: (r[0].trade_date, r[0].quantity), reverse=True
+            )
+        ],
+        columns=["date", "kind", "side", "quantity", "price", "of_volume", "client"],
+    )
+
+
 def corporate_actions(session: Session, symbol: str) -> pd.DataFrame:
     rows = session.scalars(
         select(CorporateAction)
@@ -519,7 +543,16 @@ def runs(session: Session, limit: int = 100) -> pd.DataFrame:
 
 def last_runs(session: Session) -> dict[str, dict]:
     out = {}
-    for job in ("filings", "news", "triage", "prices", "explain", "securities", "digest"):
+    for job in (
+        "filings",
+        "news",
+        "triage",
+        "deals",
+        "prices",
+        "explain",
+        "securities",
+        "digest",
+    ):
         r = session.scalars(
             select(Run).where(Run.job == job).order_by(Run.started_at.desc()).limit(1)
         ).first()

@@ -2,8 +2,9 @@
 
 For each unusual day (a stock's return minus the Nifty 50's beyond the threshold), gathers what
 was known around it: the day's numbers, the sector and the market, corporate actions, filings
-and triaged news from two sessions before to the next morning. Sonnet names the likely cause,
-how confident it is, and which documents support it.
+triaged news, bulk and block deals from two sessions before to the next morning, and how its
+peers moved. Sonnet names the likely cause, how confident it is, and which documents support
+it.
 """
 
 import logging
@@ -18,6 +19,8 @@ from sqlalchemy import and_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from stock_news_analyzer.agents.deals import watchlist_deals
+from stock_news_analyzer.agents.watchlist import peers_for
 from stock_news_analyzer.config import get_settings
 from stock_news_analyzer.llm import LLM, BudgetExceeded, LLMError, month_spend
 from stock_news_analyzer.models import (
@@ -27,6 +30,7 @@ from stock_news_analyzer.models import (
     DocumentCompany,
     MoveExplanation,
     NewsTriage,
+    PriceDaily,
     StockMove,
     WatchlistItem,
 )
@@ -75,21 +79,26 @@ SYSTEM = """You explain unusual daily moves in Indian listed stocks for a privat
 
 You get one stock's unusual day: its return, the Nifty 50's and its sector index's, the excess
 return over the Nifty and how unusual it was (z-score), the days before, any corporate action,
-and the exchange filings and news published around it. News comes with a triage: topic,
-importance (1-5) and a one-line summary.
+the exchange filings and news published around it, bulk and block deals in the stock (large
+trades by funds, promoters and others, with their share of the day's volume), and how a few
+peer companies moved that day. News comes with a triage: topic, importance (1-5) and a
+one-line summary.
 
 Decide:
 - cause, one of: results (results or a business update), order (order win or loss),
   company_news (other company-specific news: management, deal, guidance, rating, regulatory,
-  litigation), sector (the sector index moved the same way, or sector-wide news), market (a
+  litigation), sector (the sector index or most peers moved the same way, or sector-wide
+  news), market (a
   broad-market day the stock amplified), corporate_action (ex-date of a dividend, bonus, split
-  or buyback), flows (block or bulk deal, index inclusion or exclusion, lock-in expiry, offer
-  for sale, fund buying or selling), unexplained.
+  or buyback), flows (a bulk or block deal on the day that is a large share of the volume,
+  index inclusion or exclusion, lock-in expiry, offer for sale, fund buying or selling),
+  unexplained.
 - confidence: high when a document clearly explains the move and its timing fits; medium when
   the explanation is plausible but indirect; low when it is a guess.
 - explanation: two or three sentences, at most 60 words: what moved, the likely reason, and
   anything that cuts against it. Use only the information given. Do not invent numbers.
 - evidence: the ids of the documents your explanation relies on (none for unexplained).
+  Deals and peer moves have no id; name them in the explanation instead.
 
 Rules: if nothing given plausibly explains the move, answer unexplained with low confidence
 rather than guess. Timing matters: something published after the close cannot have caused that
@@ -196,6 +205,21 @@ def _documents(session: Session, isin: str, start: datetime, end: datetime):
     return filings[:MAX_FILINGS], news[:MAX_NEWS]
 
 
+def peer_moves(session: Session, peers: list[Company], day: date) -> list[tuple[str, float]]:
+    """(NSE symbol, return that day) for peers that traded, from close and previous close."""
+    rows = session.execute(
+        select(PriceDaily.symbol, PriceDaily.close, PriceDaily.prev_close).where(
+            PriceDaily.isin.in_([p.isin for p in peers]),
+            PriceDaily.trade_date == day,
+            PriceDaily.prev_close > 0,
+        )
+    ).all()
+    return sorted(
+        ((sym, float(close) / float(prev) - 1) for sym, close, prev in rows if close),
+        key=lambda pair: pair[0],
+    )
+
+
 def _pct(x) -> str:
     return "n/a" if x is None else f"{x:+.2%}"
 
@@ -216,6 +240,14 @@ def _prompt(session: Session, move: StockMove, company: Company, sector: str | N
             CorporateAction.ex_date == move.trade_date,
         )
     ).all()
+    deals = watchlist_deals(
+        session,
+        move.isin,
+        before[-min(len(before), SESSIONS_BEFORE)].trade_date if before else move.trade_date,
+        move.trade_date,
+    )
+    peers, peer_source = peers_for(session, company)
+    moves = peer_moves(session, peers, move.trade_date)
     industry = company.industry or company.bse_industry or "unknown"
     lines = [
         f"Stock: {company.name} (NSE: {company.nse_symbol or '-'}, industry: {industry})",
@@ -232,6 +264,31 @@ def _prompt(session: Session, move: StockMove, company: Company, sector: str | N
         ),
         "Corporate actions with this ex-date: "
         + ("; ".join(clean(a.subject) or a.kind for a in actions) if actions else "none"),
+        "",
+        f"Bulk and block deals ({len(deals)}, from two sessions before to the day):",
+    ]
+    for deal, share in deals:
+        price = f" at Rs {deal.price:,.2f}" if deal.price is not None else ""
+        of_volume = f", {share:.1%} of the day's volume" if share is not None else ""
+        on_day = "on the day" if deal.trade_date == move.trade_date else "before the day"
+        lines.append(
+            f"- {deal.trade_date:%d %b} ({on_day}) {deal.kind}: {deal.client} "
+            f"{deal.side.lower()}s {deal.quantity:,} shares{price}{of_volume}"
+        )
+    if moves:
+        average = sum(r for _, r in moves) / len(moves)
+        source = "you chose" if peer_source == "approved" else "largest in the same industry"
+        lines.append(
+            f"Peers on the day ({source}): "
+            + ", ".join(f"{sym} {_pct(r)}" for sym, r in moves)
+            + f"; average {_pct(average)}"
+        )
+    elif peers:
+        names = ", ".join(p.nse_symbol for p in peers)
+        lines.append(f"Peers on the day: no prices stored for {names}")
+    else:
+        lines.append("Peers on the day: none known")
+    lines += [
         "",
         f"Filings ({len(filings)}):",
     ]
@@ -310,11 +367,23 @@ def explain_moves(
     return result
 
 
-def reset(session: Session, symbol: str | None = None) -> int:
-    """Forget explanations (all, or one stock's) so they are explained again."""
+def reset(
+    session: Session,
+    symbol: str | None = None,
+    only_unexplained: bool = False,
+    since: date | None = None,
+    until: date | None = None,
+) -> int:
+    """Forget explanations (all, one stock's, only 'unexplained' ones, or a date range)."""
     from sqlalchemy import delete
 
     query = delete(MoveExplanation)
+    if only_unexplained:
+        query = query.where(MoveExplanation.cause == "unexplained")
+    if since:
+        query = query.where(MoveExplanation.trade_date >= since)
+    if until:
+        query = query.where(MoveExplanation.trade_date <= until)
     if symbol:
         isins = select(Company.isin).where(
             (Company.nse_symbol == symbol.upper()) | (Company.isin == symbol)

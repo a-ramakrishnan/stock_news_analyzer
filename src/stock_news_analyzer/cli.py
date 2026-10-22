@@ -47,6 +47,8 @@ explain_app = typer.Typer(
     help="Move Explainer (LLM): the likely cause of each unusual day.", no_args_is_help=True
 )
 app.add_typer(explain_app, name="explain")
+deals_app = typer.Typer(help="NSE bulk and block deals.", no_args_is_help=True)
+app.add_typer(deals_app, name="deals")
 app.add_typer(triage_app, name="triage")
 app.add_typer(llm_app, name="llm")
 
@@ -786,7 +788,7 @@ def labels_list(
 @app.command("run")
 def run(
     job: str = typer.Argument(
-        ..., help="filings, news, triage, prices, explain, securities, digest, or all."
+        ..., help="filings, news, triage, deals, prices, explain, securities, digest, or all."
     ),
 ) -> None:
     """Run a job now (as the orchestrator would) and record it in the run log."""
@@ -1075,6 +1077,9 @@ def explain_run(
         None, help="Only unusual days up to YYYY-MM-DD (default: yesterday)."
     ),
     limit: int = typer.Option(None, help="At most this many days (newest first)."),
+    redo_unexplained: bool = typer.Option(
+        False, help="First forget days answered 'unexplained' in the range, to try them again."
+    ),
 ) -> None:
     """Explain unusual days not explained yet (Sonnet by default; LLM_MODEL_ANALYSIS)."""
     from datetime import timedelta
@@ -1089,6 +1094,11 @@ def explain_run(
         else datetime.now(fl.IST).date() - timedelta(days=1)
     )
     with get_session() as session:
+        if redo_unexplained:
+            from stock_news_analyzer.agents.explain import reset
+
+            redo = reset(session, symbol, only_unexplained=True, since=start, until=end)
+            typer.echo(f"{redo} 'unexplained' days will be tried again")
         waiting = len(pending(session, start, end, symbol))
         n = min(waiting, limit) if limit else waiting
         typer.echo(f"{n} unusual days to explain (roughly ${0.02 * n:.2f} with Sonnet)")
@@ -1173,3 +1183,114 @@ def explain_reset(
     with get_session() as session:
         count = reset(session, symbol)
     typer.echo(f"{count} explanations removed; run `sna explain run` to explain them again")
+
+
+# --- bulk and block deals ------------------------------------------------------
+
+
+def _deals_report(result) -> None:
+    typer.echo(f"{result.seen} deals read, {result.new} new")
+    for err in result.errors:
+        typer.echo(f"error: {err}")
+    if result.errors:
+        typer.echo("if NSE keeps failing, try `sna deals probe` and paste its output")
+        raise typer.Exit(1)
+
+
+@deals_app.command("fetch")
+def deals_fetch() -> None:
+    """New bulk and block deals since the last stored day."""
+    from stock_news_analyzer.agents import deals as dl
+    from stock_news_analyzer.sources.exchange_http import ExchangeClient
+
+    with get_session() as session:
+        result = dl.collect(session, ExchangeClient(), dl.resume_date(session), progress=typer.echo)
+    _deals_report(result)
+
+
+@deals_app.command("backfill")
+def deals_backfill(
+    since: str = typer.Option(..., help="Start date, YYYY-MM-DD (e.g. 2023-10-01)."),
+) -> None:
+    """Deals from a start date, a month per request. Safe to re-run."""
+    from stock_news_analyzer.agents import deals as dl
+    from stock_news_analyzer.sources.exchange_http import ExchangeClient
+
+    start = datetime.strptime(since, "%Y-%m-%d").date()
+    with get_session() as session:
+        result = dl.collect(session, ExchangeClient(), start, progress=typer.echo)
+    _deals_report(result)
+
+
+@deals_app.command("load")
+def deals_load(
+    file: Path = typer.Argument(..., help="A CSV or JSON file saved from NSE's deals page."),
+    kind: str = typer.Option(..., help="bulk or block."),
+) -> None:
+    """Load deals from a file you downloaded from NSE (if the automatic fetch is blocked)."""
+    from stock_news_analyzer.agents.deals import store
+    from stock_news_analyzer.sources.deals import parse_deals
+
+    deals = parse_deals(file.read_bytes(), kind)
+    with get_session() as session:
+        new = store(session, deals)
+    typer.echo(f"{len(deals)} {kind} deals read, {new} new")
+
+
+@deals_app.command("probe")
+def deals_probe(days: int = typer.Option(7, help="How many days back.")) -> None:
+    """Fetch recent deals and show the raw format, to check NSE's response."""
+    from datetime import timedelta
+
+    from stock_news_analyzer.sources.deals import parse_deals, records
+    from stock_news_analyzer.sources.exchange_http import ExchangeClient, ExchangeError
+
+    client = ExchangeClient()
+    end = date.today()
+    for kind in ("bulk", "block"):
+        try:
+            content = client.nse_deals(kind, end - timedelta(days=days), end)
+        except ExchangeError as exc:
+            typer.echo(f"{kind}: FAILED {exc}")
+            continue
+        rows = records(content)
+        typer.echo(f"{kind}: {len(rows)} rows; first: {rows[0] if rows else '-'}")
+        try:
+            parsed = parse_deals(content, kind)
+            typer.echo(f"  parsed {len(parsed)}; first: {parsed[0] if parsed else '-'}")
+        except ValueError as exc:
+            typer.echo(f"  could not parse: {exc}")
+
+
+@deals_app.command("list")
+def deals_list(
+    symbol: str = typer.Argument(None, help="NSE symbol (default: all watchlist stocks)."),
+    days: int = typer.Option(30, help="How many days back."),
+) -> None:
+    """Bulk and block deals in watchlist stocks, newest first."""
+    from datetime import timedelta
+
+    from sqlalchemy import select
+
+    from stock_news_analyzer.models import Deal, WatchlistItem
+
+    since = date.today() - timedelta(days=days)
+    query = (
+        select(Deal)
+        .join(WatchlistItem, WatchlistItem.isin == Deal.isin)
+        .where(Deal.trade_date >= since)
+        .order_by(Deal.trade_date.desc(), Deal.symbol, Deal.quantity.desc())
+    )
+    if symbol:
+        query = query.where(Deal.symbol == symbol.upper())
+    with get_session() as session:
+        deals = session.scalars(query).all()
+        if not deals:
+            typer.echo("no deals in that window")
+            return
+        for d in deals:
+            price = f"{d.price:>10,.2f}" if d.price is not None else f"{'-':>10}"
+            typer.echo(
+                f"{d.trade_date:%d %b %Y}  {d.symbol:<11} {d.kind:<5} {d.side:<4} "
+                f"{d.quantity:>12,} @ {price}  {d.client[:60]}"
+            )

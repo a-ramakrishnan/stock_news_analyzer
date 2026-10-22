@@ -20,7 +20,8 @@ Every command block below can be pasted into Terminal as is; explanations are in
 | 7 | Dashboard: Phase 1 output in the browser | done |
 | 8 | History since Oct 2023: news backfill + `make backfill` | done |
 | 9 | Phase 2 starts: News Triage agent (Claude Haiku), LLM cost log and budget | done |
-| 10 | Move Explainer agent (Claude Sonnet): the likely cause of each unusual day | this PR |
+| 10 | Move Explainer agent (Claude Sonnet): the likely cause of each unusual day | done |
+| 11 | Bulk/block deals and peer moves, fed to the Move Explainer | this PR |
 
 ## Run it on a Mac
 
@@ -146,9 +147,31 @@ The scheduler runs the triage every hour at :25, ten minutes after the news. The
 
 Every call is logged with its tokens and cost (the `llm_calls` table, `sna llm usage`, and the dashboard's System page).
 
+## Bulk and block deals
+
+NSE's daily lists of large trades: bulk deals (one client trading more than 0.5% of a company's shares in a day) and block deals (Rs 10 crore or more in the block window). All stocks are stored, linked to companies by NSE symbol.
+
+```bash
+uv run sna deals probe
+uv run sna deals backfill --since 2023-10-01
+uv run sna deals list KMEW --days 365
+```
+
+| Command | What it does |
+| --- | --- |
+| `uv run sna deals probe` | Fetch the last week and show NSE's raw format and what was read from it |
+| `uv run sna deals backfill --since 2023-10-01` | History, a month per request (part of `make backfill`) |
+| `uv run sna deals fetch` | New deals since the last stored day (the scheduler does this at 19:00 and 22:00 on weekdays) |
+| `uv run sna deals list KMEW` | A watchlist stock's deals: who bought or sold how many shares at what price |
+| `uv run sna deals load ~/Downloads/bulk.csv --kind bulk` | Load a file saved from NSE's bulk/block deals page, if the automatic fetch is blocked |
+
+## Peers
+
+The Move Explainer compares each unusual day with how a few peers moved. Set them on the dashboard's **Manage stocks** page (the Peers column, NSE symbols separated by commas). Without them it uses the largest companies in the stock's NSE industry, which small companies outside the Nifty 500 often do not have.
+
 ## Move explainer (Phase 2, LLM)
 
-For each unusual day, Claude Sonnet reads the day's numbers (stock, Nifty 50, sector index, z-score, the days before), corporate actions with that ex-date, and the filings and triaged news from two sessions before to the next morning. It records the likely cause (results, order, company news, sector, market, corporate action, flows, or unexplained), its confidence, two or three sentences, and the documents it relied on.
+For each unusual day, Claude Sonnet reads the day's numbers (stock, Nifty 50, sector index, z-score, the days before), corporate actions with that ex-date, bulk and block deals with their share of the day's volume, how its peers moved, and the filings and triaged news from two sessions before to the next morning. It records the likely cause (results, order, company news, sector, market, corporate action, flows, or unexplained), its confidence, two or three sentences, and the documents it relied on.
 
 ```bash
 uv run sna explain run --since 2025-10-01
@@ -160,6 +183,7 @@ uv run sna explain list LT
 | `uv run sna explain run --since 2025-10-01` | Explain unusual days not explained yet, from a date (prints the count and a rough cost first, about $0.02 a day) |
 | `make explain` | All unusual days not explained yet, up to yesterday |
 | `uv run sna explain list LT --days 365` | Explanations with their cause, confidence and the documents behind them |
+| `uv run sna explain run --since 2023-10-01 --redo-unexplained` | Try again the days answered "unexplained" (after adding deals or peers) |
 | `uv run sna explain reset --symbol LT` | Forget explanations so they are written again |
 
 The scheduler explains the last two weeks' unusual days at 07:45, before the 08:00 digest: a day is explained the morning after, once the papers have said why it moved. Explanations appear in the digest, on the Stock page (chart hover and an **Unusual days** tab) and on the Today cards.
@@ -280,6 +304,8 @@ src/stock_news_analyzer/   Python package
   llm.py                   the one place that calls Claude: structured answers, cost log, budget
   agents/triage.py         News Triage (agent 6): relevance, topic, sentiment, importance
   agents/explain.py        Move Explainer (agent 7): likely cause of each unusual day
+  sources/deals.py         NSE bulk/block deals parsing (JSON API and CSV downloads)
+  agents/deals.py          Deals Collector: bulk and block deals for every stock
   ui/queries.py            dashboard: read-only queries
   ui/charts.py             dashboard: charts
   ui/app.py                dashboard: the Streamlit pages

@@ -1,8 +1,10 @@
 """The dashboard: `sna ui` (or `make ui`) starts it at http://localhost:8501.
 
-It only reads the database; collecting is still done by the scheduler or `sna run ...`.
+Every page only reads, except Manage stocks, which adds, edits and removes watchlist stocks
+and can load a new stock's history. Regular collecting is done by the scheduler.
 """
 
+import html
 from datetime import date, datetime, timedelta
 
 import pandas as pd
@@ -13,7 +15,7 @@ from stock_news_analyzer.agents.orchestrator import SCHEDULE_FILE, load_schedule
 from stock_news_analyzer.config import get_settings
 from stock_news_analyzer.db import get_engine
 from stock_news_analyzer.sources.announcements import IST
-from stock_news_analyzer.ui import charts, queries
+from stock_news_analyzer.ui import actions, charts, queries
 
 st.set_page_config(
     page_title="Stock News Analyzer", page_icon=":material/newspaper:", layout="wide"
@@ -45,7 +47,12 @@ def pct(x) -> str:
 
 
 def stocks() -> list[dict]:
-    return load("watchlist")
+    """Watchlist stocks, the ones you own first."""
+    return sorted(load("watchlist"), key=lambda s: not s["owned"])
+
+
+def label(s: dict) -> str:
+    return f"{s['symbol']} · {s['name']}" + ("" if s["owned"] else "  (watchlist)")
 
 
 def stock_picker(key: str, include_all: bool = True) -> dict | None:
@@ -55,7 +62,7 @@ def stock_picker(key: str, include_all: bool = True) -> dict | None:
         "Stock",
         options,
         key=key,
-        format_func=lambda s: "All stocks" if s is None else f"{s['symbol']} · {s['name']}",
+        format_func=lambda s: "All stocks" if s is None else label(s),
     )
 
 
@@ -66,10 +73,83 @@ def no_data(message: str) -> None:
 # --- pages -------------------------------------------------------------------
 
 
+# Compact tiles for the index strip: many indices fit on a row and wrap on narrow screens, and
+# full names wrap instead of being cut off. Up/down carry an arrow and a sign, not only colour.
+TILES_CSS = """
+<style>
+.sna-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:8px;
+  margin:4px 0 12px}
+.sna-tile{border:1px solid rgba(128,128,128,.3);border-radius:8px;padding:8px 10px}
+.sna-tile .l{font-size:.78rem;opacity:.75;line-height:1.2}
+.sna-tile .v{font-size:1.15rem;font-weight:600;margin:2px 0;font-variant-numeric:tabular-nums}
+.sna-tile .c{font-size:.8rem;font-weight:600;font-variant-numeric:tabular-nums}
+.sna-tile .up{color:#0ca30c}
+.sna-tile .down{color:#d03b3b}
+[data-testid="stMetricValue"]{font-size:1.6rem}
+</style>
+"""
+
+
+def index_tiles(rows: list[dict]) -> None:
+    tiles = []
+    for m in rows:
+        change = m["change"]
+        if change is None:
+            delta = '<div class="c">–</div>'
+        else:
+            arrow, cls = ("▲", "up") if change >= 0 else ("▼", "down")
+            delta = f'<div class="c {cls}">{arrow} {change:+.2%}</div>'
+        name = html.escape(m["index"])
+        value = f"{m['close']:,.2f}" if m["close"] else "–"
+        tiles.append(
+            f'<div class="sna-tile" title="{name}, {m["date"]}"><div class="l">{name}</div>'
+            f'<div class="v">{value}</div>{delta}</div>'
+        )
+    st.markdown(
+        TILES_CSS + f'<div class="sna-tiles">{"".join(tiles)}</div>', unsafe_allow_html=True
+    )
+
+
+def stock_card(s: dict) -> None:
+    threshold = get_settings().unusual_threshold
+    with st.container(border=True):
+        head, badge = st.columns([3, 1])
+        head.markdown(f"**{s['symbol']}**  \n:gray[{s['name']}]")
+        if s["unusual"]:
+            badge.badge(
+                "Unusual",
+                icon=":material/warning:",
+                color="red",
+                help=f"Move vs Nifty 50 beyond {threshold}σ of the last 60 days",
+            )
+        spark = load("performance", isin=s["isin"], start=date.today() - timedelta(days=91))
+        st.metric(
+            f"Close {s['date']:%d %b}" if s["date"] else "Close",
+            f"₹{s['close']:,.2f}" if s["close"] else "–",
+            pct(s["stock_return"]) if s["stock_return"] is not None else None,
+            chart_data=list(spark["stock"]) if not spark.empty else None,
+            chart_type="line",
+        )
+        st.markdown(
+            f"vs Nifty 50 **{pct(s['excess_return'])}** · "
+            f"vs {s['sector_index'] or 'sector'} **{pct(s['sector_excess_return'])}** · "
+            f"z **{s['zscore']:.1f}**"
+            if s["zscore"] is not None
+            else f"vs Nifty 50 **{pct(s['excess_return'])}**"
+        )
+        st.caption(f"Last 7 days: {s['filings_7d']} filings, {s['news_7d']} news articles")
+        st.page_link(
+            stock_page,
+            label="Open",
+            icon=":material/arrow_forward:",
+            query_params={"symbol": s["symbol"]},
+        )
+
+
 def today_page() -> None:
     watch = stocks()
     if not watch:
-        no_data("The watchlist is empty. Run `make watchlist` first.")
+        no_data("No stocks yet. Add them on the Manage stocks page.")
         return
     latest = max((s["date"] for s in watch if s["date"]), default=None)
     st.title("Today")
@@ -78,55 +158,19 @@ def today_page() -> None:
         if latest
         else "No prices loaded yet: run `make prices`."
     )
+    index_tiles(load("market"))
 
-    cols = st.columns(len(load("market")) or 1)
-    for col, m in zip(cols, load("market"), strict=False):
-        col.metric(
-            m["index"],
-            f"{m['close']:,.2f}" if m["close"] else "–",
-            pct(m["change"]) if m["change"] is not None else None,
-            border=True,
-        )
-
-    st.subheader("Watchlist")
-    threshold = get_settings().unusual_threshold
-    cols = st.columns(min(len(watch), 3))
-    for i, s in enumerate(watch):
-        with cols[i % len(cols)].container(border=True):
-            head, badge = st.columns([3, 1])
-            head.markdown(f"**{s['symbol']}**  \n:gray[{s['name']}]")
-            if s["unusual"]:
-                badge.badge(
-                    "Unusual",
-                    icon=":material/warning:",
-                    color="red",
-                    help=f"Move vs Nifty 50 beyond {threshold}σ of the last 60 days",
-                )
-            elif s["owned"]:
-                badge.badge("Owned", color="gray")
-            spark = load("performance", isin=s["isin"], start=date.today() - timedelta(days=91))
-            st.metric(
-                f"Close {s['date']:%d %b}" if s["date"] else "Close",
-                f"₹{s['close']:,.2f}" if s["close"] else "–",
-                pct(s["stock_return"]) if s["stock_return"] is not None else None,
-                chart_data=list(spark["stock"]) if not spark.empty else None,
-                chart_type="line",
-                label_visibility="visible",
-            )
-            st.markdown(
-                f"vs Nifty 50 **{pct(s['excess_return'])}** · "
-                f"vs {s['sector_index'] or 'sector'} **{pct(s['sector_excess_return'])}** · "
-                f"z **{s['zscore']:.1f}**"
-                if s["zscore"] is not None
-                else f"vs Nifty 50 **{pct(s['excess_return'])}**"
-            )
-            st.caption(f"Last 7 days: {s['filings_7d']} filings, {s['news_7d']} news articles")
-            st.page_link(
-                stock_page,
-                label="Open",
-                icon=":material/arrow_forward:",
-                query_params={"symbol": s["symbol"]},
-            )
+    owned = [s for s in watch if s["owned"]]
+    watching = [s for s in watch if not s["owned"]]
+    for title, group in (("Stocks I own", owned), ("Watchlist", watching)):
+        st.subheader(f"{title} ({len(group)})")
+        if not group:
+            st.caption("None yet. Add stocks on the Manage stocks page.")
+            continue
+        cols = st.columns(3)
+        for i, s in enumerate(group):
+            with cols[i % 3]:
+                stock_card(s)
 
     left, right = st.columns([2, 1])
     with left:
@@ -155,15 +199,13 @@ def today_page() -> None:
 def stock_page_body() -> None:
     watch = stocks()
     if not watch:
-        no_data("The watchlist is empty. Run `make watchlist` first.")
+        no_data("No stocks yet. Add them on the Manage stocks page.")
         return
     wanted = st.query_params.get("symbol")
     index = next((i for i, s in enumerate(watch) if s["symbol"] == wanted), 0)
     pick, span = st.columns([2, 1], vertical_alignment="bottom")
     with pick:
-        s = st.selectbox(
-            "Stock", watch, index=index, format_func=lambda s: f"{s['symbol']} · {s['name']}"
-        )
+        s = st.selectbox("Stock", watch, index=index, format_func=label)
     with span:
         window = st.segmented_control("Range", list(RANGES), default="1Y", key="range") or "1Y"
     st.query_params["symbol"] = s["symbol"]
@@ -391,6 +433,121 @@ def moves_page() -> None:
         reactions_table(lb)
 
 
+def manage_page() -> None:
+    st.title("Manage stocks")
+    st.caption(
+        "Changes here take effect straight away: the scheduler picks up new stocks on its next "
+        "run. `make watchlist` re-applies config/watchlist.yaml, so a stock listed there comes "
+        "back as written in the file."
+    )
+    with Session(engine()) as session:
+        add_stock_form(session)
+        st.divider()
+        edit_stocks(session)
+
+
+def add_stock_form(session: Session) -> None:
+    st.subheader("Add a stock")
+    query = st.text_input(
+        "Company name, NSE symbol, BSE code or ISIN", placeholder="e.g. Mrs Bectors, BECTORFOOD"
+    )
+    matches = actions.search(session, query) if query else []
+    if query and not matches:
+        st.warning(
+            "No listed company matches. If it listed recently, refresh the company list with "
+            "`make securities`.",
+            icon=":material/search_off:",
+        )
+    if not matches:
+        return
+    pick = st.radio(
+        "Matches",
+        matches,
+        format_func=lambda m: (
+            f"{m['symbol'] or '–'} · {m['name']} · BSE {m['bse_code'] or '–'}"
+            + ("  (already tracked)" if m["tracked"] else "")
+        ),
+    )
+    a, b, c = st.columns([1, 1.5, 1.5])
+    with a:
+        kind = st.radio("List", ["Stocks I own", "Watchlist"], horizontal=False)
+    with b:
+        aliases = st.text_input(
+            "Other names in the news",
+            placeholder="comma-separated, e.g. KVB, Karur Vysya",
+            help="The company name without 'Limited' is always matched.",
+        )
+    with c:
+        sector = st.selectbox(
+            "Sector benchmark (besides Nifty 50)",
+            [""] + actions.index_names(session),
+            format_func=lambda n: n or "None",
+        )
+    if st.button("Update" if pick["tracked"] else "Add", type="primary", icon=":material/add:"):
+        company = actions.add_stock(
+            session,
+            pick["isin"],
+            owned=kind == "Stocks I own",
+            aliases=aliases,
+            sector_index=sector,
+        )
+        load.clear()
+        st.session_state["just_added"] = company.isin
+        verb = "Updated" if pick["tracked"] else "Added"
+        st.success(f"{verb} {company.name} in {kind}.", icon=":material/check:")
+
+    added = st.session_state.get("just_added")
+    if added == pick["isin"]:
+        st.info(
+            "New stocks get filings and news from the last few days on the scheduler's next "
+            f"run. To load everything since {actions.HISTORY_SINCE:%d %b %Y} now (a few "
+            "minutes), use the button.",
+            icon=":material/history:",
+        )
+        if st.button("Load history now", icon=":material/download:"):
+            with st.status("Loading history...", expanded=True) as status:
+                errors = actions.load_history(
+                    session, added, get_settings().data_dir, progress=status.write
+                )
+                for err in errors:
+                    status.write(f"⚠️ {err}")
+                status.update(
+                    label="History loaded" + (" with errors" if errors else ""),
+                    state="error" if errors else "complete",
+                )
+            load.clear()
+
+
+def edit_stocks(session: Session) -> None:
+    st.subheader("Your stocks")
+    rows = actions.tracked_stocks(session)
+    if not rows:
+        st.caption("None yet.")
+        return
+    indices = [""] + actions.index_names(session)
+    edited = st.data_editor(
+        pd.DataFrame(rows),
+        hide_index=True,
+        width="stretch",
+        disabled=["symbol", "name"],
+        column_order=["symbol", "name", "owned", "sector_index", "aliases", "remove"],
+        column_config={
+            "symbol": st.column_config.TextColumn("Symbol", width="small"),
+            "name": st.column_config.TextColumn("Company"),
+            "owned": st.column_config.CheckboxColumn("I own it", width="small"),
+            "sector_index": st.column_config.SelectboxColumn("Sector benchmark", options=indices),
+            "aliases": st.column_config.TextColumn("Other names in the news"),
+            "remove": st.column_config.CheckboxColumn("Remove", width="small"),
+        },
+        key="edit-stocks",
+    )
+    if st.button("Save changes", icon=":material/save:"):
+        updated, removed = actions.save_changes(session, edited.to_dict("records"))
+        load.clear()
+        st.success(f"{updated} updated, {removed} removed.", icon=":material/check:")
+        st.rerun()
+
+
 def system_page() -> None:
     st.title("System")
     left, right = st.columns(2)
@@ -457,6 +614,9 @@ PAGES = {
     "moves": st.Page(
         moves_page, title="What moves the stock", icon=":material/insights:", url_path="moves"
     ),
+    "manage": st.Page(
+        manage_page, title="Manage stocks", icon=":material/playlist_add:", url_path="manage"
+    ),
     "system": st.Page(system_page, title="System", icon=":material/settings:", url_path="system"),
 }
 
@@ -465,7 +625,7 @@ def main() -> None:
     with st.sidebar:
         if st.button("Refresh data", icon=":material/refresh:"):
             load.clear()
-        st.caption("Reads the database only. Collecting happens in the scheduler.")
+        st.caption("Collecting happens in the scheduler; add stocks on Manage stocks.")
     st.navigation(list(PAGES.values())).run()
 
 

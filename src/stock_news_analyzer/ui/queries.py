@@ -40,7 +40,9 @@ def watchlist(session: Session) -> list[dict]:
     owned = dict(session.execute(select(WatchlistItem.isin, WatchlistItem.owned)).all())
     week_ago = datetime.now(IST) - timedelta(days=7)
     out = []
-    for company, sector in sorted(watchlist_benchmarks(session), key=lambda c: c[0].nse_symbol):
+    for company, sector in sorted(
+        watchlist_benchmarks(session), key=lambda c: c[0].nse_symbol or c[0].name
+    ):
         latest = session.scalars(
             select(StockMove)
             .where(StockMove.isin == company.isin)
@@ -64,7 +66,7 @@ def watchlist(session: Session) -> list[dict]:
         out.append(
             {
                 "isin": company.isin,
-                "symbol": company.nse_symbol,
+                "symbol": company.nse_symbol or company.bse_code,
                 "name": company.name,
                 "owned": bool(owned.get(company.isin)),
                 "sector_index": sector,

@@ -26,7 +26,9 @@ NSE_WARMUP_URL = "https://www.nseindia.com/companies-listing/corporate-filings-a
 NSE_ARCHIVES = "https://nsearchives.nseindia.com"
 NSE_ANNOUNCEMENTS_URL = "https://www.nseindia.com/api/corporate-announcements"
 NSE_CORPORATE_ACTIONS_URL = "https://www.nseindia.com/api/corporates-corporateActions"
-NSE_DEALS_URL = "https://www.nseindia.com/api/historical/{kind}-deals"
+# The API behind NSE's "Bulk & block deals" report; it answers only after that page is opened.
+NSE_DEALS_URL = "https://www.nseindia.com/api/historicalOR/bulk-block-short-deals"
+NSE_DEALS_PAGE = "https://www.nseindia.com/report-detail/display-bulk-and-block-deals"
 
 
 class ExchangeError(Exception):
@@ -41,6 +43,7 @@ class ExchangeClient:
         self.timeout = timeout
         self._sessions: dict[str, creq.Session] = {}
         self._last_request = 0.0
+        self._deals_page_opened_in = None  # the NSE session that has opened the deals page
 
     def _session(self, exchange: str) -> creq.Session:
         if exchange not in self._sessions:
@@ -108,8 +111,16 @@ class ExchangeClient:
 
     def nse_deals(self, kind: str, start: date, end: date) -> bytes:
         """NSE's bulk or block deals for a date range, as the raw JSON response."""
-        params = {"from": start.strftime("%d-%m-%Y"), "to": end.strftime("%d-%m-%Y")}
-        data = self._get_json("nse", NSE_DEALS_URL.format(kind=kind), params)
+        session = self._session("nse")
+        if self._deals_page_opened_in is not session:  # new or refreshed cookies
+            self._get(session, NSE_DEALS_PAGE)
+            self._deals_page_opened_in = session
+        params = {
+            "optionType": f"{kind}_deals",
+            "from": start.strftime("%d-%m-%Y"),
+            "to": end.strftime("%d-%m-%Y"),
+        }
+        data = self._get_json("nse", NSE_DEALS_URL, params, headers={"Referer": NSE_DEALS_PAGE})
         return json.dumps(data).encode()
 
     def nse_file(self, url: str) -> bytes | None:

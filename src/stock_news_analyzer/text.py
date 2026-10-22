@@ -5,8 +5,12 @@ import re
 
 
 def clean(text: str | None) -> str:
-    """Source text has stray HTML (<BR>), entities and doubled quotes; make it plain."""
+    """Source text has stray HTML (<BR>), entities and doubled quotes; make it plain.
+
+    NUL characters, which PostgreSQL text columns reject, are dropped.
+    """
     if not text:
         return ""
+    text = text.replace("\x00", "")
     text = re.sub(r"<[^>]+>", " ", html.unescape(text)).replace("''", "'")
     return " ".join(text.split())

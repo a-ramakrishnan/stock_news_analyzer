@@ -251,3 +251,32 @@ def test_progress_reports_each_window(watchlist, tmp_path):
     )
     assert lines[0] == "LT BSE 2026-09-22..2026-10-21: 2 new, 0 already stored, 0 PDFs"
     assert len(lines) == 4  # two 30-day windows for each exchange
+
+
+class _NulPage:
+    def extract_text(self):
+        return "IDFC FIRST Bank\x00 Limited\x00"
+
+
+class _NulReader:
+    def __init__(self, _stream):
+        self.pages = [_NulPage()]
+
+
+def test_extract_text_drops_nul_characters(monkeypatch):
+    monkeypatch.setattr(fl, "PdfReader", _NulReader)
+    assert fl.extract_text(b"%PDF") == ("IDFC FIRST Bank Limited", "ok")
+
+
+@pytest.mark.db
+def test_pdf_text_with_nul_characters_is_stored(watchlist, tmp_path, monkeypatch):
+    # Some exchange PDFs put NUL characters in their text; PostgreSQL rejects those, which
+    # used to stop the whole collection with a DataError.
+    monkeypatch.setattr(fl, "PdfReader", _NulReader)
+    collector = fl.FilingsCollector(watchlist, FakeClient(), tmp_path)
+    result = collector.collect(
+        fl.watchlist_companies(watchlist), start=date(2026, 10, 1), end=date(2026, 10, 21)
+    )
+    assert not result.errors
+    texts = [d.text for d in watchlist.query(Document) if d.text_status == "ok"]
+    assert texts and all(t == "IDFC FIRST Bank Limited" for t in texts)

@@ -64,7 +64,9 @@ def extract_text(content: bytes) -> tuple[str, str]:
     """Text of a PDF and a status: 'ok', 'empty' (no text layer, e.g. scanned) or 'failed'."""
     try:
         reader = PdfReader(io.BytesIO(content))
-        text = "\n".join((page.extract_text() or "") for page in reader.pages).strip()
+        text = "\n".join((page.extract_text() or "") for page in reader.pages)
+        # Some PDFs carry NUL characters, which PostgreSQL text columns reject.
+        text = text.replace("\x00", "").strip()
     except Exception as exc:  # malformed PDFs are common; keep the file, record the failure
         log.warning("could not read PDF: %s", exc)
         return "", "failed"

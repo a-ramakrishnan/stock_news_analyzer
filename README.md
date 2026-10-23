@@ -2,7 +2,7 @@
 
 A set of small agents that track news, exchange filings and earnings calls for Indian stocks and bullion. They explain why stocks move, track order wins and management promises, and build a point-in-time database that can train a model later. No technical analysis: prices are only used to measure what each piece of news did to a stock.
 
-- Design doc: [Indian Market News Intelligence System](https://claude.ai/artifact/2rcGGrRLaCoqDkBeg2nwxJ) (architecture, data sources, agent-by-agent plan)
+- Design: [system design](docs/design/design.md) (architecture, data sources, database) and [agent design](docs/design/agent-design.md) (models, costs, agent-by-agent plan); versions and changes in [`docs/design/README.md`](docs/design/README.md)
 - Build log, one file per step: [`docs/build-log/`](docs/build-log/)
 
 Every command block below can be pasted into Terminal as is; explanations are in the tables.

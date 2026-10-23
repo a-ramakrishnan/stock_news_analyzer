@@ -5,7 +5,6 @@ announcement APIs. `curl_cffi` presents the same TLS fingerprint as Chrome, whic
 Each session first loads an exchange web page to pick up cookies, as a browser would.
 """
 
-import json
 import logging
 import time
 from datetime import date
@@ -110,18 +109,35 @@ class ExchangeClient:
         return data if isinstance(data, list) else data.get("data", [])
 
     def nse_deals(self, kind: str, start: date, end: date) -> bytes:
-        """NSE's bulk or block deals for a date range, as the raw JSON response."""
-        session = self._session("nse")
-        if self._deals_page_opened_in is not session:  # new or refreshed cookies
-            self._get(session, NSE_DEALS_PAGE)
-            self._deals_page_opened_in = session
+        """NSE's bulk or block deals for a date range, as the report page's CSV download.
+
+        The JSON form of the same request stops at 70 rows (checked Oct 2026: 70 of 134 bulk
+        deals on 21 Oct); the CSV has every row (2,167 for 1-21 Oct in one request).
+        """
         params = {
             "optionType": f"{kind}_deals",
             "from": start.strftime("%d-%m-%Y"),
             "to": end.strftime("%d-%m-%Y"),
+            "csv": "true",
         }
-        data = self._get_json("nse", NSE_DEALS_URL, params, headers={"Referer": NSE_DEALS_PAGE})
-        return json.dumps(data).encode()
+        for attempt in (1, 2):
+            session = self._session("nse")
+            if self._deals_page_opened_in is not session:  # new or refreshed cookies
+                self._get(session, NSE_DEALS_PAGE)
+                self._deals_page_opened_in = session
+            resp = self._get(
+                session, NSE_DEALS_URL, params=params, headers={"Referer": NSE_DEALS_PAGE}
+            )
+            ctype = resp.headers.get("content-type", "")
+            if resp.status_code == 200 and "html" not in ctype:
+                return resp.content
+            if attempt == 1 and resp.status_code in (401, 403):
+                self._sessions.pop("nse", None)
+                continue
+            raise ExchangeError(
+                f"NSE returned HTTP {resp.status_code} ({ctype}) for {NSE_DEALS_URL}"
+            )
+        raise AssertionError("unreachable")
 
     def nse_file(self, url: str) -> bytes | None:
         """An NSE archive file, or None if NSE has none for that day (HTTP 404: a holiday)."""

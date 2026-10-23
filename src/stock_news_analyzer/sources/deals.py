@@ -96,7 +96,7 @@ def _text(value) -> str:
 
 def records(content: bytes | str) -> list[dict]:
     """Rows of a JSON response ({"data": [...]} or a list) or of a CSV file."""
-    text = content.decode("utf-8-sig") if isinstance(content, bytes) else content
+    text = content.decode("utf-8-sig", errors="replace") if isinstance(content, bytes) else content
     stripped = text.lstrip()
     if stripped.startswith(("{", "[")):
         data = json.loads(stripped)

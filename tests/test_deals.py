@@ -43,6 +43,22 @@ def test_parse_snapshot_of_todays_deals():
     )
 
 
+def test_parse_report_csv_with_quoted_headers():
+    # What the report page's "Download (.csv)" returns: quoted headers with trailing spaces,
+    # quantities with Indian digit grouping.
+    deals = parse_deals((FIXTURES / "nse_bulk_deals_report.csv").read_bytes(), "bulk")
+    assert [(d.symbol, d.side, d.quantity) for d in deals] == [
+        ("MSUMI", "BUY", 5_200_000),
+        ("MSUMI", "SELL", 5_000_000),
+        ("NOTLISTEDHERE", "BUY", 100_000),
+    ]
+    assert deals[0].security_name == "Motherson Sumi Wiring India Ltd"
+    assert deals[1].client == "SAMPLE PROMOTER HOLDINGS" and deals[1].remarks is None
+    # The same deals as NSE's JSON gives them, so both forms store one row each.
+    as_json = parse_deals((FIXTURES / "nse_bulk_deals.json").read_bytes(), "bulk")
+    assert deals == as_json
+
+
 def test_parse_csv_download():
     (deal,) = parse_deals((FIXTURES / "nse_block_deals.csv").read_text(), "block")
     assert (deal.kind, deal.symbol, deal.quantity, str(deal.price)) == (
@@ -72,7 +88,7 @@ class FakeNSE:
         if kind == "block" and self.fail_block:
             raise ExchangeError("NSE returned HTTP 403")
         if kind == "bulk":
-            return (FIXTURES / "nse_bulk_deals.json").read_bytes()
+            return (FIXTURES / "nse_bulk_deals_report.csv").read_bytes()
         return (FIXTURES / "nse_block_deals.csv").read_bytes()
 
 
@@ -141,3 +157,20 @@ def test_cli_load_and_list(loaded, test_database_url, monkeypatch):  # noqa: F81
     assert result.exit_code == 0 and "1 block deals read, 1 new" in result.stdout
     result = runner.invoke(app, ["deals", "list", "LT", "--days", "36500"])
     assert "block BUY     1,500,000" in result.stdout and "EXAMPLE PENSION FUND" in result.stdout
+
+
+@pytest.mark.db
+def test_a_response_of_exactly_70_rows_is_flagged(loaded):  # noqa: F811
+    row = '"21-OCT-2026","LT","Larsen","CLIENT {i}","BUY","{q}","1.00",""\n'
+    header = '"Date ","Symbol ","Security Name ","Client Name ","Buy / Sell ","Quantity Traded ",'
+    header += '"Trade Price / Wght. Avg. Price ","Remarks "\n'
+    body = (header + "".join(row.format(i=i, q=i + 1) for i in range(70))).encode()
+
+    class Capped:
+        def nse_deals(self, kind, start, end):
+            return body if kind == "bulk" else header.encode()
+
+    result = dl.collect(loaded, Capped(), date(2026, 10, 21), date(2026, 10, 21))
+    assert result.new == 70 and result.errors == [
+        "bulk deals 21 Oct 2026-21 Oct 2026: exactly 70 rows, possibly cut short"
+    ]

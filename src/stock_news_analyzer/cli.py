@@ -1454,6 +1454,11 @@ def promises_check(
             typer.echo(f"{exc}: add ANTHROPIC_API_KEY=... to .env (see .env.example)")
             raise typer.Exit(1) from exc
         spent = month_spend(session)
+    if result.held:
+        typer.echo(
+            f"{result.held} judged missed before their results are due out: they stay open and "
+            "are marked missed when the window closes with nothing newer"
+        )
     typer.echo(
         f"{result.checked} promises checked, {result.settled} settled; {result.calls} LLM calls, "
         f"${result.cost_usd:.4f} (this month ${spent:.2f} of "

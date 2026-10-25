@@ -20,6 +20,7 @@ from stock_news_analyzer.models import (
 from stock_news_analyzer.sources.announcements import IST
 
 FEB = date(2027, 2, 15)  # after the Hyderabad plant's due date (31 Dec 2026)
+APR = date(2027, 4, 1)  # after its results window too (due date + 75 days: 16 Mar 2027)
 
 
 def filing(session, when, doc_type="results", title="Financial results Q3 FY27", text=None):
@@ -149,6 +150,29 @@ def test_no_evidence_waits_for_a_new_document(ledger):
 
 
 @pytest.mark.db
+def test_missed_waits_for_the_results_window_to_close(ledger):
+    filing(ledger, datetime(2027, 1, 30, 17, 0, tzinfo=IST), text="Hyderabad plant pending.")
+    llm, client = _llm(ledger, verdicts("missed"))
+    result = pl.check_promises(ledger, llm, today=FEB)
+    promise = ledger.query(Promise).one()
+    assert (result.held, result.settled, promise.status) == (1, 0, "open")
+    assert ledger.query(PromiseCheck).one().verdict == "missed"  # the verdict is kept
+
+    result = pl.check_promises(ledger, llm, today=APR)
+    assert len(client.requests) == 1  # settled from the stored verdict, no LLM call
+    ledger.refresh(promise)
+    assert promise.status == "missed" and "per the Q3 results" in promise.status_note
+    assert result.settled == 1
+
+    # A miss recorded before the window closed (as the first version allowed) is reopened.
+    promise.status = "missed"
+    ledger.commit()
+    assert pl.settle_misses(ledger, FEB) == (0, 1)
+    ledger.refresh(promise)
+    assert (promise.status, promise.status_note) == ("open", None)
+
+
+@pytest.mark.db
 def test_no_documents_no_call_and_budget(ledger):
     llm, client = _llm(ledger, verdicts())
     lines = []
@@ -180,7 +204,7 @@ def test_reset_puts_back_what_the_calls_said(ledger):
     ledger.commit()
     filing(ledger, datetime(2027, 1, 30, 17, 0, tzinfo=IST))
     llm, _ = _llm(ledger, verdicts("missed"))
-    pl.check_promises(ledger, llm, today=FEB)
+    pl.check_promises(ledger, llm, today=APR)
     assert promise.status == "missed"
     assert pl.reset(ledger, "LT") == 1
     ledger.refresh(promise)

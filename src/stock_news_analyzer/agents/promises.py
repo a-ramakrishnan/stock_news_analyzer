@@ -109,6 +109,7 @@ class CheckAnswer(BaseModel):
 class CheckResult:
     checked: int = 0  # promises looked at
     settled: int = 0  # given a verdict other than no_evidence
+    held: int = 0  # judged missed before their results could be out: settled later
     companies: int = 0
     calls: int = 0
     cost_usd: Decimal = Decimal(0)
@@ -253,6 +254,7 @@ def _check_batch(
     docs: list[Evidence],
     result: CheckResult,
     say: Callable[[str], None],
+    today: date,
 ) -> bool:
     """One LLM call for up to MAX_PROMISES of a company's promises. False when the monthly
     budget is reached (stop everything); an ordinary failure is recorded and skipped."""
@@ -302,7 +304,11 @@ def _check_batch(
             )
         )
         result.checked += 1
-        if v.verdict in VERDICT_STATUS:
+        if v.verdict == "missed" and not window_closed(promise, today):
+            # The results for the due period may not be out yet: the verdict is kept, and the
+            # promise is settled as missed once the window closes with nothing newer.
+            result.held += 1
+        elif v.verdict in VERDICT_STATUS:
             promise.status, promise.status_note = VERDICT_STATUS[v.verdict], note
             promise.updated_at = datetime.now(IST)
             result.settled += 1
@@ -315,6 +321,50 @@ def _check_batch(
         + (f" ({', '.join(sorted(settled))})" if settled else "")
     )
     return True
+
+
+def window_closed(promise: Promise, today: date) -> bool:
+    """Whether results covering the promise's due date should be out by now."""
+    return promise.due_date is not None and promise.due_date + REPORTING_LAG < today
+
+
+def _last_check(session: Session, promise: Promise) -> PromiseCheck | None:
+    return session.scalars(
+        select(PromiseCheck)
+        .where(PromiseCheck.promise_id == promise.id)
+        .order_by(PromiseCheck.checked_at.desc(), PromiseCheck.id.desc())
+        .limit(1)
+    ).first()
+
+
+def settle_misses(session: Session, today: date) -> tuple[int, int]:
+    """Apply 'missed' verdicts once a promise's reporting window has closed, and reopen ones
+    marked missed before it did (as an earlier version allowed). Returns (settled, reopened);
+    no LLM call."""
+    settled = reopened = 0
+    for promise in session.scalars(select(Promise).where(Promise.status == "missed")):
+        if window_closed(promise, today):
+            continue
+        first = session.scalars(
+            select(PromiseCheck)
+            .where(PromiseCheck.promise_id == promise.id, PromiseCheck.verdict == "missed")
+            .order_by(PromiseCheck.id)
+            .limit(1)
+        ).first()
+        if first:
+            promise.status, promise.status_note = first.previous_status, first.previous_note
+            reopened += 1
+    pending = session.scalars(
+        select(Promise).where(Promise.status.in_(UNSETTLED), Promise.due_date < today)
+    )
+    for promise in pending:
+        last = _last_check(session, promise)
+        if last and last.verdict == "missed" and window_closed(promise, today):
+            promise.status, promise.status_note = "missed", last.note
+            promise.updated_at = datetime.now(IST)
+            settled += 1
+    session.commit()
+    return settled, reopened
 
 
 def check_promises(
@@ -331,7 +381,12 @@ def check_promises(
     new document arrives."""
     model = model or get_settings().llm_model_analysis
     say = progress or (lambda _line: None)
+    today = today or datetime.now(IST).date()
     result = CheckResult()
+    late, reopened = settle_misses(session, today)
+    if late or reopened:
+        say(f"{late} promises now settled as missed (results window closed), {reopened} reopened")
+    result.settled += late
     spend_before = month_spend(session)
     for company, promises in due(session, symbol, today):
         if limit is not None and result.calls >= limit:
@@ -348,7 +403,7 @@ def check_promises(
         result.companies += 1
         for i in range(0, len(todo), MAX_PROMISES):
             if not _check_batch(
-                session, llm, model, company, todo[i : i + MAX_PROMISES], docs, result, say
+                session, llm, model, company, todo[i : i + MAX_PROMISES], docs, result, say, today
             ):
                 result.cost_usd = month_spend(session) - spend_before
                 return result

@@ -14,6 +14,8 @@ jobs:
     cron: "0 19,22 * * 1-5"
   explain:       # LLM (Sonnet): likely cause of each unusual day, before the morning digest
     cron: "45 7 * * *"
+  concalls:      # LLM (Sonnet): earnings call transcripts of stocks you own, before the digest
+    cron: "30 7 * * *"
   securities:    # NSE/BSE company lists (new listings, symbol changes, market caps)
     cron: "0 9 * * 0"
   digest:        # daily report covering everything since the previous digest

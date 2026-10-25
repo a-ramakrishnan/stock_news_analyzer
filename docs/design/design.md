@@ -1,6 +1,6 @@
 # Indian Market News Intelligence System — Design
 
-Version 1.1 · Oct 25, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
+Version 1.2 · Oct 25, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
 
 ## Goal and principles
 
@@ -10,7 +10,7 @@ The system is built as independent agents under an orchestrator; models, tools, 
 
 ## Status (Oct 25, 2026)
 
-Phase 1 is done and Phase 2 is under way. Eleven build steps have shipped, each logged in [`docs/build-log/`](../build-log/). The system runs on a Mac in Docker, and its data goes back to October 2023.
+Phase 1 is done and Phase 2 is under way. Twelve build steps have shipped, each logged in [`docs/build-log/`](../build-log/). The system runs on a Mac in Docker, and its data goes back to October 2023.
 
 | Module | Status |
 | --- | --- |
@@ -21,7 +21,7 @@ Phase 1 is done and Phase 2 is under way. Eleven build steps have shipped, each 
 | Event-to-return labels (1, 5, 20 days) | Built, per filing; per typed event once event extraction exists |
 | Daily digest and dashboard | Built: Markdown digest saved locally, Streamlit dashboard with 7 pages |
 | Event extraction and QA check | Not started |
-| Earnings call analysis and promise ledger | Not started; next in line |
+| Earnings call analysis and promise ledger | Built (Claude Sonnet 5.5), step 12; checking promises against results is still to come |
 | Order and execution tracker | Not started |
 | Bullion, ratings, SAST, pledges, tenders, MF holdings, macro | Not started |
 | Telegram or email delivery, Q&A, red flags, themes | Not started |
@@ -145,6 +145,24 @@ The same price data labels every event with the stock's excess return over 1, 5 
 
 Audio is a fallback: when only audio exists, transcribe it with a speech-to-text model (Whisper or similar) before parsing.
 
+**As built (step 12):**
+
+- **Source:** transcripts come from exchange filings only. BSE and NSE copies of one call are read once. When the filing is just a letter with a link, the link is followed.
+- **One structured reading per call (Sonnet 5.5, medium effort):**
+  - summary, tone, 6-15 key points with the speaker's own words
+  - what analysts pressed on, and how directly management answered
+  - changes since the previous call (compared against its stored summary and points)
+  - points to watch
+  - promises with a due date (Q3 FY27 becomes 31 Dec 2026)
+  - status updates to earlier open promises
+- **Quote check:** every quote is checked against the transcript.
+- **Cost:** about $0.10 a call.
+- **Not built yet:**
+  - splitting remarks from Q&A and tagging speakers. The model reads the transcript whole, which has been enough so far.
+  - audio transcription
+  - Screener or company IR pages as fallbacks
+  - checking promises against results (the Promise Ledger, agent 12)
+
 ## Extended ideas
 
 These build on the core modules. Each adds a new kind of signal to the database.
@@ -205,8 +223,11 @@ The database is managed by Alembic migrations (0001–0011). Built tables and ho
 | `event_labels` | `event_returns` | Excess returns 0, 1, 5 and 20 days after each filing |
 | `deals` | `signals` (in Agent design) | NSE bulk and block deals |
 | `runs`, `llm_calls` | `runs` (in Agent design) | Every job run; every LLM call with tokens and cost |
+| `concalls` | `concalls` | One row per transcript filing: quarter, tone, summary, the full structured reading; or why it was not read (copy, no text, not an earnings call) |
+| `concall_points` | `concall_points` | Key points by category, sentiment, quote and whether the quote was found in the transcript |
+| `promises` | `promises` | The promise ledger: statement, metric, target, due as said and as a date, status, latest update |
 
-Not built yet: `sources` (feeds are listed in config files instead), `events`, `orders`, `order_book_snapshots`, `concalls`, `concall_points`, `promises`. The `vector` extension is installed but not used yet.
+Not built yet: `sources` (feeds are listed in config files instead), `events`, `orders`, `order_book_snapshots`, `credibility_scores`. The `vector` extension is installed but not used yet.
 
 ### Rules that make the data usable for a model later
 
@@ -284,5 +305,5 @@ The product descriptions above come from search results; the source pages could 
 - [x] Watchlist size, and how many of those stocks you own? **About 15 stocks, most of them owned**; added and edited from the dashboard.
 - [x] Dashboard, or a daily email/Telegram digest first? **Both**: a Markdown digest and the dashboard; Telegram later.
 - [x] Pay for a data vendor or consensus estimates now, or stay free until Phase 4? **Stay free.**
-- [ ] Which agent next: Earnings Call Analyst (recommended, needs only exchange filings) or Order Book Tracker?
-- [ ] Unusual-day threshold: keep 2.0σ, or raise it to 2.5σ to flag fewer, larger moves?
+- [x] Which agent next: Earnings Call Analyst or Order Book Tracker? **Earnings Call Analyst** (step 12).
+- [x] Unusual-day threshold: keep 2.0σ, or raise it to 2.5σ? **Keep 2.0σ.**

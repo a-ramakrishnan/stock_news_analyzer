@@ -141,6 +141,14 @@ def test_important_policy_skips_routine_attachments(watchlist, tmp_path):
     routine = watchlist.query(Document).filter_by(doc_type="other").one()
     assert routine.attachment_path is None and routine.text_status == "pending"
 
+    # Older important files are reached even when newer routine ones fill the limit.
+    transcript = watchlist.query(Document).filter_by(doc_type="concall_transcript").one()
+    transcript.attachment_path, transcript.text, transcript.text_status = None, None, "pending"
+    watchlist.commit()
+    assert collector.fetch_missing_attachments(limit=1) == 1
+    watchlist.refresh(transcript)
+    assert transcript.text_status == "ok" and routine.attachment_path is None
+
     # A later run with the 'all' policy fills it in.
     fetched = fl.FilingsCollector(watchlist, client, tmp_path).fetch_missing_attachments()
     watchlist.refresh(routine)

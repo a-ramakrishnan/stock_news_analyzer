@@ -254,9 +254,18 @@ def stock_page_body() -> None:
             f"previous 60 days. Diamonds mark key filings."
         )
 
-    unusual_tab, filings_tab, news_tab, deals_tab, reactions_tab, actions_tab = st.tabs(
+    (
+        unusual_tab,
+        calls_tab,
+        filings_tab,
+        news_tab,
+        deals_tab,
+        reactions_tab,
+        actions_tab,
+    ) = st.tabs(
         [
             "Unusual days",
+            "Earnings calls",
             "Filings",
             "News",
             "Bulk/block deals",
@@ -315,6 +324,8 @@ def stock_page_body() -> None:
                     "morning; `sna explain run --symbol "
                     f"{s['symbol']}` explains the rest."
                 )
+    with calls_tab:
+        earnings_calls(s)
     with filings_tab:
         filings_table(load("filings", isin=s["isin"], dedupe=True, limit=200), key="stock")
     with news_tab:
@@ -336,6 +347,117 @@ def stock_page_body() -> None:
                     "dividend": st.column_config.NumberColumn("Dividend", format="₹%.2f"),
                 },
             )
+
+
+TONE = {"positive": "🟢", "neutral": "⚪", "cautious": "🟠", "negative": "🔴"}
+CATEGORY = {
+    "guidance": "Guidance",
+    "demand": "Demand",
+    "margins": "Margins",
+    "capex": "Capex",
+    "order_book": "Order book",
+    "risk": "Risks",
+    "initiative": "New initiatives",
+    "other": "Other",
+}
+
+
+def earnings_calls(s: dict) -> None:
+    """The Concall Analyst's reading of each call, and the promise ledger."""
+    calls = load("concalls", isin=s["isin"])
+    if not calls:
+        how = (
+            "The scheduler reads new transcripts each morning; "
+            f"`sna concalls run --symbol {s['symbol']} --since 2023-10-01` reads older ones."
+            if s["owned"]
+            else "Earnings calls are read for stocks you own: mark it owned on Manage stocks, "
+            f"or run `sna concalls run --symbol {s['symbol']}`."
+        )
+        no_data(f"No earnings calls analysed yet. {how}")
+    else:
+        pick = st.selectbox(
+            "Call",
+            calls,
+            format_func=lambda c: f"{c['quarter']} · filed {c['filed']:%d %b %Y} · {c['tone']}",
+            key="concall",
+        )
+        st.markdown(f"#### {TONE.get(pick['tone'], '')} {pick['quarter']}: {pick['tone']} tone")
+        st.write(pick["summary"])
+        left, right = st.columns(2)
+        with left:
+            st.markdown("**To watch**")
+            st.markdown("\n".join(f"- {p}" for p in pick["action_points"]) or "–")
+        with right:
+            st.markdown("**Since the previous call**")
+            st.markdown(
+                "\n".join(
+                    f"- *{c['kind'].replace('_', ' ')}*: {c['text']}" for c in pick["changes"]
+                )
+                or "First call stored, nothing to compare with."
+            )
+        if pick["points"]:
+            points = pd.DataFrame(pick["points"])
+            points["category"] = points["category"].map(CATEGORY).fillna(points["category"])
+            st.markdown("**What management said**")
+            st.dataframe(
+                points,
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    "category": st.column_config.TextColumn("Topic"),
+                    "point": st.column_config.TextColumn("Point", width="large"),
+                    "sentiment": st.column_config.TextColumn("For shareholders"),
+                    "quote": st.column_config.TextColumn("In their words", width="medium"),
+                },
+            )
+        if pick["concerns"]:
+            st.markdown("**What analysts pressed on**")
+            st.dataframe(
+                pd.DataFrame(pick["concerns"]),
+                hide_index=True,
+                width="stretch",
+                column_order=["topic", "question", "answer"],
+                column_config={
+                    "topic": st.column_config.TextColumn("Topic"),
+                    "question": st.column_config.TextColumn("Question", width="large"),
+                    "answer": st.column_config.TextColumn("Answer"),
+                },
+            )
+        if pick["note"]:
+            st.caption(pick["note"])
+        with st.expander("Transcript text"):
+            st.text(load("concall_text", doc_id=pick["document_id"])[:20000])
+
+    ledger = load("promises", isin=s["isin"])
+    st.markdown("**Promise ledger**")
+    if ledger.empty:
+        st.caption("No promises recorded yet.")
+    else:
+        overdue = int(ledger["overdue"].sum())
+        st.dataframe(
+            ledger.drop(columns=["symbol"]),
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "promise": st.column_config.TextColumn("Promise", width="large"),
+                "target": st.column_config.TextColumn("Target"),
+                "due": st.column_config.TextColumn("Due (as said)"),
+                "status": st.column_config.TextColumn("Status"),
+                "due_date": st.column_config.DateColumn("Due by", format="DD MMM YYYY"),
+                "overdue": st.column_config.CheckboxColumn("Overdue"),
+                "note": st.column_config.TextColumn("Latest update", width="medium"),
+                "said_in": st.column_config.TextColumn("Said in"),
+                "quote": st.column_config.TextColumn("In their words", width="medium"),
+            },
+        )
+        st.caption(
+            "Each later call updates a promise when management mentions it again"
+            + (f". {overdue} past their date and still open." if overdue else ".")
+        )
+    gaps = load("concall_gaps", isin=s["isin"])
+    if not gaps.empty:
+        with st.expander(f"Transcripts not read ({len(gaps)})"):
+            st.dataframe(gaps, hide_index=True, width="stretch")
 
 
 def filings_table(df: pd.DataFrame, key: str) -> None:

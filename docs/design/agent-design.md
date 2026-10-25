@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.1 · Oct 25, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.2 · Oct 25, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -32,8 +32,8 @@ Orchestrator (0)
 | 8 | QA Checker | Not started | — |
 | 9 | Move Explainer | Built (Sonnet 5.5) | 10, 11 |
 | 10 | Order Book Tracker | Not started | — |
-| 11 | Concall Analyst | Not started; recommended next | — |
-| 12 | Promise Ledger | Not started | — |
+| 11 | Concall Analyst | Built (Sonnet 5.5): structured reading of each call, comparison with the previous one, promises recorded | 12 |
+| 12 | Promise Ledger | Partly: the `promises` table, filled and updated by the Concall Analyst; checks against results and a credibility score not started | 12 |
 | 13 | Bullion Analyst | Not started | — |
 | 14 | Theme & Peer Analyst | Not started (peers exist for the Move Explainer) | — |
 | 15 | Red-flag Monitor | Not started | — |
@@ -59,7 +59,7 @@ You need one capable cloud LLM for judgment work and, optionally, a cheaper one 
 
 Prices are Anthropic's API list prices as of Oct 2026.
 
-**As built:** Haiku 5.5 (low effort) for triage and Sonnet 5.5 (medium effort) for the Move Explainer. Opus 5.5 isn't used anywhere yet: Sonnet gave good explanations at half the price. Every call is logged to `llm_calls` with tokens and cost. Calls stop when the month's spend reaches `LLM_MONTHLY_BUDGET_USD` ($20). The fixed instructions are prompt-cached.
+**As built:** Haiku 5.5 (low effort) for triage, and Sonnet 5.5 (medium effort) for the Move Explainer and the Concall Analyst. Opus 5.5 isn't used anywhere yet: Sonnet gave good explanations at half the price. Every call is logged to `llm_calls` with tokens and cost. Calls stop when the month's spend reaches `LLM_MONTHLY_BUDGET_USD` ($20). The fixed instructions are prompt-cached.
 
 ### Rough monthly cost (estimate)
 
@@ -77,6 +77,7 @@ Prices are Anthropic's API list prices as of Oct 2026.
 | --- | --- | --- |
 | Triage (Haiku 5.5) | 4,230 articles back to Oct 2023, batches of 15 | $0.28 in total, about $0.00007 an article |
 | Move Explainer (Sonnet 5.5) | 562 unusual days back to Oct 2023 | $2.42 in total, about $0.004 a day explained |
+| Concall Analyst (Sonnet 5.5) | Estimate before the first run: about 50 calls a year for 12 owned stocks | about $0.10 a call, about $5 a year of calls |
 
 The daily run costs a few cents, well under the estimate below, because the watchlist has about 15 stocks rather than 50 and the Opus agents aren't built yet.
 
@@ -351,6 +352,12 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **Trigger:** when the Filings Collector flags a new transcript or audio file.
 - **LLM:** Opus 5.5; faster-whisper for audio-only calls.
 - **Reads / writes:** transcript documents → `concalls`, `concall_points`.
+- **As built (step 12):**
+  - **Model:** Sonnet 5.5 at medium effort instead of Opus. Runs daily at 07:30 for transcripts of the last 120 days; `sna concalls run --since` goes further back.
+  - **Finding transcripts:** BSE and NSE copies filed within 7 days are read once. Covering letters under 4,000 characters have their links followed, both links in the text and link annotations in the PDF. Scanned PDFs and AGM transcripts are recorded with the reason.
+  - **One call per transcript** returns summary, tone, key points with quotes, promises, updates to earlier promises, analyst concerns, changes since the previous call, and action points. Quotes are checked against the text.
+  - **Output:** results go to `concalls`, `concall_points` and `promises`. They show in the digest, on the Stock page's **Earnings calls** tab, and through `sna concalls list/show/promises`.
+  - **Not yet:** speaker tagging, audio transcription.
 
 1. Download the transcript PDF (or transcribe the audio).
 2. Split opening remarks from Q\&A; tag each speaker as management or analyst.
@@ -366,6 +373,10 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **Trigger:** after each Concall Analyst run and each results filing.
 - **LLM:** Opus 5.5.
 - **Reads / writes:** `concall_points`, results, earlier calls → `promises`, `credibility_scores`.
+- **As built so far (step 12), steps 1–3 only:**
+  - The Concall Analyst records each promise with its due date. Each later call marks the earlier promises it mentions, with a note.
+  - `sna concalls promises` flags open promises past their date.
+  - **Not yet:** checking promises against results filings, and the credibility score.
 
 1. Record each new promise with metric, target value and target date.
 2. Compare with earlier calls: new topics, topics dropped, tone changes, revised targets.
@@ -449,7 +460,7 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 
 ## Build-in-public plan
 
-Each build step has a log with a draft post in [`docs/build-log/`](../build-log/) (steps 1–11 so far).
+Each build step has a log with a draft post in [`docs/build-log/`](../build-log/) (steps 1–12 so far).
 
 Post one agent per post, in build order, with something visual each time: a screenshot of real output does better than a description. The tweet drafts above are starting points; rewrite them with real numbers once each agent runs.
 

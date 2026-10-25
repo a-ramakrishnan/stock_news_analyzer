@@ -350,3 +350,87 @@ class Deal(Base):
     quantity: Mapped[int] = mapped_column(BigInteger)
     price: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     remarks: Mapped[str | None] = mapped_column(Text)
+
+
+class Concall(Base):
+    """Concall Analyst (agent 11): one earnings call transcript and what it says.
+
+    One row per transcript filing looked at, so nothing is read twice. Only rows with status
+    'analysed' carry an analysis; the others say why not in `note`: 'duplicate' (the same call
+    filed on the other exchange), 'no_text' (scanned, or a letter whose link could not be
+    fetched), 'skipped' (not an earnings call, e.g. an AGM).
+    """
+
+    __tablename__ = "concalls"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    isin: Mapped[str] = mapped_column(ForeignKey("companies.isin"), index=True)
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), unique=True
+    )
+    status: Mapped[str] = mapped_column(String(16), index=True)
+    note: Mapped[str | None] = mapped_column(Text)
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    quarter: Mapped[str | None] = mapped_column(String(16))  # results quarter, e.g. 'Q2 FY27'
+    period_end: Mapped[date | None] = mapped_column(Date)  # last day of that quarter
+    call_date: Mapped[date | None] = mapped_column(Date)
+    # Where the text came from: the filing's PDF, or a transcript the filing only linked to.
+    text_source: Mapped[str | None] = mapped_column(String(16))  # 'filing' or 'link'
+    text_chars: Mapped[int | None] = mapped_column()
+    linked_url: Mapped[str | None] = mapped_column(Text)
+    linked_path: Mapped[str | None] = mapped_column(Text)  # relative to DATA_DIR
+    linked_text: Mapped[str | None] = mapped_column(Text)
+    tone: Mapped[str | None] = mapped_column(String(16))  # positive/neutral/cautious/negative
+    summary: Mapped[str | None] = mapped_column(Text)
+    analysis: Mapped[dict | None] = mapped_column(JSONB)  # the model's full structured answer
+    model: Mapped[str | None] = mapped_column(String(64))
+    prompt_version: Mapped[str | None] = mapped_column(String(16))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ConcallPoint(Base):
+    """One point from a call: guidance, demand, margins, capex, order book, risk, initiative."""
+
+    __tablename__ = "concall_points"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    concall_id: Mapped[int] = mapped_column(
+        ForeignKey("concalls.id", ondelete="CASCADE"), index=True
+    )
+    category: Mapped[str] = mapped_column(String(16), index=True)
+    text: Mapped[str] = mapped_column(Text)
+    sentiment: Mapped[str] = mapped_column(String(16))  # positive/neutral/negative
+    quote: Mapped[str | None] = mapped_column(Text)  # the speaker's words, from the transcript
+    quote_found: Mapped[bool] = mapped_column(Boolean, default=False)  # quote is in the text
+
+
+class Promise(Base):
+    """The promise ledger: a forward-looking commitment from a call, and whether it was kept.
+
+    Written by the Concall Analyst; each later call updates `status` when management mentions
+    it again. Checking promises against results is the Promise Ledger's job (agent 12).
+    """
+
+    __tablename__ = "promises"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    isin: Mapped[str] = mapped_column(ForeignKey("companies.isin"), index=True)
+    concall_id: Mapped[int] = mapped_column(
+        ForeignKey("concalls.id", ondelete="CASCADE"), index=True
+    )
+    statement: Mapped[str] = mapped_column(Text)
+    metric: Mapped[str] = mapped_column(Text)  # e.g. 'EBITDA margin', 'Plant 2 commissioning'
+    target: Mapped[str] = mapped_column(Text)  # e.g. '18-20%', 'complete'
+    due: Mapped[str] = mapped_column(Text)  # as said: 'Q3 FY27', 'FY28', 'by March 2027'
+    due_date: Mapped[date | None] = mapped_column(Date, index=True)  # end of that period
+    quote: Mapped[str | None] = mapped_column(Text)
+    quote_found: Mapped[bool] = mapped_column(Boolean, default=False)
+    # open, on_track, kept, delayed, revised, dropped
+    status: Mapped[str] = mapped_column(String(16), default="open", server_default="open")
+    status_note: Mapped[str | None] = mapped_column(Text)
+    status_concall_id: Mapped[int | None] = mapped_column(
+        ForeignKey("concalls.id", ondelete="SET NULL")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

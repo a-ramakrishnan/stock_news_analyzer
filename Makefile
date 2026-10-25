@@ -1,4 +1,4 @@
-.PHONY: setup up down health migrate securities watchlist filings news triage explain prices digest backfill run-all scheduler scheduler-logs scheduler-stop ui ui-docker ui-stop test lint format docker-health
+.PHONY: setup up down health migrate securities watchlist filings news triage explain concalls prices digest backfill run-all scheduler scheduler-logs scheduler-stop ui ui-docker ui-stop test lint format docker-health
 
 setup:          ## Install Python dependencies and create .env
 	uv sync
@@ -35,6 +35,9 @@ triage:         ## LLM triage of new articles: relevance, topic, sentiment, impo
 explain:        ## LLM explanation of unusual days not explained yet (up to yesterday)
 	uv run sna explain run
 
+concalls:       ## LLM reading of earnings call transcripts of stocks you own (last 400 days)
+	uv run sna concalls run
+
 prices:         ## Load new NSE prices, update moves and labels
 	uv run sna prices fetch
 	uv run sna labels update
@@ -52,7 +55,7 @@ backfill:       ## Load history since SINCE (default 2023-10-01): prices, filing
 	-uv run sna deals backfill --since $(SINCE)
 	uv run sna labels update
 
-run-all:        ## Run filings, news, prices and digest once, now
+run-all:        ## Run every job once, now, in order (collect, judge, measure, report)
 	uv run sna run all
 
 scheduler:      ## Start the orchestrator in Docker (keeps running while Docker is up)

@@ -11,6 +11,15 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.2 · Oct 25, 2026
+
+- Step 12, the Earnings Call Analyst, recorded in both documents:
+  - status tables updated: Concall Analyst built, Promise Ledger partly built
+  - "As built" notes under the earnings call module and agents 11 and 12
+  - the three new tables mapped to the plan
+  - the cost estimate added
+- The two open decisions answered: Earnings Call Analyst next; unusual-day threshold kept at 2.0σ.
+
 ### 1.1 · Oct 25, 2026
 
 The design brought up to date with steps 1–11.

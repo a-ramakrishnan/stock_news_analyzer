@@ -73,6 +73,17 @@ def extract_text(content: bytes) -> tuple[str, str]:
     return text, ("ok" if text else "empty")
 
 
+def bse_alternatives(url: str) -> list[str]:
+    """A stored attachment URL and, for BSE, its other folder: BSE moves older files from
+    AttachLive to AttachHis, so the URL that worked when the filing was new can 404 later."""
+    live, his = "/corpfiling/AttachLive/", "/corpfiling/AttachHis/"
+    if live in url:
+        return [url, url.replace(live, his)]
+    if his in url:
+        return [url, url.replace(his, live)]
+    return [url]
+
+
 def watchlist_companies(session: Session, symbol: str | None = None) -> list[Company]:
     query = select(Company).join(WatchlistItem, WatchlistItem.isin == Company.isin)
     if symbol:
@@ -203,7 +214,7 @@ class FilingsCollector:
     # --- attachments ---------------------------------------------------------
 
     def _fetch_attachment(self, doc: Document, isin: str, ann: Announcement | None = None) -> bool:
-        urls = ann.attachment_urls if ann else [doc.attachment_url]
+        urls = ann.attachment_urls if ann else bse_alternatives(doc.attachment_url)
         try:
             url, content, complete = self.client.download(doc.source, urls)
         except ExchangeError as exc:

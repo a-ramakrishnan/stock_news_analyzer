@@ -425,7 +425,8 @@ class Promise(Base):
     due_date: Mapped[date | None] = mapped_column(Date, index=True)  # end of that period
     quote: Mapped[str | None] = mapped_column(Text)
     quote_found: Mapped[bool] = mapped_column(Boolean, default=False)
-    # open, on_track, kept, delayed, revised, dropped
+    # open, on_track, delayed, revised (still to come); kept, kept_late, partly, missed,
+    # dropped (settled). Calls set the first group and dropped; the Promise Ledger the rest.
     status: Mapped[str] = mapped_column(String(16), default="open", server_default="open")
     status_note: Mapped[str | None] = mapped_column(Text)
     status_concall_id: Mapped[int | None] = mapped_column(
@@ -434,3 +435,24 @@ class Promise(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class PromiseCheck(Base):
+    """Promise Ledger (agent 12): one check of a promise against what the company reported
+    after its due date. Every check is kept, including 'no_evidence', as a record of what was
+    known when."""
+
+    __tablename__ = "promise_checks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    promise_id: Mapped[int] = mapped_column(
+        ForeignKey("promises.id", ondelete="CASCADE"), index=True
+    )
+    checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    verdict: Mapped[str] = mapped_column(String(16))  # kept/kept_late/partly/missed/no_evidence
+    note: Mapped[str] = mapped_column(Text)
+    evidence: Mapped[list[int]] = mapped_column(ARRAY(BigInteger), default=list)  # document ids
+    model: Mapped[str] = mapped_column(String(64))
+    # The promise's status and note before this check, so a reset can put them back.
+    previous_status: Mapped[str] = mapped_column(String(16))
+    previous_note: Mapped[str | None] = mapped_column(Text)

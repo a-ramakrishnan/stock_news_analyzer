@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.2 · Oct 25, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.3 · Oct 25, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -33,7 +33,7 @@ Orchestrator (0)
 | 9 | Move Explainer | Built (Sonnet 5.5) | 10, 11 |
 | 10 | Order Book Tracker | Not started | — |
 | 11 | Concall Analyst | Built (Sonnet 5.5): structured reading of each call, comparison with the previous one, promises recorded | 12 |
-| 12 | Promise Ledger | Partly: the `promises` table, filled and updated by the Concall Analyst; checks against results and a credibility score not started | 12 |
+| 12 | Promise Ledger | Built (Sonnet 5.5): promises past their date checked against later results and filings; credibility score per company | 12, 13 |
 | 13 | Bullion Analyst | Not started | — |
 | 14 | Theme & Peer Analyst | Not started (peers exist for the Move Explainer) | — |
 | 15 | Red-flag Monitor | Not started | — |
@@ -373,10 +373,16 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **Trigger:** after each Concall Analyst run and each results filing.
 - **LLM:** Opus 5.5.
 - **Reads / writes:** `concall_points`, results, earlier calls → `promises`, `credibility_scores`.
-- **As built so far (step 12), steps 1–3 only:**
-  - The Concall Analyst records each promise with its due date. Each later call marks the earlier promises it mentions, with a note.
-  - `sna concalls promises` flags open promises past their date.
-  - **Not yet:** checking promises against results filings, and the credibility score.
+- **As built (steps 12, 13):**
+  - **Recording (step 12):** the Concall Analyst records each promise with its due date. Spans like "within 12 months" are counted from the call date. Each later call marks earlier promises on track, delayed, revised, kept or dropped when management mentions them.
+  - **Checking (step 13):** once a promise's due date has passed, Sonnet 5.5 (medium effort) reads what the company published from 45 days before the due date onwards:
+    - results and investor presentations
+    - filings whose titles mention commissioning, capacity, approvals, launches and the like
+    - later calls' summaries and points
+
+    It returns kept, kept late, partly, missed or no evidence, with a one-sentence finding and the documents cited. There is one call per company, at about $0.05. Every check is stored in `promise_checks`. A promise with no evidence is checked again only when new evidence arrives; news doesn't count.
+  - **Credibility score:** kept 1, kept late or partly 0.5, missed, dropped or long overdue 0, over the promises settled so far. It is shown from 3 settled promises and computed when shown, not stored.
+  - **Where it shows:** `sna promises check/list/scores/reset`, the 07:40 `promises` job, a "Promises" section in the digest (settled, and due in the next 30 days), and the Stock page's Earnings calls tab ("Promises kept", plus how each promise was checked).
 
 1. Record each new promise with metric, target value and target date.
 2. Compare with earlier calls: new topics, topics dropped, tone changes, revised targets.
@@ -460,7 +466,7 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 
 ## Build-in-public plan
 
-Each build step has a log with a draft post in [`docs/build-log/`](../build-log/) (steps 1–12 so far).
+Each build step has a log with a draft post in [`docs/build-log/`](../build-log/) (steps 1–13 so far).
 
 Post one agent per post, in build order, with something visual each time: a screenshot of real output does better than a description. The tweet drafts above are starting points; rewrite them with real numbers once each agent runs.
 

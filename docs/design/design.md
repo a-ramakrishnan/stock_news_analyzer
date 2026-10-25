@@ -1,6 +1,6 @@
 # Indian Market News Intelligence System — Design
 
-Version 1.2 · Oct 25, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
+Version 1.3 · Oct 25, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
 
 ## Goal and principles
 
@@ -10,7 +10,7 @@ The system is built as independent agents under an orchestrator; models, tools, 
 
 ## Status (Oct 25, 2026)
 
-Phase 1 is done and Phase 2 is under way. Twelve build steps have shipped, each logged in [`docs/build-log/`](../build-log/). The system runs on a Mac in Docker, and its data goes back to October 2023.
+Phase 1 is done and Phase 2 is under way. Thirteen build steps have shipped, each logged in [`docs/build-log/`](../build-log/). The system runs on a Mac in Docker, and its data goes back to October 2023.
 
 | Module | Status |
 | --- | --- |
@@ -21,7 +21,7 @@ Phase 1 is done and Phase 2 is under way. Twelve build steps have shipped, each 
 | Event-to-return labels (1, 5, 20 days) | Built, per filing; per typed event once event extraction exists |
 | Daily digest and dashboard | Built: Markdown digest saved locally, Streamlit dashboard with 7 pages |
 | Event extraction and QA check | Not started |
-| Earnings call analysis and promise ledger | Built (Claude Sonnet 5.5), step 12; checking promises against results is still to come |
+| Earnings call analysis and promise ledger | Built (Claude Sonnet 5.5): calls in step 12; promises checked against later results, and a credibility score per company, in step 13 |
 | Order and execution tracker | Not started |
 | Bullion, ratings, SAST, pledges, tenders, MF holdings, macro | Not started |
 | Telegram or email delivery, Q&A, red flags, themes | Not started |
@@ -171,7 +171,7 @@ These build on the core modules. Each adds a new kind of signal to the database.
 | --- | --- | --- | --- |
 | Peer and supply-chain effects | Maps each company's customers, suppliers and peers, so one company's news reaches the others | A big Railways wagon order to one maker is read as a signal for wheel and coupler suppliers | Annual reports, concalls, a hand-built relationship table refined by the LLM |
 | Theme tracker | Groups events across companies into themes and tracks their strength over time | "Data centres", "defence indigenisation", "transmission capex": event count, order value and sentiment per month | Event table plus a theme tag per event |
-| Management credibility score | Turns the promise ledger into a score: share of guidance met on time, in full | A company that met 9 of 12 commitments over 3 years scores higher than one that missed 6 | Promise ledger plus quarterly results |
+| Management credibility score | Turns the promise ledger into a score: share of guidance met on time, in full | A company that met 9 of 12 commitments over 3 years scores higher than one that missed 6 | Promise ledger plus quarterly results. **Built in step 13** |
 | Smart-money overlay | Combines events with institutional and promoter behaviour | An order win followed by promoter buying and rising MF holding is a stronger signal than either alone | Bulk/block deals, SAST, shareholding patterns, MF portfolios |
 | Tender pipeline | Tracks government tenders bid, won (L1) and awarded before the company files | NHAI or IREPS award lists show the L1 bidder weeks before a formal order filing | CPPP, GeM, IREPS, NHAI portals |
 | Surprise measurement | Compares results and guidance with what was expected, not with last year | Profit up 20% when the market expected 30% is negative news | Consensus estimates (paid) or management's own previous guidance as a free proxy |
@@ -226,8 +226,9 @@ The database is managed by Alembic migrations (0001–0011). Built tables and ho
 | `concalls` | `concalls` | One row per transcript filing: quarter, tone, summary, the full structured reading; or why it was not read (copy, no text, not an earnings call) |
 | `concall_points` | `concall_points` | Key points by category, sentiment, quote and whether the quote was found in the transcript |
 | `promises` | `promises` | The promise ledger: statement, metric, target, due as said and as a date, status, latest update |
+| `promise_checks` | — | Every check of a promise against later documents: verdict, finding, the documents it rested on, and the status before it |
 
-Not built yet: `sources` (feeds are listed in config files instead), `events`, `orders`, `order_book_snapshots`, `credibility_scores`. The `vector` extension is installed but not used yet.
+Not built yet: `sources` (feeds are listed in config files instead), `events`, `orders`, `order_book_snapshots`. Credibility scores are computed from `promises` when shown, not stored. The `vector` extension is installed but not used yet.
 
 ### Rules that make the data usable for a model later
 

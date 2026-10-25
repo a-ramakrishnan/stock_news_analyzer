@@ -22,7 +22,8 @@ Every command block below can be pasted into Terminal as is; explanations are in
 | 9 | Phase 2 starts: News Triage agent (Claude Haiku), LLM cost log and budget | done |
 | 10 | Move Explainer agent (Claude Sonnet): the likely cause of each unusual day | done |
 | 11 | Bulk/block deals and peer moves, fed to the Move Explainer | done |
-| 12 | Earnings Call Analyst (Claude Sonnet) and the promise ledger | this PR |
+| 12 | Earnings Call Analyst (Claude Sonnet) and the promise ledger | done |
+| 13 | Promise Ledger (Claude Sonnet): promises checked against later results; credibility per company | this PR |
 
 ## Run it on a Mac
 
@@ -221,6 +222,29 @@ uv run sna concalls promises --open
 
 The scheduler reads new transcripts at 07:30, before the 08:00 digest. New calls appear in the digest and on the Stock page's **Earnings calls** tab, along with the promise ledger and the transcripts that could not be read.
 
+## Promise ledger (Phase 2, LLM)
+
+The Earnings Call Analyst records each promise with a due date, and later calls update the ones management mentions again. Once a promise's date has passed, the Promise Ledger settles it. Claude Sonnet reads what the company published around and after that date: results, investor presentations, filings about commissioning, capacity, approvals or launches, and later calls. It decides whether the promise was **kept**, **kept late**, **partly** kept or **missed**, with a one-sentence finding and the documents it rests on. When the documents don't say yet, the promise is checked again once new results or filings arrive. News doesn't count as a new document.
+
+Each company gets a credibility score: kept counts 1, kept late or partly 0.5, and missed, dropped or long overdue 0, over the promises settled so far. It is shown once 3 promises are settled.
+
+```bash
+make migrate
+uv run sna promises check
+uv run sna promises scores
+uv run sna promises list GRAVITA
+```
+
+| Command | What it does |
+| --- | --- |
+| `uv run sna promises check` | Check promises past their date, one LLM call per company (about $0.05). Already-checked ones are skipped until new documents arrive |
+| `uv run sna promises scores` | Credibility per company: the score and how many promises were kept, kept late, partly kept, missed, dropped, long overdue, or are still to come |
+| `uv run sna promises list GRAVITA` | The ledger with each promise's status and latest finding (same as `sna concalls promises`) |
+| `uv run sna promises reset --symbol GRAVITA` | Forget the checks; promises go back to what the calls last said |
+| `make promises` | Check, then show the scores |
+
+The scheduler checks promises at 07:40, after reading new calls. Settled promises and those due in the next 30 days appear in the digest. The Stock page's **Earnings calls** tab shows the score and how each promise was checked.
+
 ## Prices, moves and labels
 
 ```bash
@@ -272,7 +296,7 @@ make scheduler
 | --- | --- |
 | `uv run sna orchestrator show` | The schedule and when each job runs next |
 | `make run-all` | Run every job once, now, in order: collect, triage, measure, explain, read calls, digest |
-| `uv run sna run news` | Run one job now: `filings`, `news`, `triage`, `deals`, `prices`, `explain`, `concalls`, `securities` or `digest` |
+| `uv run sna run news` | Run one job now: `filings`, `news`, `triage`, `deals`, `prices`, `explain`, `concalls`, `promises`, `securities` or `digest` |
 | `uv run sna runs` | Recent runs: when, how long, result, errors |
 | `make digest` | Print the digest covering everything since the last scheduled digest (`--hours 24` for a fixed window) |
 | `make scheduler` | Start the orchestrator in Docker; it keeps running while Docker Desktop is open |
@@ -340,6 +364,7 @@ src/stock_news_analyzer/   Python package
   sources/deals.py         NSE bulk/block deals parsing (JSON API and CSV downloads)
   agents/deals.py          Deals Collector: bulk and block deals for every stock
   agents/concalls.py       Concall Analyst (agent 11): earnings calls and the promise ledger
+  agents/promises.py       Promise Ledger (agent 12): promises checked against results, credibility
   ui/queries.py            dashboard: read-only queries
   ui/charts.py             dashboard: charts
   ui/app.py                dashboard: the Streamlit pages

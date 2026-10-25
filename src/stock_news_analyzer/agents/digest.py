@@ -25,6 +25,8 @@ from stock_news_analyzer.models import (
     IndexDaily,
     MoveExplanation,
     NewsTriage,
+    Promise,
+    PromiseCheck,
     Run,
     StockMove,
     WatchlistItem,
@@ -185,6 +187,48 @@ def _earnings_calls(session: Session, since: datetime, until: datetime) -> list[
     return lines
 
 
+def _promises(session: Session, since: datetime, until: datetime) -> list[str]:
+    """Promises settled since the previous digest, and those falling due in the next 30 days."""
+    from stock_news_analyzer.agents.promises import UNSETTLED, VERDICT_STATUS
+
+    settled = session.execute(
+        select(PromiseCheck, Promise, Company.nse_symbol)
+        .join(Promise, Promise.id == PromiseCheck.promise_id)
+        .join(Company, Company.isin == Promise.isin)
+        .where(
+            PromiseCheck.checked_at >= since,
+            PromiseCheck.checked_at < until,
+            PromiseCheck.verdict.in_(VERDICT_STATUS),
+        )
+        .order_by(Company.nse_symbol, Promise.due_date)
+    ).all()
+    today = until.astimezone(IST).date()
+    coming = session.execute(
+        select(Promise, Company.nse_symbol)
+        .join(Company, Company.isin == Promise.isin)
+        .where(
+            Promise.status.in_(UNSETTLED),
+            Promise.due_date >= today,
+            Promise.due_date <= today + timedelta(days=30),
+        )
+        .order_by(Promise.due_date)
+    ).all()
+    if not settled and not coming:
+        return []
+    lines = ["", "## Promises"]
+    if settled:
+        lines += ["", "Settled:"]
+        lines += [
+            f"- {sym} **{check.verdict.replace('_', ' ')}**: {p.statement} (due "
+            f"{p.due_date:%d %b %Y}). {check.note}"
+            for check, p, sym in settled
+        ]
+    if coming:
+        lines += ["", "Due in the next 30 days:"]
+        lines += [f"- {sym} {p.due_date:%d %b}: {p.statement}" for p, sym in coming]
+    return lines
+
+
 def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
     lines = [
         f"# Daily digest, {until.astimezone(IST):%d %b %Y %H:%M} IST",
@@ -203,6 +247,7 @@ def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
         lines.append(f"| {name} | {day} | {close_s} | {pct(change)} |")
 
     lines += _earnings_calls(session, since, until)
+    lines += _promises(session, since, until)
 
     owned = dict(session.execute(select(WatchlistItem.isin, WatchlistItem.owned)).all())
     total_filings = total_news = total_unusual = 0
@@ -346,6 +391,7 @@ def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
         "prices",
         "explain",
         "concalls",
+        "promises",
         "securities",
     ):
         run = session.scalars(

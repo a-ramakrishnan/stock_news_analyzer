@@ -22,6 +22,7 @@ Every command block below can be pasted into Terminal as is; explanations are in
 | 9 | Phase 2 starts: News Triage agent (Claude Haiku), LLM cost log and budget | done |
 | 10 | Move Explainer agent (Claude Sonnet): the likely cause of each unusual day | done |
 | 11 | Bulk/block deals and peer moves, fed to the Move Explainer | done |
+| 12 | Earnings Call Analyst (Claude Sonnet) and the promise ledger | this PR |
 
 ## Run it on a Mac
 
@@ -142,7 +143,7 @@ The scheduler runs the triage every hour at :25, ten minutes after the news. The
 | Setting in `.env` | Default | Meaning |
 | --- | --- | --- |
 | `LLM_MODEL_TRIAGE` | `claude-haiku-5-5` | Model for high-volume work such as triage |
-| `LLM_MODEL_ANALYSIS` | `claude-sonnet-5-5` | Model for judgement work (coming next: move explanations, order extraction, earnings calls) |
+| `LLM_MODEL_ANALYSIS` | `claude-sonnet-5-5` | Model for judgement work: move explanations, earnings calls |
 | `LLM_MONTHLY_BUDGET_USD` | `20` | LLM calls stop for the rest of the month (India time) once this much is spent |
 
 Every call is logged with its tokens and cost (the `llm_calls` table, `sna llm usage`, and the dashboard's System page).
@@ -187,6 +188,38 @@ uv run sna explain list LT
 | `uv run sna explain reset --symbol LT` | Forget explanations so they are written again |
 
 The scheduler explains the last two weeks' unusual days at 07:45, before the 08:00 digest: a day is explained the morning after, once the papers have said why it moved. Explanations appear in the digest, on the Stock page (chart hover and an **Unusual days** tab) and on the Today cards.
+
+## Earnings calls (Phase 2, LLM)
+
+For each stock you own, Claude Sonnet reads the earnings call transcript the company files with the exchanges:
+
+- **The call:** a summary, management's tone, and 3-5 points to watch.
+- **What management said:** 6-15 key points (guidance, demand, margins, capex, order book, risks, new initiatives), each with the speaker's own words.
+- **What analysts pressed on,** and whether management answered directly, partially or evasively.
+- **Since the previous call:** what is new, what management stopped mentioning, tone changes, revised targets.
+- **The promise ledger:** every commitment with a target and a time ("Plant 2 by Q3 FY27", "EBITDA margin 18-20% in FY27"), with its due date. Each later call marks earlier promises on track, kept, delayed, revised or dropped when management mentions them.
+
+Calls are read oldest first, so each one is compared with the one before. A transcript filed on both BSE and NSE is read once. Some companies file only a letter with a link to the transcript on their website: the link is followed and the transcript saved under `data/concalls/`. Each quote is checked against the transcript, and a quote that is not found is not shown.
+
+```bash
+make migrate
+uv run sna concalls run
+uv run sna concalls list
+uv run sna concalls show LT
+uv run sna concalls promises --open
+```
+
+| Command | What it does |
+| --- | --- |
+| `uv run sna concalls run` | Read transcripts of the last 400 days not read yet. It prints how many calls and a rough cost first, and asks before spending more than $2 |
+| `uv run sna concalls run --since 2023-10-01` | Go further back (about $0.10 a call) |
+| `uv run sna concalls run --symbol BECTORFOOD` | One stock; this also works for a stock you only watch |
+| `uv run sna concalls list LT --all` | Calls read, newest first; `--all` also shows transcripts not read and why (copies, scanned PDFs, AGMs) |
+| `uv run sna concalls show LT --quarter "Q2 FY27"` | One call in full (default: the latest) |
+| `uv run sna concalls promises LT` | The promise ledger, soonest due first; open promises past their date are marked OVERDUE |
+| `uv run sna concalls reset --symbol LT` | Forget calls (with their points and promises) so they are read again; `--unread-only` retries only those with no text |
+
+The scheduler reads new transcripts at 07:30, before the 08:00 digest. New calls appear in the digest and on the Stock page's **Earnings calls** tab, along with the promise ledger and the transcripts that could not be read.
 
 ## Prices, moves and labels
 
@@ -238,8 +271,8 @@ make scheduler
 | Command | What it does |
 | --- | --- |
 | `uv run sna orchestrator show` | The schedule and when each job runs next |
-| `make run-all` | Run filings, news, prices and digest once, now |
-| `uv run sna run news` | Run one job now: `filings`, `news`, `prices`, `securities` or `digest` |
+| `make run-all` | Run every job once, now, in order: collect, triage, measure, explain, read calls, digest |
+| `uv run sna run news` | Run one job now: `filings`, `news`, `triage`, `deals`, `prices`, `explain`, `concalls`, `securities` or `digest` |
 | `uv run sna runs` | Recent runs: when, how long, result, errors |
 | `make digest` | Print the digest covering everything since the last scheduled digest (`--hours 24` for a fixed window) |
 | `make scheduler` | Start the orchestrator in Docker; it keeps running while Docker Desktop is open |
@@ -264,7 +297,7 @@ make ui
 | Page | What it shows |
 | --- | --- |
 | Today | Indices, then **Stocks I own** and **Watchlist** as separate groups of cards (move vs Nifty 50 and sector, unusual badge, 3-month sparkline), the latest digest, job health |
-| Stock | Stock vs sector vs Nifty 50 indexed to 100, key filings and unusual days marked; its filings, news, reactions and corporate actions |
+| Stock | Stock vs sector vs Nifty 50 indexed to 100, key filings and unusual days marked; unusual days with their likely cause, earnings calls and the promise ledger, filings, news, deals, reactions and corporate actions |
 | Filings | Search by stock, type, words and date; read a filing's extracted text |
 | News | Search headlines; links to the articles |
 | What moves the stock | Average return vs Nifty 50 after each kind of filing, 1, 5 and 20 trading days later |
@@ -306,6 +339,7 @@ src/stock_news_analyzer/   Python package
   agents/explain.py        Move Explainer (agent 7): likely cause of each unusual day
   sources/deals.py         NSE bulk/block deals parsing (JSON API and CSV downloads)
   agents/deals.py          Deals Collector: bulk and block deals for every stock
+  agents/concalls.py       Concall Analyst (agent 11): earnings calls and the promise ledger
   ui/queries.py            dashboard: read-only queries
   ui/charts.py             dashboard: charts
   ui/app.py                dashboard: the Streamlit pages

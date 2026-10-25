@@ -12,6 +12,8 @@ from stock_news_analyzer.agents.digest import _dedupe_filings, _index_change
 from stock_news_analyzer.agents.prices import NIFTY, watchlist_benchmarks
 from stock_news_analyzer.models import (
     Company,
+    Concall,
+    ConcallPoint,
     CorporateAction,
     Document,
     DocumentCompany,
@@ -21,6 +23,7 @@ from stock_news_analyzer.models import (
     MoveExplanation,
     NewsTriage,
     PriceDaily,
+    Promise,
     Run,
     StockMove,
     WatchlistItem,
@@ -500,6 +503,119 @@ def deals(session: Session, isin: str) -> pd.DataFrame:
     )
 
 
+def concalls(session: Session, isin: str) -> list[dict]:
+    """A stock's analysed earnings calls, newest first, each with its points."""
+    calls = session.scalars(
+        select(Concall)
+        .where(Concall.isin == isin, Concall.status == "analysed")
+        .order_by(Concall.published_at.desc())
+    ).all()
+    points: dict[int, list[dict]] = {}
+    if calls:
+        for p in session.scalars(
+            select(ConcallPoint)
+            .where(ConcallPoint.concall_id.in_([c.id for c in calls]))
+            .order_by(ConcallPoint.id)
+        ):
+            points.setdefault(p.concall_id, []).append(
+                {
+                    "category": p.category,
+                    "point": p.text,
+                    "sentiment": p.sentiment,
+                    "quote": p.quote if p.quote_found else None,
+                }
+            )
+    return [
+        {
+            "id": c.id,
+            "quarter": c.quarter,
+            "filed": c.published_at.astimezone(IST).replace(tzinfo=None),
+            "call_date": c.call_date,
+            "tone": c.tone,
+            "summary": c.summary,
+            "action_points": (c.analysis or {}).get("action_points", []),
+            "changes": (c.analysis or {}).get("changes", []),
+            "concerns": (c.analysis or {}).get("analyst_concerns", []),
+            "points": points.get(c.id, []),
+            "document_id": c.document_id,
+            "note": c.note,
+        }
+        for c in calls
+    ]
+
+
+def concall_text(session: Session, doc_id: int) -> str:
+    """The transcript a call was read from: the filing's text, or the linked transcript's."""
+    call = session.scalars(select(Concall).where(Concall.document_id == doc_id)).first()
+    if call and call.linked_text:
+        return call.linked_text
+    return document_text(session, doc_id)
+
+
+def concall_gaps(session: Session, isin: str) -> pd.DataFrame:
+    """Transcript filings that were not analysed, and why (copies are left out)."""
+    rows = session.scalars(
+        select(Concall)
+        .where(Concall.isin == isin, Concall.status.in_(("no_text", "skipped")))
+        .order_by(Concall.published_at.desc())
+    ).all()
+    return pd.DataFrame(
+        [
+            {
+                "filed": r.published_at.astimezone(IST).replace(tzinfo=None),
+                "status": r.status,
+                "why": r.note,
+            }
+            for r in rows
+        ],
+        columns=["filed", "status", "why"],
+    )
+
+
+def promises(session: Session, isin: str | None = None) -> pd.DataFrame:
+    """The promise ledger, soonest due first; `overdue` when the date passed while still open."""
+    query = (
+        select(Promise, Concall.quarter, Company.nse_symbol)
+        .join(Concall, Concall.id == Promise.concall_id)
+        .join(Company, Company.isin == Promise.isin)
+        .order_by(Promise.due_date.nulls_last(), Promise.id)
+    )
+    if isin:
+        query = query.where(Promise.isin == isin)
+    today = datetime.now(IST).date()
+    return pd.DataFrame(
+        [
+            {
+                "symbol": sym,
+                "promise": p.statement,
+                "target": p.target,
+                "due": p.due,
+                "due_date": p.due_date,
+                "status": p.status,
+                "overdue": bool(
+                    p.due_date and p.due_date < today and p.status in ("open", "on_track")
+                ),
+                "note": p.status_note,
+                "said_in": quarter,
+                "quote": p.quote if p.quote_found else None,
+            }
+            for p, quarter, sym in session.execute(query).all()
+        ],
+        columns=[
+            "symbol",
+            "promise",
+            "target",
+            "due",
+            "due_date",
+            "status",
+            "overdue",
+            "note",
+            "said_in",
+            "quote",
+        ],
+    )
+
+
 def corporate_actions(session: Session, symbol: str) -> pd.DataFrame:
     rows = session.scalars(
         select(CorporateAction)
@@ -584,6 +700,10 @@ def data_counts(session: Session) -> dict[str, object]:
             select(func.count()).select_from(Document).where(Document.doc_type == "news")
         ),
         "labels": session.scalar(select(func.count()).select_from(EventLabel)),
+        "earnings calls analysed": session.scalar(
+            select(func.count()).select_from(Concall).where(Concall.status == "analysed")
+        ),
+        "promises": session.scalar(select(func.count()).select_from(Promise)),
         "complete labels": session.scalar(
             select(func.count()).select_from(EventLabel).where(EventLabel.complete)
         ),

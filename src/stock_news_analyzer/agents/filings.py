@@ -250,6 +250,9 @@ class FilingsCollector:
         )
         if isin:
             query = query.where(DocumentCompany.isin == isin)
+        if self.pdf_policy == "important":
+            # Filter before the limit, or older important files are never reached.
+            query = query.where(Document.doc_type.in_(IMPORTANT_TYPES))
         fetched = 0
         for doc, doc_isin in self.session.execute(query).all():
             if self._wants_attachment(doc) and self._fetch_attachment(doc, doc_isin):

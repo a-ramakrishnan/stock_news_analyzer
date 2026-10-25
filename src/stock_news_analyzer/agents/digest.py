@@ -2,7 +2,8 @@
 
 Everything since the previous digest, per watchlist company: the latest daily move against the
 Nifty 50 and sector index, unusual days, new filings, news headlines, and what recent filings
-did to the price. Written as Markdown, printed and saved under data/digests/.
+did to the price; and earnings calls analysed since then. Written as Markdown, printed and
+saved under data/digests/.
 """
 
 import re
@@ -16,6 +17,8 @@ from sqlalchemy.orm import Session
 from stock_news_analyzer.agents.deals import watchlist_deals
 from stock_news_analyzer.agents.prices import NIFTY, watchlist_benchmarks
 from stock_news_analyzer.models import (
+    Company,
+    Concall,
     Document,
     DocumentCompany,
     EventLabel,
@@ -146,6 +149,42 @@ def _triaged_news(session: Session, isin: str, docs: list[Document]):
     return kept, len(docs) - len(kept)
 
 
+def _earnings_calls(session: Session, since: datetime, until: datetime) -> list[str]:
+    """Earnings calls analysed since the previous digest: summary, what to watch, changes."""
+    rows = session.execute(
+        select(Concall, Company)
+        .join(Company, Company.isin == Concall.isin)
+        .where(
+            Concall.status == "analysed",
+            Concall.created_at >= since,
+            Concall.created_at < until,
+        )
+        .order_by(Concall.published_at)
+    ).all()
+    if not rows:
+        return []
+    lines = ["", "## Earnings calls"]
+    for c, company in rows:
+        a = c.analysis or {}
+        lines += [
+            "",
+            f"### {company.nse_symbol or company.name} {c.quarter}: {c.tone}",
+            "",
+            c.summary or "",
+            "",
+            "To watch:",
+            *[f"- {point}" for point in a.get("action_points", [])],
+        ]
+        if a.get("changes"):
+            lines += ["", "Since the previous call:"]
+            lines += [f"- {ch['kind']}: {ch['text']}" for ch in a["changes"]]
+        if a.get("promises"):
+            lines += ["", "Promises made:"]
+            lines += [f"- {p['statement']} (due {p['due']})" for p in a["promises"]]
+        lines.append(f"\nIn full: `sna concalls show {company.nse_symbol}`")
+    return lines
+
+
 def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
     lines = [
         f"# Daily digest, {until.astimezone(IST):%d %b %Y %H:%M} IST",
@@ -162,6 +201,8 @@ def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
         day, close, change = _index_change(session, name)
         close_s = f"{close:,.2f}" if close is not None else "–"
         lines.append(f"| {name} | {day} | {close_s} | {pct(change)} |")
+
+    lines += _earnings_calls(session, since, until)
 
     owned = dict(session.execute(select(WatchlistItem.isin, WatchlistItem.owned)).all())
     total_filings = total_news = total_unusual = 0
@@ -297,7 +338,16 @@ def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
         "| Job | Last run | Status | Result |",
         "| --- | --- | --- | --- |",
     ]
-    for job in ("filings", "news", "triage", "deals", "prices", "explain", "securities"):
+    for job in (
+        "filings",
+        "news",
+        "triage",
+        "deals",
+        "prices",
+        "explain",
+        "concalls",
+        "securities",
+    ):
         run = session.scalars(
             select(Run).where(Run.job == job).order_by(Run.started_at.desc()).limit(1)
         ).first()

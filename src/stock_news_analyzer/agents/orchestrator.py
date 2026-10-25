@@ -1,6 +1,6 @@
 """Orchestrator (agent 0).
 
-Runs the collectors, the triage and the digest on a schedule (config/schedule.yaml, in India
+Runs the collectors, the LLM agents and the digest on a schedule (config/schedule.yaml, in India
 time), one job at a time, and records every run in the `runs` table. The order of work is fixed
 code, not an LLM decision.
 """
@@ -114,6 +114,28 @@ def job_explain(session: Session) -> str:
     return summary
 
 
+# The scheduled run reads transcripts filed in the last few months; `sna concalls run` goes
+# further back.
+CONCALL_DAYS = 120
+
+
+def job_concalls(session: Session) -> str:
+    from stock_news_analyzer.agents.concalls import analyse_calls
+    from stock_news_analyzer.llm import LLM
+
+    if not get_settings().anthropic_api_key:
+        return "skipped: ANTHROPIC_API_KEY is not set in .env"
+    since = datetime.now(IST).date() - timedelta(days=CONCALL_DAYS)
+    result = analyse_calls(session, LLM(session), since=since)
+    summary = (
+        f"{result.analysed} earnings calls analysed, {result.no_text} without text, "
+        f"{result.duplicates} copies, ${result.cost_usd:.4f}"
+    )
+    if result.errors:
+        raise JobError(summary, result.errors)
+    return summary
+
+
 def job_prices(session: Session) -> str:
     from stock_news_analyzer.agents.prices import (
         PriceCollector,
@@ -178,11 +200,12 @@ JOBS: dict[str, Callable[[Session], str]] = {
     "deals": job_deals,
     "prices": job_prices,
     "explain": job_explain,
+    "concalls": job_concalls,
     "securities": job_securities,
     "digest": job_digest,
 }
 # `sna run all`: collect, then judge, then measure, then report.
-RUN_ALL = ("filings", "news", "triage", "deals", "prices", "explain", "digest")
+RUN_ALL = ("filings", "news", "triage", "deals", "prices", "explain", "concalls", "digest")
 
 
 # --- running and recording ---------------------------------------------------

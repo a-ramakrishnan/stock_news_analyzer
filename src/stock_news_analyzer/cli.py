@@ -47,6 +47,11 @@ explain_app = typer.Typer(
     help="Move Explainer (LLM): the likely cause of each unusual day.", no_args_is_help=True
 )
 app.add_typer(explain_app, name="explain")
+concalls_app = typer.Typer(
+    help="Concall Analyst (LLM): earnings calls of stocks you own, and the promise ledger.",
+    no_args_is_help=True,
+)
+app.add_typer(concalls_app, name="concalls")
 deals_app = typer.Typer(help="NSE bulk and block deals.", no_args_is_help=True)
 app.add_typer(deals_app, name="deals")
 app.add_typer(triage_app, name="triage")
@@ -788,7 +793,8 @@ def labels_list(
 @app.command("run")
 def run(
     job: str = typer.Argument(
-        ..., help="filings, news, triage, deals, prices, explain, securities, digest, or all."
+        ...,
+        help="filings, news, triage, deals, prices, explain, concalls, securities, digest, or all.",
     ),
 ) -> None:
     """Run a job now (as the orchestrator would) and record it in the run log."""
@@ -1183,6 +1189,217 @@ def explain_reset(
     with get_session() as session:
         count = reset(session, symbol)
     typer.echo(f"{count} explanations removed; run `sna explain run` to explain them again")
+
+
+# --- earnings calls ------------------------------------------------------------
+
+
+@concalls_app.command("run")
+def concalls_run(
+    symbol: str = typer.Option(
+        None, help="Only this NSE symbol (also works for a stock you only watch)."
+    ),
+    since: str = typer.Option(
+        None, help="Transcripts filed from YYYY-MM-DD (default: the last 400 days)."
+    ),
+    limit: int = typer.Option(None, help="At most this many LLM calls."),
+    yes: bool = typer.Option(False, "--yes", help="Don't ask before spending more than $2."),
+) -> None:
+    """Analyse earnings call transcripts not read yet (Sonnet by default; LLM_MODEL_ANALYSIS).
+
+    Oldest first, so each call is compared with the one before it.
+    """
+    from datetime import timedelta
+
+    from stock_news_analyzer.agents import concalls as cc
+    from stock_news_analyzer.llm import LLM, LLMNotConfigured, month_spend
+
+    start = (
+        datetime.strptime(since, "%Y-%m-%d").date()
+        if since
+        else datetime.now(fl.IST).date() - timedelta(days=400)
+    )
+    model = get_settings().llm_model_analysis
+    with get_session() as session:
+        waiting = cc.pending(session, start, symbol)
+        calls, estimate = cc.estimate(session, waiting, model)
+        typer.echo(
+            f"{len(waiting)} transcript filings to look at since {start:%d %b %Y}: about "
+            f"{calls} call{'' if calls == 1 else 's'} once BSE/NSE copies are merged; "
+            f"roughly ${estimate:.2f} with {model}"
+        )
+        if estimate > 2 and not yes and not typer.confirm("Go ahead?"):
+            raise typer.Exit(1)
+        try:
+            result = cc.analyse_calls(
+                session, LLM(session), since=start, symbol=symbol, limit=limit, progress=typer.echo
+            )
+        except LLMNotConfigured as exc:
+            typer.echo(f"{exc}: add ANTHROPIC_API_KEY=... to .env (see .env.example)")
+            raise typer.Exit(1) from exc
+        spent = month_spend(session)
+    typer.echo(
+        f"{result.analysed} calls analysed, {result.duplicates} copies of the same call, "
+        f"{result.no_text} without text, {result.skipped} not earnings calls; "
+        f"{result.calls} LLM calls, ${result.cost_usd:.4f} "
+        f"(this month ${spent:.2f} of ${get_settings().llm_monthly_budget_usd:.2f})"
+    )
+    if result.waiting:
+        typer.echo(
+            f"{result.waiting} transcripts have no PDF yet: run "
+            "`sna filings attachments --pdf important`, then this again"
+        )
+    for err in result.errors:
+        typer.echo(f"error: {err}")
+    if result.errors:
+        raise typer.Exit(1)
+
+
+@concalls_app.command("list")
+def concalls_list(
+    symbol: str = typer.Argument(None, help="NSE symbol (default: every stock)."),
+    all_rows: bool = typer.Option(
+        False, "--all", help="Also transcripts not analysed (copies, no text, skipped)."
+    ),
+) -> None:
+    """Earnings calls looked at, newest first."""
+    from sqlalchemy import select
+
+    from stock_news_analyzer.models import Company, Concall
+
+    query = (
+        select(Concall, Company.nse_symbol)
+        .join(Company, Company.isin == Concall.isin)
+        .order_by(Concall.published_at.desc())
+    )
+    if symbol:
+        query = query.where(Company.nse_symbol == symbol.upper())
+    if not all_rows:
+        query = query.where(Concall.status == "analysed")
+    with get_session() as session:
+        rows = session.execute(query).all()
+    if not rows:
+        typer.echo("no earnings calls analysed yet; run: sna concalls run")
+        return
+    for c, sym in rows:
+        when = f"{c.published_at.astimezone(fl.IST):%d %b %Y}"
+        if c.status == "analysed":
+            typer.echo(f"{when}  {sym or '-':<11} {c.quarter:<8} {c.tone:<9} #{c.id}")
+            typer.echo(f"      {c.summary}")
+        else:
+            typer.echo(f"{when}  {sym or '-':<11} {c.status}: {c.note}")
+
+
+@concalls_app.command("show")
+def concalls_show(
+    symbol: str = typer.Argument(..., help="NSE symbol."),
+    quarter: str = typer.Option(None, help="e.g. 'Q2 FY27' (default: the latest call)."),
+) -> None:
+    """One call in full: summary, points to watch, changes, guidance, analyst concerns."""
+    from sqlalchemy import select
+
+    from stock_news_analyzer.agents.concalls import quarter_name
+    from stock_news_analyzer.models import Company, Concall, ConcallPoint, Promise
+
+    query = (
+        select(Concall)
+        .join(Company, Company.isin == Concall.isin)
+        .where(Company.nse_symbol == symbol.upper(), Concall.status == "analysed")
+        .order_by(Concall.published_at.desc())
+    )
+    if quarter:
+        query = query.where(Concall.quarter == (quarter_name(quarter) or quarter))
+    with get_session() as session:
+        c = session.scalars(query.limit(1)).first()
+        if c is None:
+            typer.echo(f"no analysed call for {symbol}" + (f" {quarter}" if quarter else ""))
+            raise typer.Exit(1)
+        a = c.analysis or {}
+        typer.echo(f"{symbol.upper()} {c.quarter} earnings call, tone: {c.tone}")
+        typer.echo(f"filed {c.published_at.astimezone(fl.IST):%d %b %Y %H:%M}, concall #{c.id}")
+        typer.echo(f"\n{c.summary}\n\nTo watch:")
+        for point in a.get("action_points", []):
+            typer.echo(f"  - {point}")
+        if a.get("changes"):
+            typer.echo("\nSince the previous call:")
+            for ch in a["changes"]:
+                typer.echo(f"  - {ch['kind']}: {ch['text']}")
+        typer.echo("\nPoints:")
+        points = session.scalars(
+            select(ConcallPoint).where(ConcallPoint.concall_id == c.id).order_by(ConcallPoint.id)
+        ).all()
+        for p in points:
+            mark = "" if p.quote_found else "  (quote not found in the transcript)"
+            typer.echo(f"  - [{p.category}, {p.sentiment}] {p.text}{mark}")
+        if a.get("analyst_concerns"):
+            typer.echo("\nAnalysts pressed on:")
+            for q in a["analyst_concerns"]:
+                typer.echo(f"  - {q['topic']} ({q['answer']} answer): {q['question']}")
+        promises = session.scalars(select(Promise).where(Promise.concall_id == c.id)).all()
+        if promises:
+            typer.echo("\nPromises made:")
+            for p in promises:
+                typer.echo(f"  - #{p.id} {p.statement} (due {p.due}; {p.status})")
+
+
+@concalls_app.command("promises")
+def concalls_promises(
+    symbol: str = typer.Argument(None, help="NSE symbol (default: every stock)."),
+    open_only: bool = typer.Option(False, "--open", help="Only promises not settled yet."),
+) -> None:
+    """The promise ledger: what management committed to, by when, and what became of it."""
+    from sqlalchemy import select
+
+    from stock_news_analyzer.models import Company, Concall, Promise
+
+    query = (
+        select(Promise, Company.nse_symbol, Concall.quarter)
+        .join(Company, Company.isin == Promise.isin)
+        .join(Concall, Concall.id == Promise.concall_id)
+        .order_by(Company.nse_symbol, Promise.due_date.nulls_last(), Promise.id)
+    )
+    if symbol:
+        query = query.where(Company.nse_symbol == symbol.upper())
+    if open_only:
+        query = query.where(Promise.status.in_(("open", "on_track", "revised")))
+    with get_session() as session:
+        rows = session.execute(query).all()
+    if not rows:
+        typer.echo("no promises recorded yet; run: sna concalls run")
+        return
+    today = datetime.now(fl.IST).date()
+    for p, sym, made_in in rows:
+        overdue = (
+            "  OVERDUE"
+            if p.due_date and p.due_date < today and p.status in ("open", "on_track")
+            else ""
+        )
+        typer.echo(
+            f"{sym or '-':<11} #{p.id:<5} due {p.due:<14} {p.status:<9} "
+            f"(said in {made_in}) {p.statement}{overdue}"
+        )
+        if p.status_note:
+            typer.echo(f"{'':<19}{p.status_note}")
+
+
+@concalls_app.command("reset")
+def concalls_reset(
+    symbol: str = typer.Option(None, help="Only this NSE symbol (default: every stock)."),
+    unread_only: bool = typer.Option(
+        False, "--unread-only", help="Only transcripts that had no text or were skipped."
+    ),
+    yes: bool = typer.Option(False, "--yes", help="Don't ask for confirmation."),
+) -> None:
+    """Forget calls (with their points and promises) so `sna concalls run` reads them again."""
+    from stock_news_analyzer.agents.concalls import reset
+
+    what = f"{symbol}'s" if symbol else "all"
+    what += " unread" if unread_only else ""
+    if not yes and not typer.confirm(f"Forget {what} earnings call results?"):
+        raise typer.Exit(1)
+    with get_session() as session:
+        count = reset(session, symbol, only_unread=unread_only)
+    typer.echo(f"{count} transcripts forgotten; run `sna concalls run` to read them again")
 
 
 # --- bulk and block deals ------------------------------------------------------

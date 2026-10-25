@@ -216,7 +216,7 @@ uv run sna concalls promises --open
 | `uv run sna concalls run --symbol BECTORFOOD` | One stock; this also works for a stock you only watch |
 | `uv run sna concalls list LT --all` | Calls read, newest first; `--all` also shows transcripts not read and why (copies, scanned PDFs, AGMs) |
 | `uv run sna concalls show LT --quarter "Q2 FY27"` | One call in full (default: the latest) |
-| `uv run sna concalls promises LT` | The promise ledger, soonest due first; open promises past their date are marked OVERDUE |
+| `uv run sna concalls promises LT` | The promise ledger, soonest due first, with each promise's target and how management put the deadline; open promises past their date are marked OVERDUE. Deadlines like "within 12 months" or "next 3 years" are counted from the call date |
 | `uv run sna concalls reset --symbol LT` | Forget calls (with their points and promises) so they are read again; `--unread-only` retries only those with no text |
 
 The scheduler reads new transcripts at 07:30, before the 08:00 digest. New calls appear in the digest and on the Stock page's **Earnings calls** tab, along with the promise ledger and the transcripts that could not be read.

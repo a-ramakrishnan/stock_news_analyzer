@@ -58,6 +58,23 @@ app.add_typer(triage_app, name="triage")
 app.add_typer(llm_app, name="llm")
 
 
+def entry() -> None:
+    """The `sna` command: the app, with a one-line message when Postgres is not running
+    instead of a long traceback."""
+    try:
+        app()
+    except OperationalError as exc:
+        if "connection" not in str(exc).lower():
+            raise
+        url = get_settings().database_url.rsplit("@", 1)[-1]
+        typer.echo(
+            f"Postgres is not reachable at {url}. Open Docker Desktop, run `make up`, "
+            "then `make health` to check.",
+            err=True,
+        )
+        raise SystemExit(1) from None
+
+
 @app.callback()
 def main() -> None:
     logging.basicConfig(
@@ -1374,12 +1391,13 @@ def concalls_promises(
             if p.due_date and p.due_date < today and p.status in ("open", "on_track")
             else ""
         )
+        due = f"{p.due_date:%d %b %Y}" if p.due_date else "no date"
         typer.echo(
-            f"{sym or '-':<11} #{p.id:<5} due {p.due:<14} {p.status:<9} "
-            f"(said in {made_in}) {p.statement}{overdue}"
+            f"{sym or '-':<11} #{p.id:<5} {p.status:<9} due {due:<11}  {p.statement}{overdue}"
         )
+        typer.echo(f"{'':<17}target: {p.target}; due as said: {p.due}; said in {made_in}")
         if p.status_note:
-            typer.echo(f"{'':<19}{p.status_note}")
+            typer.echo(f"{'':<17}{p.status_note}")
 
 
 @concalls_app.command("reset")

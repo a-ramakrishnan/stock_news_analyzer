@@ -204,6 +204,57 @@ def period_end(text: str | None) -> date | None:
     return None
 
 
+_WORDS = {
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "twelve": 12,
+    "eighteen": 18,
+}
+_NUMBER = r"(\d+(?:\.\d+)?|" + "|".join(_WORDS) + r")(\s+and\s+a\s+half)?"
+# "within the next 12 months", "next three years", "2 to 2.5 years", "in 18 months": the
+# last number before the unit counts.
+_SPAN = re.compile(rf"\b{_NUMBER}(?:\s*(?:-|to)\s*{_NUMBER})?\s+(month|year)s?\b", re.I)
+_NEXT = re.compile(r"\b(?:next|coming)\s+(year|quarter)\b", re.I)
+
+
+def _amount(number: str, half: str | None) -> float:
+    value = _WORDS.get(number.lower()) or float(number)
+    return value + (0.5 if half else 0)
+
+
+def _add_months(day: date, months: int) -> date:
+    index = day.month - 1 + months
+    year, month = day.year + index // 12, index % 12 + 1
+    return date(year, month, min(day.day, _month_end(year, month).day))
+
+
+def due_date(text: str | None, said_on: date) -> date | None:
+    """Due date of a promise: a named period ('Q3 FY27', 'by March 2027'), or a span counted
+    from the day it was said ('within the next 12 months', 'next 3 years', '2 to 2.5 years',
+    'next year'). None if neither is recognised."""
+    end = period_end(text)
+    if end or not text:
+        return end
+    m = _SPAN.search(text)
+    if m:
+        first, first_half, second, second_half, unit = m.groups()
+        amount = _amount(second, second_half) if second else _amount(first, first_half)
+        months = round(amount * (12 if unit.lower() == "year" else 1))
+        return _add_months(said_on, months) if months > 0 else None
+    m = _NEXT.search(text)
+    if m:
+        return _add_months(said_on, 12 if m.group(1).lower() == "year" else 3)
+    return None
+
+
 def quarter_name(text: str | None) -> str | None:
     """'q2fy27', 'Q2 FY2027', "Q2 FY'27" -> 'Q2 FY27'; None if it is not a quarter."""
     m = _PERIOD.search(text or "")
@@ -522,6 +573,7 @@ def _store(
 ) -> None:
     text_norm = _norm(text)
     quarter = quarter_name(answer.quarter) or row.quarter
+    said_on = _parse_day(answer.call_date) or row.published_at.astimezone(IST).date()
     row.status = "analysed" if answer.is_earnings_call else "skipped"
     row.note = None if answer.is_earnings_call else "the model found it is not an earnings call"
     row.quarter = quarter
@@ -553,7 +605,7 @@ def _store(
                     metric=p.metric.strip(),
                     target=p.target.strip(),
                     due=p.due.strip(),
-                    due_date=period_end(p.due),
+                    due_date=due_date(p.due, said_on),
                     quote=p.quote.strip() or None,
                     quote_found=quote_in(p.quote, text_norm),
                 )
@@ -566,6 +618,23 @@ def _store(
             promise.status_concall_id = row.id
             promise.updated_at = datetime.now(UTC)
     session.commit()
+
+
+def fill_due_dates(session: Session) -> int:
+    """Work out due dates the parser could not before (e.g. 'within the next 12 months',
+    stored before such spans were understood). Returns how many promises got one."""
+    rows = session.execute(
+        select(Promise, Concall)
+        .join(Concall, Concall.id == Promise.concall_id)
+        .where(Promise.due_date.is_(None))
+    ).all()
+    filled = 0
+    for promise, call in rows:
+        said_on = call.call_date or call.published_at.astimezone(IST).date()
+        promise.due_date = due_date(promise.due, said_on)
+        filled += promise.due_date is not None
+    session.commit()
+    return filled
 
 
 def analyse_calls(
@@ -586,6 +655,7 @@ def analyse_calls(
     data_dir = data_dir or settings.data_dir
     say = progress or (lambda _line: None)
     result = ConcallResult()
+    fill_due_dates(session)
     spend_before = month_spend(session)
     for doc, company in _ordered(pending(session, since, symbol)):
         if limit is not None and result.calls >= limit:

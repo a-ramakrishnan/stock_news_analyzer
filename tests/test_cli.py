@@ -25,6 +25,19 @@ def test_health_fails_cleanly_when_database_is_down(monkeypatch, tmp_path):
     assert (tmp_path / "data").is_dir()
 
 
+def test_commands_say_plainly_when_database_is_down(monkeypatch, capsys):
+    from stock_news_analyzer.cli import entry
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://sna:sna@localhost:1/sna")
+    monkeypatch.setattr("sys.argv", ["sna", "concalls", "list"])
+    with pytest.raises(SystemExit) as exit_info:
+        entry()
+    assert exit_info.value.code == 1
+    err = capsys.readouterr().err
+    assert "Postgres is not reachable at localhost:1/sna" in err and "make up" in err
+    assert "Traceback" not in err and "sna:sna" not in err  # no password shown
+
+
 @pytest.mark.db
 def test_health_passes_against_running_database(engine, monkeypatch, tmp_path):
     monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))

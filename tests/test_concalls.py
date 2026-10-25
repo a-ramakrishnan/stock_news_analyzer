@@ -59,6 +59,25 @@ def test_period_end(text, expected):
     assert cc.period_end(text) == expected
 
 
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("within the next 12 months", date(2027, 4, 28)),
+        ("next three years", date(2029, 4, 28)),
+        ("2 to 2.5 years", date(2028, 10, 28)),
+        ("two and a half years", date(2028, 10, 28)),
+        ("within 6-9 months", date(2027, 1, 28)),
+        ("next year", date(2027, 4, 28)),
+        ("coming quarter", date(2026, 7, 28)),
+        ("Q3 FY27", date(2026, 12, 31)),  # a named period wins
+        ("soon", None),
+    ],
+)
+def test_due_dates_count_spans_from_the_day_said(text, expected):
+    assert cc.due_date(text, date(2026, 4, 28)) == expected
+    assert cc.due_date("in 1 month", date(2026, 1, 31)) == date(2026, 2, 28)  # month end
+
+
 def test_quarter_names():
     assert cc.quarter_name("q2fy27") == "Q2 FY27"
     assert cc.quarter_name("Q2 FY2027 results") == "Q2 FY27"
@@ -276,6 +295,30 @@ def test_only_owned_stocks_unless_named(loaded, tmp_path):  # noqa: F811
 
 
 @pytest.mark.db
+def test_spans_are_dated_from_the_call_and_old_promises_filled(loaded, tmp_path):  # noqa: F811
+    transcript(loaded, LT, OCT)
+    reply = answer()
+    reply.promises.append(
+        cc.PromiseItem(
+            statement="New plant running",
+            metric="plant",
+            target="running",
+            due="within the next 12 months",
+            quote="",
+        )
+    )
+    llm, _ = _llm(loaded, replying(reply))
+    cc.analyse_calls(loaded, llm, data_dir=tmp_path)
+    plant = loaded.query(Promise).filter_by(statement="New plant running").one()
+    assert plant.due_date == date(2027, 10, 22)  # 12 months from the call on 22 Oct 2026
+
+    plant.due_date = None  # as stored before spans were understood
+    loaded.commit()
+    assert cc.fill_due_dates(loaded) == 1
+    assert plant.due_date == date(2027, 10, 22)
+
+
+@pytest.mark.db
 def test_failures_and_budget_leave_transcripts_unread(loaded, tmp_path):  # noqa: F811
     doc = transcript(loaded, LT, OCT)
 
@@ -341,6 +384,8 @@ def test_calls_reach_digest_dashboard_and_cli(loaded, tmp_path, test_database_ur
     assert "(quote not found in the transcript)" in out.stdout
     out = runner.invoke(app, ["concalls", "promises", "--open"])
     assert out.exit_code == 0 and "Hyderabad plant" in out.stdout
+    assert "due 31 Dec 2026" in out.stdout
+    assert "target: commissioned; due as said: Q3 FY27; said in Q2 FY27" in out.stdout
     out = runner.invoke(app, ["concalls", "run", "--since", "2026-01-01"])
     assert out.exit_code == 0 and "about 1 call once BSE/NSE copies are merged" in out.stdout
     assert "1 transcripts have no PDF yet" in out.stdout  # the fixture's, never downloaded

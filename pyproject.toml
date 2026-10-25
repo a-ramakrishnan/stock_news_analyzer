@@ -24,7 +24,7 @@ dependencies = [
 ]
 
 [project.scripts]
-sna = "stock_news_analyzer.cli:app"
+sna = "stock_news_analyzer.cli:entry"
 
 [dependency-groups]
 dev = [

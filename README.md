@@ -21,7 +21,7 @@ Every command block below can be pasted into Terminal as is; explanations are in
 | 8 | History since Oct 2023: news backfill + `make backfill` | done |
 | 9 | Phase 2 starts: News Triage agent (Claude Haiku), LLM cost log and budget | done |
 | 10 | Move Explainer agent (Claude Sonnet): the likely cause of each unusual day | done |
-| 11 | Bulk/block deals and peer moves, fed to the Move Explainer | this PR |
+| 11 | Bulk/block deals and peer moves, fed to the Move Explainer | done |
 
 ## Run it on a Mac
 

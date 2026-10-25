@@ -7,9 +7,30 @@
 
 These files are the reference for the design. Change them in a pull request like code: edit the text, bump the version line at the top of each changed file, and add an entry below.
 
-Versions: a minor bump (1.1) for corrections and decisions that fit the existing plan, a major bump (2.0) when the plan itself changes, such as agents added, dropped or reordered.
+Versions: a minor bump (1.1) for corrections and decisions that fit the existing plan, a major bump (2.0) when the plan itself changes, such as agents added or dropped, or the architecture changed. Building agents in a different order is a minor change.
 
 ## Changes
+
+### 1.1 · Oct 25, 2026
+
+The design brought up to date with steps 1–11.
+
+- Both files:
+  - a status section: what is built, what is not, and which build step did it
+  - "As built" notes under each module or agent that exists
+- design.md:
+  - data sources marked built or not started
+  - a table mapping the tables built so far to the planned ones
+  - the tech stack as used: curl_cffi, pypdf, APScheduler, Haiku/Sonnet, Streamlit
+  - Phase 1 marked done and Phase 2 in progress
+  - the open decisions answered; two new ones added (next agent, unusual-day threshold)
+- agent-design.md:
+  - the actual LLM costs next to the estimates
+  - Sonnet 5.5 instead of Opus 5.5 for the Move Explainer
+  - the actual schedule and hosting
+  - the one change to the build order: the Move Explainer came before the Event Extractor
+
+The original plan text is unchanged; differences are recorded beside it, so the plan and what was built can be read together.
 
 ### 1.0 · Oct 21, 2026
 
@@ -17,20 +38,3 @@ The original design, written before any code. Moved into the repo on Oct 23, 202
 
 - a version line at the top of each file, and links between the two files
 - the three diagrams (architecture, roadmap, agent team) redrawn as text; the roadmap table was rebuilt from the data sources table
-
-## Where the build differs so far
-
-Decisions made while building steps 0–11, not yet folded into the documents. They become version 1.1 when the documents are next revised.
-
-| Design says | Built | Why |
-| --- | --- | --- |
-| Opus 5.5 for move explanations and the digest | Haiku 5.5 for triage, Sonnet 5.5 for move explanations; the digest has no LLM | Cost: 562 explanations cost $2.42, triage of 4,230 articles $0.29; budget capped at $20 a month |
-| Dashboard later, digest first | Streamlit dashboard built in step 7, alongside the digest | Easier to check the data while building |
-| Event Extractor (7) before Move Explainer (9) | Move Explainer reads filings and triaged news directly | Explanations were useful without typed events |
-| Bulk and block deals in Phase 4 (Market Signals) | Collected now from NSE's CSV download | Needed to explain flow-driven moves |
-| Peers suggested by the Watchlist Manager | Peers from the same industry, editable on the Manage stocks page; used by the Move Explainer | Same |
-| NSE main board only | NSE SME list added | Watchlist includes SME stocks |
-| Triage clusters duplicates by text similarity | Headline matching plus the model linking reports of the same story | Different outlets rarely share wording |
-| "No news found" is rare | About 55% of unusual days stay unexplained | The 2σ threshold flags about 1 day in 20 by design; many are noise |
-
-Still to build: Event Extractor, QA Checker, Order Book Tracker, Concall Analyst, Promise Ledger, Bullion Analyst, Theme & Peer Analyst, Red-flag Monitor, Telegram/email delivery, Analyst Q&A.

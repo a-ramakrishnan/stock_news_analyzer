@@ -149,6 +149,16 @@ def test_important_policy_skips_routine_attachments(watchlist, tmp_path):
     watchlist.refresh(transcript)
     assert transcript.text_status == "ok" and routine.attachment_path is None
 
+    # A re-download also tries BSE's archive folder: older files move from AttachLive.
+    transcript.attachment_path, transcript.text_status = None, "failed"
+    transcript.attachment_url = transcript.attachment_url.replace("/AttachHis/", "/AttachLive/")
+    watchlist.commit()
+    client.downloads.clear()
+    assert collector.fetch_missing_attachments(limit=1) == 1
+    assert "AttachLive" in client.downloads[0]  # tried first, then AttachHis served it
+    watchlist.refresh(transcript)
+    assert "AttachHis" in transcript.attachment_url and transcript.text_status == "ok"
+
     # A later run with the 'all' policy fills it in.
     fetched = fl.FilingsCollector(watchlist, client, tmp_path).fetch_missing_attachments()
     watchlist.refresh(routine)

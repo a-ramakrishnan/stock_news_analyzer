@@ -24,6 +24,7 @@ from stock_news_analyzer.models import (
     NewsTriage,
     PriceDaily,
     Promise,
+    PromiseCheck,
     Run,
     StockMove,
     WatchlistItem,
@@ -613,6 +614,43 @@ def promises(session: Session, isin: str | None = None) -> pd.DataFrame:
             "said_in",
             "quote",
         ],
+    )
+
+
+def credibility(session: Session) -> list[dict]:
+    """Per company: promises kept, kept late, partly kept, missed, dropped, overdue, still to
+    come, and the credibility score (see agents/promises.py)."""
+    from stock_news_analyzer.agents.promises import credibility as score
+
+    return score(session)
+
+
+def promise_checks(session: Session, isin: str) -> pd.DataFrame:
+    """Every check of a stock's promises, newest first, with the documents it rested on."""
+    rows = session.execute(
+        select(PromiseCheck, Promise)
+        .join(Promise, Promise.id == PromiseCheck.promise_id)
+        .where(Promise.isin == isin)
+        .order_by(PromiseCheck.checked_at.desc())
+    ).all()
+    ids = {i for c, _ in rows for i in c.evidence}
+    titles = (
+        dict(session.execute(select(Document.id, Document.title).where(Document.id.in_(ids))).all())
+        if ids
+        else {}
+    )
+    return pd.DataFrame(
+        [
+            {
+                "checked": c.checked_at.astimezone(IST).replace(tzinfo=None),
+                "promise": p.statement,
+                "verdict": c.verdict,
+                "note": c.note,
+                "based_on": " | ".join(titles[i] for i in c.evidence if i in titles),
+            }
+            for c, p in rows
+        ],
+        columns=["checked", "promise", "verdict", "note", "based_on"],
     )
 
 

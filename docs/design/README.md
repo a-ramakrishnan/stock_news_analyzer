@@ -11,6 +11,14 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.3 · Oct 25, 2026
+
+- Step 13, the rest of the Promise Ledger:
+  - promises checked against later results and filings
+  - a credibility score per company
+  - the `promise_checks` table
+  - agent 12 marked built
+
 ### 1.2 · Oct 25, 2026
 
 - Step 12, the Earnings Call Analyst, recorded in both documents:

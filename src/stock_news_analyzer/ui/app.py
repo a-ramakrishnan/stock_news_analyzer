@@ -430,6 +430,20 @@ def earnings_calls(s: dict) -> None:
 
     ledger = load("promises", isin=s["isin"])
     st.markdown("**Promise ledger**")
+    score = next((c for c in load("credibility") if c["isin"] == s["isin"]), None)
+    if score:
+        left, right = st.columns([1, 3], vertical_alignment="center")
+        left.metric(
+            "Promises kept",
+            f"{score['score']:.0%}" if score["score"] is not None else "–",
+            help="Kept 1, kept late or partly kept 0.5, missed, dropped or long overdue 0, "
+            "over the promises settled so far. Shown from 3 settled promises.",
+        )
+        right.caption(
+            f"Of {score['scored']} settled: {score['kept']} kept, {score['kept_late']} kept "
+            f"late, {score['partly']} partly, {score['missed']} missed, {score['dropped']} "
+            f"dropped, {score['overdue']} long overdue. {score['to_come']} still to come."
+        )
     if ledger.empty:
         st.caption("No promises recorded yet.")
     else:
@@ -451,9 +465,24 @@ def earnings_calls(s: dict) -> None:
             },
         )
         st.caption(
-            "Each later call updates a promise when management mentions it again"
+            "Each later call updates a promise when management mentions it again; once its "
+            "date has passed, the Promise Ledger checks it against later results and filings"
             + (f". {overdue} past their date and still open." if overdue else ".")
         )
+        checks = load("promise_checks", isin=s["isin"])
+        if not checks.empty:
+            with st.expander(f"How promises were checked ({len(checks)})"):
+                st.dataframe(
+                    checks,
+                    hide_index=True,
+                    width="stretch",
+                    column_config={
+                        "checked": st.column_config.DatetimeColumn("Checked", format="DD MMM YYYY"),
+                        "promise": st.column_config.TextColumn("Promise", width="medium"),
+                        "note": st.column_config.TextColumn("Finding", width="large"),
+                        "based_on": st.column_config.TextColumn("Based on", width="medium"),
+                    },
+                )
     gaps = load("concall_gaps", isin=s["isin"])
     if not gaps.empty:
         with st.expander(f"Transcripts not read ({len(gaps)})"):

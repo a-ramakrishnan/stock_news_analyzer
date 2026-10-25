@@ -136,6 +136,22 @@ def job_concalls(session: Session) -> str:
     return summary
 
 
+def job_promises(session: Session) -> str:
+    from stock_news_analyzer.agents.promises import check_promises
+    from stock_news_analyzer.llm import LLM
+
+    if not get_settings().anthropic_api_key:
+        return "skipped: ANTHROPIC_API_KEY is not set in .env"
+    result = check_promises(session, LLM(session))
+    summary = (
+        f"{result.checked} promises checked for {result.companies} companies, "
+        f"{result.settled} settled, ${result.cost_usd:.4f}"
+    )
+    if result.errors:
+        raise JobError(summary, result.errors)
+    return summary
+
+
 def job_prices(session: Session) -> str:
     from stock_news_analyzer.agents.prices import (
         PriceCollector,
@@ -201,11 +217,22 @@ JOBS: dict[str, Callable[[Session], str]] = {
     "prices": job_prices,
     "explain": job_explain,
     "concalls": job_concalls,
+    "promises": job_promises,
     "securities": job_securities,
     "digest": job_digest,
 }
 # `sna run all`: collect, then judge, then measure, then report.
-RUN_ALL = ("filings", "news", "triage", "deals", "prices", "explain", "concalls", "digest")
+RUN_ALL = (
+    "filings",
+    "news",
+    "triage",
+    "deals",
+    "prices",
+    "explain",
+    "concalls",
+    "promises",
+    "digest",
+)
 
 
 # --- running and recording ---------------------------------------------------

@@ -52,6 +52,11 @@ concalls_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(concalls_app, name="concalls")
+promises_app = typer.Typer(
+    help="Promise Ledger (LLM): were management's promises kept? Credibility per company.",
+    no_args_is_help=True,
+)
+app.add_typer(promises_app, name="promises")
 deals_app = typer.Typer(help="NSE bulk and block deals.", no_args_is_help=True)
 app.add_typer(deals_app, name="deals")
 app.add_typer(triage_app, name="triage")
@@ -811,7 +816,8 @@ def labels_list(
 def run(
     job: str = typer.Argument(
         ...,
-        help="filings, news, triage, deals, prices, explain, concalls, securities, digest, or all.",
+        help="filings, news, triage, deals, prices, explain, concalls, promises, securities, "
+        "digest, or all.",
     ),
 ) -> None:
     """Run a job now (as the orchestrator would) and record it in the run log."""
@@ -1418,6 +1424,94 @@ def concalls_reset(
     with get_session() as session:
         count = reset(session, symbol, only_unread=unread_only)
     typer.echo(f"{count} transcripts forgotten; run `sna concalls run` to read them again")
+
+
+# --- promise ledger -------------------------------------------------------------
+
+
+@promises_app.command("check")
+def promises_check(
+    symbol: str = typer.Option(None, help="Only this NSE symbol."),
+    limit: int = typer.Option(None, help="At most this many companies (LLM calls)."),
+) -> None:
+    """Check promises past their due date against later results, filings and calls."""
+    from stock_news_analyzer.agents.promises import check_promises, due
+    from stock_news_analyzer.llm import LLM, LLMNotConfigured, month_spend
+
+    with get_session() as session:
+        waiting = due(session, symbol)
+        count = sum(len(p) for _, p in waiting)
+        typer.echo(
+            f"{count} promises past their due date at {len(waiting)} companies "
+            f"(already-checked ones are skipped until new documents arrive; about $0.05 a "
+            "company)"
+        )
+        try:
+            result = check_promises(
+                session, LLM(session), symbol=symbol, limit=limit, progress=typer.echo
+            )
+        except LLMNotConfigured as exc:
+            typer.echo(f"{exc}: add ANTHROPIC_API_KEY=... to .env (see .env.example)")
+            raise typer.Exit(1) from exc
+        spent = month_spend(session)
+    typer.echo(
+        f"{result.checked} promises checked, {result.settled} settled; {result.calls} LLM calls, "
+        f"${result.cost_usd:.4f} (this month ${spent:.2f} of "
+        f"${get_settings().llm_monthly_budget_usd:.2f})"
+    )
+    for err in result.errors:
+        typer.echo(f"error: {err}")
+    if result.errors:
+        raise typer.Exit(1)
+
+
+@promises_app.command("list")
+def promises_list(
+    symbol: str = typer.Argument(None, help="NSE symbol (default: every stock)."),
+    open_only: bool = typer.Option(False, "--open", help="Only promises not settled yet."),
+) -> None:
+    """The promise ledger (same as `sna concalls promises`)."""
+    concalls_promises(symbol, open_only)
+
+
+@promises_app.command("scores")
+def promises_scores() -> None:
+    """Management credibility: the share of each company's promises kept."""
+    from stock_news_analyzer.agents.promises import MIN_SCORED, credibility
+
+    with get_session() as session:
+        rows = credibility(session)
+    if not rows:
+        typer.echo("no promises recorded yet; run: sna concalls run")
+        return
+    for c in rows:
+        score = f"{c['score']:.0%}" if c["score"] is not None else "–"
+        typer.echo(
+            f"{c['symbol'] or '-':<11} {score:>5} of {c['scored']:<3} "
+            f"kept {c['kept']}, kept late {c['kept_late']}, partly {c['partly']}, "
+            f"missed {c['missed']}, dropped {c['dropped']}, overdue {c['overdue']}; "
+            f"{c['to_come']} still to come"
+        )
+    typer.echo(
+        f"Score: kept 1, kept late or partly 0.5, missed, dropped or long overdue 0; shown from "
+        f"{MIN_SCORED} settled promises. Run `sna promises check` to settle more."
+    )
+
+
+@promises_app.command("reset")
+def promises_reset(
+    symbol: str = typer.Option(None, help="Only this NSE symbol (default: every stock)."),
+    yes: bool = typer.Option(False, "--yes", help="Don't ask for confirmation."),
+) -> None:
+    """Forget promise checks; settled promises go back to what the calls last said."""
+    from stock_news_analyzer.agents.promises import reset
+
+    what = f"{symbol}'s" if symbol else "all"
+    if not yes and not typer.confirm(f"Forget {what} promise checks?"):
+        raise typer.Exit(1)
+    with get_session() as session:
+        count = reset(session, symbol)
+    typer.echo(f"{count} promises reopened; run `sna promises check` to check them again")
 
 
 # --- bulk and block deals ------------------------------------------------------

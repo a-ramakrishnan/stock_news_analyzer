@@ -1,0 +1,51 @@
+# Step 16: Results Reader
+
+**Goal:** record each watchlist company's reported figures from its results filings: revenue, profit and margins by quarter, or by half year for SME companies. With these, the order metrics for companies like KMEW and DIACABS no longer depend on order-book documents that leave revenue out.
+
+## What was added
+
+| Piece | Why |
+| --- | --- |
+| `results`, `result_filings` tables (migration 0016) | Each company's figures per period (quarter, half year, year); each results filing read and its outcome |
+| `agents/results.py` | Reads results filings (Haiku), converts and checks the figures, and builds the per-period table with growth and margins |
+| `results` job, 07:20 daily | New results before the earnings calls and order books |
+| `sna results run/list/coverage/reset`, `make results` | Read, see a company's periods, see what was found per stock, start over |
+| Order Book Tracker | Revenue the order-book documents left out now comes from results; half-yearly reporters get 12-month revenue from two half years |
+| Digest | A "Results" section: revenue and profit with their change on a year earlier, and the EBITDA margin |
+| Stock page | A **Results** tab: latest revenue, profit and EBITDA margin; revenue chart; the table |
+
+## How a filing is read
+
+1. **Group:** results filings are grouped by company and the quarter they report. The BSE and NSE copies, the board meeting outcome and the newspaper advertisement of the same results fall in one group.
+2. **Best first:** in each group the filing titled as results is read first, then the board meeting outcome, then the newspaper copy. Once a period is read, the rest of its group is marked as copies without an LLM call.
+3. **Only the statement:** a results PDF also carries auditors' reports and notes. Only the covering letter's start and the text around each "revenue from operations" (for banks, "interest earned" or "total income") is sent, at most 40,000 characters, so a quarter costs about $0.002 with Haiku.
+4. **Copy, don't convert:** Haiku copies each figure exactly as written ("67,00,000.00", "(234.10)" for a loss) and names the statement's unit. The code turns them into Rs crore and checks each one against the filing's text. The model does no arithmetic.
+5. **Three periods per filing:** the statement's columns also give the previous quarter and the same quarter a year earlier. Those periods are filled at once, marked as coming from a comparative column, and replaced when their own filing is read.
+
+## Choices
+
+- **Haiku, not Sonnet:** copying numbers from a table is a reading task, and every figure is checked against the text. Sonnet would cost about 20 times as much for two years of results.
+- **Consolidated first:** the consolidated statement is used where the filing has one, else standalone. The basis is stored per period.
+- **EBITDA in code:** results statements don't report EBITDA. It is computed as profit before tax + finance costs + depreciation − other income.
+- **Fill, don't replace:** where an order-book document gave a quarter's revenue, that figure stays; results fill only the gaps (marked `*` in `sna orders book`). L&T's figures already matched its published numbers.
+- **Half-yearly SME reporters:** without four quarters, revenue is the 12 months to the latest order book from two half years (or the year). Book-to-bill then uses the orders the company announced in those 12 months when it didn't report its inflow. The dashboard says which was used.
+
+## On the Mac
+
+```
+git checkout main
+git pull
+uv run sna db upgrade
+uv run sna results run
+uv run sna results coverage
+uv run sna results list KMEW
+uv run sna orders book KMEW
+uv run sna orders peers
+make scheduler
+```
+
+`results run` reads two years of results, shows its cost estimate first (well under $1) and asks before spending more than $1.
+
+## Next
+
+The rest of the Event Extractor (capex, guidance, management, ratings, fundraises), with the QA Checker.

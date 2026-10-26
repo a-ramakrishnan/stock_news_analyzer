@@ -33,7 +33,7 @@ from stock_news_analyzer.models import (
 )
 from stock_news_analyzer.sources.announcements import IST
 from stock_news_analyzer.sources.corporate_actions import parse_corporate_actions
-from stock_news_analyzer.sources.exchange_http import ExchangeError
+from stock_news_analyzer.sources.exchange_http import SME_SERIES, ExchangeError
 from stock_news_analyzer.sources.prices import (
     FULL_BHAVCOPY_URL,
     INDEX_CLOSE_URL,
@@ -250,8 +250,9 @@ def refresh_corporate_actions(
         if not company.nse_symbol or (isins is not None and company.isin not in isins):
             continue
         try:
+            index = "sme" if company.nse_series in SME_SERIES else "equities"
             actions = parse_corporate_actions(
-                client.nse_corporate_actions(company.nse_symbol, start, end)
+                client.nse_corporate_actions(company.nse_symbol, start, end, index=index)
             )
         except ExchangeError as exc:
             errors.append(f"{company.nse_symbol} corporate actions: {exc}")

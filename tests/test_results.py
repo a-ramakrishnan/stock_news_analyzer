@@ -508,3 +508,49 @@ def test_results_reach_digest_dashboard_cli_and_scheduler(
     at.run()
     assert not at.exception, at.exception
     assert any(m.label == "Revenue, Q2 FY27" and m.value == "Rs 67,000 cr" for m in at.metric)
+
+
+@pytest.mark.db
+def test_probe_shows_the_results_listing_and_an_xbrl_file(
+    loaded,  # noqa: F811
+    test_database_url,
+    monkeypatch,
+    tmp_path,
+):
+    from test_xbrl import SAMPLE
+    from typer.testing import CliRunner
+
+    from stock_news_analyzer.cli import app
+    from stock_news_analyzer.config import get_settings
+    from stock_news_analyzer.sources import exchange_http
+
+    class FakeNSE:
+        def __init__(self, *a, **kw):
+            pass
+
+        def nse_financial_results(self, symbol, period="Quarterly", index="equities"):
+            if period != "Quarterly":
+                raise exchange_http.ExchangeError("NSE returned HTTP 404")
+            return [
+                {
+                    "symbol": symbol,
+                    "toDate": "30-Jun-2026",
+                    "consolidated": "Consolidated",
+                    "xbrl": "/corporate/xbrl/LT_Q1.xml",
+                }
+            ]
+
+        def download(self, exchange, urls):
+            assert urls == ["https://nsearchives.nseindia.com/corporate/xbrl/LT_Q1.xml"]
+            return urls[0], SAMPLE, True
+
+    monkeypatch.setattr(exchange_http, "ExchangeClient", FakeNSE)
+    monkeypatch.setenv("DATABASE_URL", test_database_url)
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    get_settings.cache_clear()
+    out = CliRunner().invoke(app, ["results", "probe", "LT"])
+    assert out.exit_code == 0, out.stdout
+    assert "Quarterly (equities): 1 filings" in out.stdout
+    assert "Half-Yearly (equities): FAILED ExchangeError" in out.stdout
+    assert "3 facts" in out.stdout and "RevenueFromOperations" in out.stdout
+    assert (tmp_path / "probe" / "LT.xml").read_bytes() == SAMPLE

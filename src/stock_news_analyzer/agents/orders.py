@@ -753,8 +753,18 @@ def summary(session: Session, isin: str, today: date | None = None) -> dict:
     books = [r for r in q if r["order_book_cr"] is not None]
     latest = books[-1] if books else None
     if not full_year and latest:
-        trailing = rs.trailing_revenue(session, isin, latest["period_end"])
+        # The latest order book whose 12 months of revenue the results cover (a company that
+        # just moved from half-yearly to quarterly results may not cover the very latest).
+        anchor, trailing = next(
+            (
+                (r, t)
+                for r in reversed(books)
+                if (t := rs.trailing_revenue(session, isin, r["period_end"]))
+            ),
+            (latest, None),
+        )
         if trailing:
+            latest = anchor
             revenue, made_of = trailing
             revenue_from = f"results, {made_of}"
             year = [

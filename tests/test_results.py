@@ -276,6 +276,14 @@ def test_trailing_revenue_from_quarters_or_half_years(loaded):  # noqa: F811
     assert rs.trailing_revenue(loaded, LT, date(2026, 9, 30)) == (460, "4 quarters")
     assert rs.trailing_revenue(loaded, LT, date(2026, 6, 30)) is None
     assert rs.trailing_revenue(loaded, KVB, date(2026, 9, 30)) == (640, "2 half years")
+    # Moved to quarterly results after H1 FY27: two quarters and the half year before them.
+    period(date(2026, 12, 31), 3, 200, KVB)
+    period(date(2027, 3, 31), 3, 210, KVB)
+    loaded.commit()
+    assert rs.trailing_revenue(loaded, KVB, date(2027, 3, 31)) == (
+        750,
+        "2 quarters and a half year",
+    )
     assert rs.quarter_revenue(loaded, LT)["Q2 FY27"] == 130
 
 
@@ -323,6 +331,13 @@ def test_order_metrics_use_results_revenue_where_order_books_lack_it(loaded):  #
     assert s["years_of_revenue"] == pytest.approx(2400 / 1200)
     assert s["inflow_cr"] == 800 and s["inflow_from"] == "announced"  # orders in the 12 months
     assert s["book_to_bill"] == pytest.approx(800 / 1200)
+
+    # A newer order book whose 12 months the results don't cover yet: the measures stay on
+    # the latest book they can be worked out for.
+    _snapshot(loaded, "Q3 FY27", 2600, None, None)
+    loaded.commit()
+    s = ob.summary(loaded, LT, today=date(2027, 1, 20))
+    assert s["order_book_quarter"] == "Q2 FY27" and s["years_of_revenue"] == pytest.approx(2)
 
     _snapshot(loaded, "Q1 FY27", 2200, 100, None)
     loaded.commit()

@@ -540,7 +540,8 @@ class ResultFiling(Base):
 
     status: 'read' (its figures are in `results`), 'duplicate' (that period was already read
     from another filing, e.g. the other exchange's copy), 'no_figures' (no results statement
-    in it, e.g. a board meeting about something else), 'no_text' (a scanned PDF).
+    in it, e.g. a board meeting about something else), 'no_text' (a scanned PDF), 'failed' (the
+    model's answer was unusable, e.g. cut off).
     """
 
     __tablename__ = "result_filings"

@@ -38,6 +38,11 @@ class LLMNotConfigured(LLMError):
     """No API key in .env."""
 
 
+class BadAnswer(LLMError):
+    """The model answered, but not usably: declined, cut off, or not matching the schema. Asking
+    again with the same input is likely to give the same answer."""
+
+
 class BudgetExceeded(LLMError):
     """This month's spend has reached LLM_MONTHLY_BUDGET_USD."""
 
@@ -121,7 +126,7 @@ class LLM:
             # here, without the response (so its tokens can't be logged).
             call.ok, call.error = False, f"answer did not match the schema: {exc}"[:2000]
             self._record(call)
-            raise LLMError(call.error) from exc
+            raise BadAnswer(call.error) from exc
 
         usage = response.usage
         call.input_tokens = usage.input_tokens or 0
@@ -138,7 +143,7 @@ class LLM:
             call.ok, call.error = False, "no structured answer in the response"
         self._record(call)
         if not call.ok:
-            raise LLMError(call.error)
+            raise BadAnswer(call.error)
         return parsed
 
     def _record(self, call: LlmCall) -> None:

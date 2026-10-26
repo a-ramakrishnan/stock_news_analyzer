@@ -236,6 +236,25 @@ def test_order_book_read_once_a_quarter_best_document_first(filings):
     ob.update_snapshots(filings, llm, since=date(2026, 1, 1))
     assert len(client.requests) == 1  # this quarter is done
 
+    # A corporate presentation filed the next quarter repeating the same figures.
+    doc(
+        filings,
+        LT,
+        datetime(2027, 2, 10, 18, 0, tzinfo=IST),
+        "investor_presentation",
+        "Corporate presentation",
+        "Order book Rs 6,50,000 crore. " * 30,
+    )
+    ob.update_snapshots(filings, llm, since=date(2026, 1, 1))
+    q3 = filings.query(OrderBookSnapshot).filter_by(quarter="Q3 FY27").one()
+    assert q3.order_book_cr is None and "same order book and revenue as Q2 FY27" in q3.note
+
+    # One stored earlier (before this guard) is left out of the figures.
+    q3.order_book_cr, q3.revenue_cr = snap.order_book_cr, snap.revenue_cr
+    filings.commit()
+    books = [r["order_book_cr"] for r in ob.quarterly(filings, LT) if r["order_book_cr"]]
+    assert books == [650000]
+
 
 @pytest.mark.db
 def test_a_quarter_without_an_order_book_tries_new_documents_only(filings):

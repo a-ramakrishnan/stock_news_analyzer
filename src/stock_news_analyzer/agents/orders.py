@@ -542,6 +542,14 @@ def _store_snapshot(session, company, quarter, doc, text, answer: SnapshotAnswer
         )
     ).first() or _new_snapshot(session, company, quarter)
     text_norm = _norm(text)
+    copy_of = _same_figures(session, company.isin, quarter, answer)
+    if copy_of:
+        # A later document repeating an earlier quarter's figures (a re-filed or general
+        # presentation): not this quarter's order book.
+        row.note = f"same order book and revenue as {copy_of}: the earlier quarter's figures"
+        row.tried = sorted(set(row.tried or []) | tried)
+        session.commit()
+        return row
     if answer.order_book.value_cr is not None:
         row.order_book_cr = _dec(answer.order_book.value_cr)
         row.inflow_cr = _dec(answer.inflow.value_cr)
@@ -560,6 +568,23 @@ def _store_snapshot(session, company, quarter, doc, text, answer: SnapshotAnswer
     row.tried = sorted(set(row.tried or []) | tried)
     session.commit()
     return row
+
+
+def _same_figures(session, isin: str, quarter: str, answer: SnapshotAnswer) -> str | None:
+    """The other quarter with exactly this order book and revenue, if any."""
+    book, revenue = _dec(answer.order_book.value_cr), _dec(answer.revenue.value_cr)
+    if book is None:
+        return None
+    return session.scalar(
+        select(OrderBookSnapshot.quarter).where(
+            OrderBookSnapshot.isin == isin,
+            OrderBookSnapshot.quarter != quarter,
+            OrderBookSnapshot.order_book_cr == book,
+            OrderBookSnapshot.revenue_cr == revenue
+            if revenue is not None
+            else OrderBookSnapshot.revenue_cr.is_(None),
+        )
+    )
 
 
 def apply_scales(session: Session, isin: str | None = None) -> int:
@@ -650,9 +675,16 @@ def quarterly(session: Session, isin: str) -> list[dict]:
             r["unvalued"] += 1
         else:
             r["announced_cr"] += float(o.value_cr)
-    for s in session.scalars(select(OrderBookSnapshot).where(OrderBookSnapshot.isin == isin)):
-        if s.order_book_cr is None:
-            continue
+    seen = set()
+    snapshots = session.scalars(
+        select(OrderBookSnapshot)
+        .where(OrderBookSnapshot.isin == isin)
+        .order_by(OrderBookSnapshot.period_end)
+    )
+    for s in snapshots:
+        if s.order_book_cr is None or (s.order_book_cr, s.revenue_cr) in seen:
+            continue  # a later quarter repeating an earlier one's figures is left out
+        seen.add((s.order_book_cr, s.revenue_cr))
         r = row(s.quarter)
         r["inflow_cr"], r["order_book_cr"] = _f(s.inflow_cr), _f(s.order_book_cr)
         r["revenue_cr"] = _f(s.revenue_cr)

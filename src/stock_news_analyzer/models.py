@@ -582,7 +582,7 @@ class QuarterlyResult(Base):
     finance_costs_cr: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     depreciation_cr: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     pbt_cr: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
-    pat_cr: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    pat_cr: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))  # attributable to owners
     eps: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))  # Rs, basic
     unit: Mapped[str] = mapped_column(String(16))  # as the statement gives it: lakh, crore...
     # Each figure as written, and whether it was found in the filing's text.

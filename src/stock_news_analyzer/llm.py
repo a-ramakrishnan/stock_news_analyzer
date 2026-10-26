@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -114,6 +114,12 @@ class LLM:
             )
         except anthropic.APIError as exc:
             call.ok, call.error = False, f"{type(exc).__name__}: {exc}"[:2000]
+            self._record(call)
+            raise LLMError(call.error) from exc
+        except ValidationError as exc:
+            # The SDK parses the answer before returning: a cut-off or malformed answer raises
+            # here, without the response (so its tokens can't be logged).
+            call.ok, call.error = False, f"answer did not match the schema: {exc}"[:2000]
             self._record(call)
             raise LLMError(call.error) from exc
 

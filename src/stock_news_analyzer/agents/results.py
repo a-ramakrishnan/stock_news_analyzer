@@ -87,15 +87,16 @@ Answer:
 - unit: the unit the statement's figures are in, as its heading says ("Rs in lakhs" is lakh,
   "Rs in crore" is crore, "Rs in million" is million; rupees if figures are in plain rupees).
 - columns: one per period column of that statement: the quarter just ended, the previous
-  quarter, the same quarter a year earlier, and the year-to-date or year columns. SME
-  companies report half years instead of quarters. For each column:
+  quarter, the same quarter a year earlier, and any half-year or full-year columns. Leave out
+  nine-month columns. SME companies report half years instead of quarters. For each column:
   - period_end: YYYY-MM-DD, the last day of the period.
-  - months: the period's length: 3 (a quarter), 6 (a half year), 9 (nine months) or 12 (a
-    year).
+  - months: the period's length: 3 (a quarter), 6 (a half year) or 12 (a year).
   - revenue: revenue from operations (banks and NBFCs: total income).
   - other_income, finance_costs (interest cost), depreciation (depreciation and
     amortisation), pbt (profit before tax, after exceptional items), pat (net profit for the
-    period; for consolidated, before non-controlling interests), eps (basic EPS in rupees).
+    period; for consolidated results, the profit attributable to owners of the company, not
+    the total including non-controlling interests, when the statement gives it), eps (basic
+    EPS in rupees).
   Copy each figure exactly as written in that column, e.g. "12,345.67" or "(234.10)" for a
   loss; null when the statement does not give it. Do not convert units or compute anything.
 - note: one short sentence on what the document is.

@@ -1779,7 +1779,8 @@ def results_run(
     typer.echo(
         f"{result.periods} periods stored from {result.filings} filings ({result.duplicates} "
         f"copies of a period already read, {result.no_figures} without a results statement, "
-        f"{result.no_text} without text); {result.calls} LLM calls, ${result.cost_usd:.4f} "
+        f"{result.no_text} without text, {result.failed} unusable answers); "
+        f"{result.calls} LLM calls, ${result.cost_usd:.4f} "
         f"(this month ${spent:.2f} of ${get_settings().llm_monthly_budget_usd:.2f})"
     )
     if result.waiting:
@@ -1833,18 +1834,20 @@ def results_coverage() -> None:
         rows = rs.coverage(session)
     typer.echo(
         f"{'':<11} {'filings':>7} {'read':>5} {'copies':>6} {'none':>5} {'no text':>7} "
-        f"{'no PDF':>6} {'unread':>6} {'periods':>7}  latest"
+        f"{'failed':>6} {'no PDF':>6} {'unread':>6} {'periods':>7}  latest"
     )
     for r in rows:
         typer.echo(
             f"{r['symbol']:<11} {r['filings']:>7} {r['read']:>5} {r['copies']:>6} "
-            f"{r['no_figures']:>5} {r['no_text']:>7} {r['no_pdf']:>6} {r['unread']:>6} "
+            f"{r['no_figures']:>5} {r['no_text']:>7} {r['failed']:>6} {r['no_pdf']:>6} "
+            f"{r['unread']:>6} "
             f"{r['periods']:>7}  {r['latest'] or '–'}"
         )
     typer.echo(
         "copies: the same period already read from another filing. none: no results statement "
-        "in it. no text: a scanned PDF. no PDF: run `sna filings attachments --pdf important`. "
-        "unread: run `sna results run`."
+        "in it. no text: a scanned PDF. failed: the model's answer was unusable; the period's "
+        "next filing is tried instead. no PDF: run `sna filings attachments --pdf important`. "
+        "unread: run `sna results run` (filings older than 800 days stay unread)."
     )
 
 

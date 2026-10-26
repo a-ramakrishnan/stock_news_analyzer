@@ -148,6 +148,38 @@ def test_excerpt_keeps_the_statements_and_drops_the_rest():
     assert rs.excerpt("No statement here.") == "No statement here."
 
 
+def test_excerpt_finds_the_statement_behind_a_long_press_release():
+    release = "".join(
+        f"Revenue from operations for segment {i} rose 12% to Rs 6,707 crore.\n" + "Text. " * 900
+        for i in range(10)
+    )
+    part = rs.excerpt("Press release. " + release + STATEMENT)
+    assert "Revenue from operations 67,00,000.00 60,00,000.00" in part
+
+
+@pytest.mark.db
+def test_an_unusable_answer_is_recorded_and_the_next_filing_tried(loaded):  # noqa: F811
+    first = results_filing(loaded)
+    second = results_filing(loaded, OCT.replace(minute=20), "Outcome of Board Meeting")
+    answers = [None, answer()]
+
+    def reply(_kwargs):
+        parsed = answers.pop(0)
+        if parsed is None:
+            rs.ResultsAnswer.model_validate_json('{"is_results": true, "basis": "')
+        return SimpleNamespace(
+            usage=usage(8000, 1200), parsed_output=parsed, stop_reason="end_turn"
+        )
+
+    llm, client = _llm(loaded, reply)
+    result = rs.read_results(loaded, llm)
+    assert (result.failed, result.periods, result.calls) == (1, 4, 2)
+    assert client.requests[0]["max_tokens"] == rs.MAX_TOKENS
+    assert loaded.get(ResultFiling, first.id).status == "failed"
+    assert loaded.get(ResultFiling, second.id).status == "read"
+    assert rs.pending(loaded) == []  # not asked again on the next run
+
+
 @pytest.mark.db
 def test_reads_a_quarter_and_its_comparatives_once(loaded):  # noqa: F811
     bse = results_filing(loaded)
@@ -342,7 +374,8 @@ def test_results_reach_digest_dashboard_cli_and_scheduler(
     out = runner.invoke(app, ["results", "coverage"])
     assert out.exit_code == 0
     lt = next(line for line in out.stdout.splitlines() if line.startswith("LT "))
-    assert lt.split()[1:9] == ["1", "1", "0", "0", "0", "0", "0", "4"] and lt.endswith("Q2 FY27")
+    assert lt.split()[1:10] == ["1", "1", "0", "0", "0", "0", "0", "0", "4"]
+    assert lt.endswith("Q2 FY27")
     assert run_job("results").summary.startswith("skipped")
 
     at = AppTest.from_string(

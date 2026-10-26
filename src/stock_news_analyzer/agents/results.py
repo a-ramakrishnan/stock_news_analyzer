@@ -35,7 +35,7 @@ from stock_news_analyzer.agents.concalls import (
     quarter_of,
 )
 from stock_news_analyzer.config import get_settings
-from stock_news_analyzer.llm import LLM, PRICES, BudgetExceeded, LLMError, month_spend
+from stock_news_analyzer.llm import LLM, PRICES, BadAnswer, BudgetExceeded, LLMError, month_spend
 from stock_news_analyzer.models import (
     Company,
     Document,
@@ -64,6 +64,10 @@ WINDOW_CHARS = 9000
 MAX_WINDOWS = 6
 MAX_CHARS = 40_000
 OUTPUT_TOKENS = 1500  # a typical answer, for estimates
+MAX_TOKENS = 4000  # an answer longer than this has gone wrong (repeating itself)
+# A statement row: the revenue line followed by at least three figures on the same line (a
+# sentence in a press release rarely has more than two).
+_ROW_FIGURES = re.compile(r"\d[\d,]*\.\d+|\d{1,3}(?:,\d{2,3})+")
 # The statement's unit, in Rs crore.
 UNITS = {
     "crore": Decimal(1),
@@ -131,6 +135,7 @@ class ResultsResult:
     duplicates: int = 0
     no_figures: int = 0
     no_text: int = 0
+    failed: int = 0  # the model's answer was unusable
     waiting: int = 0  # PDF not downloaded yet
     calls: int = 0
     cost_usd: Decimal = Decimal(0)
@@ -218,12 +223,23 @@ def statement_text(doc: Document) -> str:
     return "\n".join(line for line in lines if line)
 
 
+def _line(text: str, start: int) -> str:
+    """The rest of the line from `start`, at most 200 characters (a row's figures follow its
+    label closely)."""
+    end = text.find("\n", start)
+    return text[start : end if end >= 0 else len(text)][:200]
+
+
 def excerpt(text: str) -> str:
-    """The parts of a results filing around its revenue lines, at most MAX_CHARS."""
+    """The parts of a results filing around its revenue lines, at most MAX_CHARS. Revenue
+    lines in a table (followed by figures) come first: a press release that mentions revenue
+    in every paragraph would otherwise use up the windows before the statement."""
     low = text.lower()
     starts = sorted({m.start() for a in ANCHORS for m in re.finditer(re.escape(a), low)})
     if not starts:
         return text[:MAX_CHARS]
+    rows = [s for s in starts if len(_ROW_FIGURES.findall(_line(text, s))) >= 3]
+    starts = rows or starts
     spans = [(0, HEAD_CHARS)]
     for s in starts:
         a, b = max(0, s - LEAD_CHARS), s - LEAD_CHARS + WINDOW_CHARS
@@ -395,14 +411,28 @@ def read_results(
                 return result
             try:
                 answer = llm.structured(
-                    "results", model, SYSTEM, _prompt(company, quarter, doc, text), ResultsAnswer
+                    "results",
+                    model,
+                    SYSTEM,
+                    _prompt(company, quarter, doc, text),
+                    ResultsAnswer,
+                    max_tokens=MAX_TOKENS,
                 )
             except BudgetExceeded as exc:
                 result.errors.append(str(exc))
                 say(f"stopped: {exc}")
                 session.commit()
                 return result
-            except LLMError as exc:
+            except BadAnswer as exc:
+                # Asking again would likely fail the same way: record it and try the
+                # period's next filing.
+                result.calls += 1
+                tries += 1
+                result.failed += 1
+                result.errors.append(f"{company.nse_symbol or isin} {quarter}: {exc}")
+                _mark(session, doc, company, "failed", note=str(exc)[:500], model=model)
+                continue
+            except LLMError as exc:  # the API was unreachable: try again on the next run
                 result.errors.append(f"{company.nse_symbol or isin} {quarter}: {exc}")
                 break
             result.calls += 1
@@ -539,6 +569,7 @@ def coverage(session: Session) -> list[dict]:
                 "copies": status.count("duplicate"),
                 "no_figures": status.count("no_figures"),
                 "no_text": status.count("no_text"),
+                "failed": status.count("failed"),
                 "no_pdf": sum(1 for t, s in docs if s is None and t == "pending"),
                 "unread": sum(1 for t, s in docs if s is None and t != "pending"),
                 "periods": session.scalar(

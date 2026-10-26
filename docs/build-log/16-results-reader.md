@@ -51,6 +51,13 @@ make scheduler
 - **A cut-off answer stopped the run.** The SDK checks the answer against the schema before returning it, so a malformed answer raised a pydantic error the agents didn't catch. It is now an ordinary LLM error: that filing is skipped and tried again on the next run, and the rest carry on. Nine-month columns, which aren't stored, are no longer asked for, so answers are shorter.
 - **Profit included minority interests.** KMEW's consolidated profit didn't match its EPS (Q3 FY26: Rs 33 crore profit but EPS 13.35, against Rs 12 crore and 10.37 the quarter before), because its subsidiaries have outside partners. Profit is now the profit attributable to owners, the figure EPS is based on.
 
+## After the second run
+
+237 periods from 136 filings for $0.23. Two more things showed up:
+
+- **L&T's last two quarters weren't found.** Its results come with a press release that mentions "revenue from operations" in paragraph after paragraph. Those mentions used up the text windows before the statement itself. Revenue lines followed by three or more figures, the statement's rows, are now picked first.
+- **An unusable answer was asked again every day.** Haiku once repeated itself until 8,000 tokens, and once returned broken JSON. Such a filing is now marked `failed` and the period's next filing is tried instead. Transient API errors are still retried on the next run. Answers are capped at 4,000 tokens.
+
 ## Next
 
 The rest of the Event Extractor (capex, guidance, management, ratings, fundraises), with the QA Checker.

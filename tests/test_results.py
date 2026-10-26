@@ -218,6 +218,35 @@ def test_reads_a_quarter_and_its_comparatives_once(loaded):  # noqa: F811
 
 
 @pytest.mark.db
+def test_a_key_figures_table_is_used_when_there_is_no_statement(loaded):  # noqa: F811
+    text = (
+        "Press release. L&T's Q1 results.\nAnnexure 1 Group Performance - Key Parameters\n"
+        "Key Parameters (in Rs crore) Q1 FY'26 Q1 FY'27 % Var\n"
+        "Revenue from operations 63,679 67,942 7%\n"
+        "Finance costs 782 539 (31%)\nDepreciation & Amortisation 1,033 1,032 0%\n"
+        "Consolidated Profit After Tax 3,617 4,123 14%\n" + PADDING
+    )
+    results_filing(
+        loaded, datetime(2026, 7, 28, 16, 0, tzinfo=IST), "Outcome of Board Meeting", text=text
+    )
+    key = [
+        col("2026-06-30", 3, "67,942", None, "539", "1,032", None, "4,123", None),
+        col("2025-06-30", 3, "63,679", None, "782", "1,033", None, "3,617", None),
+    ]
+    llm, client = _llm(loaded, replying(answer(key, unit="crore")))
+    rs.read_results(loaded, llm)
+    assert (
+        "Key Parameters" in rs.SYSTEM
+        and "Key Parameters" in client.requests[0]["system"][0]["text"]
+    )
+    shown = {r["period"]: r for r in rs.table(loaded, LT)}
+    q1 = shown["Q1 FY27"]
+    assert (q1["revenue_cr"], q1["pat_cr"]) == (67942, 4123) and q1["checked"]
+    assert q1["ebitda_cr"] is None  # no profit before tax or other income in the table
+    assert q1["revenue_yoy"] == pytest.approx(67942 / 63679 - 1)
+
+
+@pytest.mark.db
 def test_a_periods_own_filing_wins_over_a_comparative_column(loaded):  # noqa: F811
     results_filing(loaded)
     july = results_filing(

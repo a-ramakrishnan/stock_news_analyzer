@@ -58,6 +58,10 @@ make scheduler
 - **L&T's last two quarters weren't found.** Its results come with a press release that mentions "revenue from operations" in paragraph after paragraph. Those mentions used up the text windows before the statement itself. Revenue lines followed by three or more figures, the statement's rows, are now picked first.
 - **An unusable answer was asked again every day.** Haiku once repeated itself until 8,000 tokens, and once returned broken JSON. Such a filing is now marked `failed` and the period's next filing is tried instead. Transient API errors are still retried on the next run. Answers are capped at 4,000 tokens.
 
+## L&T's results without a statement
+
+L&T's Q4 FY26 and Q1 FY27 results filings, on both exchanges and under several titles, all attach the same PDF: the results press release with its annexures. The statement pages either aren't in it or aren't text. The press release's "Group Performance – Key Parameters" annexure still gives revenue, EBITDA, finance costs, depreciation and profit after tax for the quarter and a year earlier. Haiku had seen it but said "no results statement", because the prompt asked for one. The prompt now takes such a key-figures table when a filing has no statement. Figures the table doesn't give (other income, profit before tax, EPS) stay empty, so EBITDA isn't worked out for those quarters.
+
 ## Next
 
 The rest of the Event Extractor (capex, guidance, management, ratings, fundraises), with the QA Checker.

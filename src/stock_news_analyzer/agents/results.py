@@ -84,10 +84,14 @@ SYSTEM = """You read the financial results that Indian listed companies file wit
 exchanges, and copy the headline figures from the results statement.
 
 Answer:
-- is_results: false if the document has no statement of financial results (e.g. a board
-  meeting notice about something else, or only a covering letter).
-- basis: consolidated if the document has consolidated results, else standalone. Use the
-  same statement for every figure.
+- is_results: false if the document gives no results figures (e.g. a board meeting notice,
+  or only a covering letter). Use the statement of financial results if the document has
+  one. If it has none, but has a table of the period's key figures (often an annexure to a
+  results press release: "Key Parameters", "Group Performance", "Financial Highlights" with
+  revenue, EBITDA, profit after tax), use that table instead, with null for figures it
+  doesn't give.
+- basis: consolidated if the figures are consolidated (a group or consolidated table), else
+  standalone. Use the same statement or table for every figure.
 - unit: the unit the statement's figures are in, as its heading says ("Rs in lakhs" is lakh,
   "Rs in crore" is crore, "Rs in million" is million; rupees if figures are in plain rupees).
 - columns: one per period column of that statement: the quarter just ended, the previous

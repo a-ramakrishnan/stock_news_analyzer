@@ -35,11 +35,13 @@ SOURCES = ("bse", "nse")
 CHUNK_DAYS = 30
 # Attachments downloaded under the 'important' policy (backfills default to this).
 IMPORTANT_TYPES = CONCALL_MATERIAL | {"order_win", "credit_rating", "concall_schedule"}
+# NSE series of SME (Emerge) companies, whose announcements NSE serves separately.
+SME_SERIES = {"SM", "ST", "SZ"}
 
 
 class Client(Protocol):
     def bse_announcements(self, scrip_code: str, start: date, end: date, page: int = 1): ...
-    def nse_announcements(self, symbol: str, start: date, end: date): ...
+    def nse_announcements(self, symbol: str, start: date, end: date, index: str = ...): ...
     def download(self, exchange: str, urls: list[str]) -> tuple[str, bytes, bool]: ...
 
 
@@ -131,7 +133,8 @@ class FilingsCollector:
                 try:
                     for lo, hi in date_chunks(since, end):
                         new, had, pdfs = result.new, result.already_had, result.attachments
-                        for ann in self._chunk(source, code, lo, hi):
+                        sme = company.nse_series in SME_SERIES
+                        for ann in self._chunk(source, code, lo, hi, sme):
                             self._store(ann, company, result)
                         if progress:
                             progress(
@@ -155,9 +158,12 @@ class FilingsCollector:
             return end - timedelta(days=default_days)
         return latest.astimezone(IST).date() - timedelta(days=1)
 
-    def _chunk(self, source: str, code: str, lo: date, hi: date) -> Iterator[Announcement]:
+    def _chunk(
+        self, source: str, code: str, lo: date, hi: date, sme: bool = False
+    ) -> Iterator[Announcement]:
         if source == "nse":
-            yield from parse_nse(self.client.nse_announcements(code, lo, hi))
+            index = "sme" if sme else "equities"
+            yield from parse_nse(self.client.nse_announcements(code, lo, hi, index=index))
             return
         page, seen = 1, 0
         while True:

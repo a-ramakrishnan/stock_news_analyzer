@@ -139,6 +139,7 @@ class ResultsResult:
     no_figures: int = 0
     no_text: int = 0
     failed: int = 0  # the model's answer was unusable
+    rescaled: int = 0  # figures with a lost decimal point restored, or left out
     waiting: int = 0  # PDF not downloaded yet
     calls: int = 0
     cost_usd: Decimal = Decimal(0)
@@ -478,8 +479,66 @@ def run(
 ) -> ResultsResult:
     spend_before = month_spend(session)
     result = read_results(session, llm, since=since, symbol=symbol, limit=limit, progress=progress)
+    isins = select(QuarterlyResult.isin).distinct()
+    for isin in session.scalars(isins):
+        result.rescaled += check_scale(session, isin)
+    session.commit()
     result.cost_usd = month_spend(session) - spend_before
     return result
+
+
+# A lost decimal point makes a figure 100 times too large: "67,078.68" extracted from the
+# PDF as "6707868". The text check can't see it (the wrong number is in the text), so the
+# figures are checked against each other: revenue against the company's other periods,
+# everything else against the period's revenue.
+OUT_OF_SCALE = 20  # times the company's usual revenue: not a real quarter
+LOST_POINT = (50, 200)  # times: consistent with two decimal places lost
+
+
+def _no_point(row: QuarterlyResult, f: str) -> bool:
+    """The figure was written without a decimal point while others in its column have one."""
+    written = row.as_written or {}
+    mine = (written.get(f) or {}).get("as_written") or ""
+    others = [(v or {}).get("as_written") or "" for g, v in written.items() if g not in (f, "eps")]
+    return "." not in mine and any("." in o for o in others)
+
+
+def _rescale(row: QuarterlyResult, f: str, restore: bool) -> None:
+    value = getattr(row, f"{f}_cr")
+    setattr(row, f"{f}_cr", round(value / 100, 2) if restore else None)
+    entry = dict((row.as_written or {}).get(f) or {})
+    entry["note"] = "decimal point restored" if restore else "out of scale, left out"
+    row.as_written = {**(row.as_written or {}), f: entry}
+
+
+def check_scale(session: Session, isin: str) -> int:
+    """Restore figures that lost their decimal point, and leave out other figures far out of
+    scale. Returns how many figures changed."""
+    changed = 0
+    for months in (3, 6, 12):
+        rows = periods(session, isin, months)
+        revenues = sorted(abs(r.revenue_cr) for r in rows if r.revenue_cr)
+        usual = revenues[len(revenues) // 2] if len(revenues) >= 3 else None
+        for r in rows:
+            if usual and r.revenue_cr:
+                ratio = abs(r.revenue_cr) / usual
+                if LOST_POINT[0] <= ratio <= LOST_POINT[1] and _no_point(r, "revenue"):
+                    _rescale(r, "revenue", restore=True)
+                    changed += 1
+                elif ratio > OUT_OF_SCALE:
+                    _rescale(r, "revenue", restore=False)
+                    changed += 1
+            if not r.revenue_cr:
+                continue
+            revenue = abs(r.revenue_cr)
+            for f in ("other_income", "finance_costs", "depreciation", "pbt", "pat"):
+                value = getattr(r, f"{f}_cr")
+                if value is None or abs(value) <= revenue:
+                    continue  # costs and profit within the period's revenue
+                restore = _no_point(r, f) and abs(value) / 100 <= revenue
+                _rescale(r, f, restore)
+                changed += 1
+    return changed
 
 
 # --- using the figures -----------------------------------------------------------

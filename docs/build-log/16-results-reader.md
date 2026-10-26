@@ -69,6 +69,12 @@ On the full re-run, three L&T quarters came out 100 times too large: Q4 FY24 rev
 - **Exact numbers only:** a figure is now kept only if the same number, decimal point included, appears in the filing. A figure that doesn't is left empty and marked as not found.
 - **Sonnet as a second try:** KARURVYSYA's long bank statements still made Haiku repeat itself or break off in 9 of its filings, and BLACKBUCK's in 4. When Haiku's answer is unusable, the analysis model now tries the same filing once before it is marked `failed`.
 
+The exact-number check didn't stop it. On the next run the same three L&T quarters were still 100 times too large, and Q4 FY25's profit was too (Rs 549,726 crore). So the number without its point really is in the extracted text: the PDF's text layer loses the decimal point in some table cells, and Haiku copied what it saw.
+
+- **Figures checked against each other:** after each run, each company's revenue is compared with its other periods of the same length, and every other figure with its period's revenue.
+- **Restored when it fits a lost point:** a figure 50-200 times too large, written without a decimal point while the others in its column have one, is divided by 100 and noted "decimal point restored".
+- **Left out otherwise:** revenue over 20 times the usual, or costs or profit above revenue for another reason, is left out and noted "out of scale, left out".
+
 ## Next
 
 The rest of the Event Extractor (capex, guidance, management, ratings, fundraises), with the QA Checker.

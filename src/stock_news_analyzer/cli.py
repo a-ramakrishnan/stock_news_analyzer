@@ -1779,7 +1779,8 @@ def results_run(
     typer.echo(
         f"{result.periods} periods stored from {result.filings} filings ({result.duplicates} "
         f"copies of a period already read, {result.no_figures} without a results statement, "
-        f"{result.no_text} without text, {result.failed} unusable answers); "
+        f"{result.no_text} without text, {result.failed} unusable answers; "
+        f"{result.rescaled} figures out of scale restored or left out); "
         f"{result.calls} LLM calls, ${result.cost_usd:.4f} "
         f"(this month ${spent:.2f} of ${get_settings().llm_monthly_budget_usd:.2f})"
     )

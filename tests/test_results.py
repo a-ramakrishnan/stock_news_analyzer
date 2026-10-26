@@ -194,6 +194,49 @@ def test_a_figure_not_in_the_filing_is_not_stored(loaded):  # noqa: F811
 
 
 @pytest.mark.db
+def test_a_lost_decimal_point_is_restored_by_checking_figures_against_each_other(loaded):  # noqa: F811
+    def quarter(end, revenue, pat, written_revenue, written_pat):
+        loaded.add(
+            QuarterlyResult(
+                isin=LT,
+                period=rs.period_label(end, 3),
+                period_end=end,
+                months=3,
+                basis="consolidated",
+                primary=True,
+                revenue_cr=revenue,
+                pat_cr=pat,
+                unit="crore",
+                model="m",
+                as_written={
+                    "revenue": {"as_written": written_revenue, "found": True},
+                    "pat": {"as_written": written_pat, "found": True},
+                    "finance_costs": {"as_written": "782.10", "found": True},
+                },
+            )
+        )
+
+    quarter(date(2025, 3, 31), Decimal("7439228"), Decimal("549726"), "7439228", "549726")
+    quarter(date(2025, 6, 30), Decimal("63679.12"), Decimal("3617.45"), "63,679.12", "3,617.45")
+    quarter(date(2025, 9, 30), Decimal("67983.53"), Decimal("3926.10"), "67,983.53", "3,926.10")
+    quarter(date(2025, 12, 31), Decimal("71450.20"), Decimal("3215.00"), "71,450.20", "3,215.00")
+    # 30x the usual revenue and written with its point: not a lost point, left out.
+    quarter(
+        date(2026, 3, 31), Decimal("2100000.50"), Decimal("5326.00"), "21,00,000.50", "5,326.00"
+    )
+    loaded.commit()
+    assert rs.check_scale(loaded, LT) == 3
+    rows = {r.period: r for r in rs.periods(loaded, LT, 3)}
+    assert rows["Q4 FY25"].revenue_cr == Decimal("74392.28")
+    assert rows["Q4 FY25"].pat_cr == Decimal("5497.26")
+    assert rows["Q4 FY25"].as_written["revenue"]["note"] == "decimal point restored"
+    assert rows["Q4 FY26"].revenue_cr is None
+    assert rows["Q4 FY26"].as_written["revenue"]["note"] == "out of scale, left out"
+    assert rows["Q1 FY26"].revenue_cr == Decimal("63679.12")  # untouched
+    assert rs.check_scale(loaded, LT) == 0  # nothing left to change
+
+
+@pytest.mark.db
 def test_an_unusable_answer_is_recorded_and_the_next_filing_tried(loaded):  # noqa: F811
     first = results_filing(loaded)
     second = results_filing(loaded, OCT.replace(minute=20), "Outcome of Board Meeting")

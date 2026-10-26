@@ -12,6 +12,8 @@ capital goods, defence, marine, power T&D...):
 3. Metrics, in code: announced vs reported inflow, book-to-bill, years of revenue in the order
    book, execution rate, the unexplained change in the order book (cancellations or orders not
    announced), client concentration, and a ranking against the other order-driven stocks.
+   Revenue the order-book documents leave out comes from the results read by the Results
+   Reader (agents/results.py), including half-yearly results of SME companies.
 """
 
 import logging
@@ -26,6 +28,7 @@ from rapidfuzz import fuzz
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from stock_news_analyzer.agents import results as rs
 from stock_news_analyzer.agents.concalls import _norm, period_end, quarter_before, quarter_of
 from stock_news_analyzer.config import get_settings
 from stock_news_analyzer.llm import LLM, BudgetExceeded, LLMError, month_spend
@@ -665,6 +668,7 @@ def quarterly(session: Session, isin: str) -> list[dict]:
                 "inflow_cr": None,
                 "order_book_cr": None,
                 "revenue_cr": None,
+                "revenue_from": None,
             },
         )
 
@@ -688,6 +692,11 @@ def quarterly(session: Session, isin: str) -> list[dict]:
         r = row(s.quarter)
         r["inflow_cr"], r["order_book_cr"] = _f(s.inflow_cr), _f(s.order_book_cr)
         r["revenue_cr"] = _f(s.revenue_cr)
+        r["revenue_from"] = "order book" if s.revenue_cr is not None else None
+    reported = rs.quarter_revenue(session, isin)
+    for r in by_q.values():
+        if r["revenue_cr"] is None and r["quarter"] in reported:
+            r["revenue_cr"], r["revenue_from"] = reported[r["quarter"]], "results"
     rows = sorted(by_q.values(), key=lambda r: r["period_end"])
     for r in rows:
         if r["announced"] and r["unvalued"] == r["announced"]:
@@ -716,7 +725,12 @@ def summary(session: Session, isin: str, today: date | None = None) -> dict:
     """The last four reported quarters (those with an order book and revenue): inflow, revenue,
     book-to-bill, years of revenue in the latest order book, execution (revenue / the order
     book a year earlier). Growth of orders announced in the last four calendar quarters on the
-    four before, and client concentration of the last year's orders."""
+    four before, and client concentration of the last year's orders.
+
+    Without four such quarters (an SME company reporting half-yearly, or quarters whose
+    order-book documents gave no revenue), revenue is the 12 months to the latest order book
+    from the results read, and book-to-bill uses the orders won in those 12 months: the
+    reported inflow if every quarter gave it, else the orders announced."""
     today = today or datetime.now(IST).date()
     q = [r for r in quarterly(session, isin) if r["period_end"] <= today]
 
@@ -732,8 +746,29 @@ def summary(session: Session, isin: str, today: date | None = None) -> dict:
     )
     revenue = total(last4, "revenue_cr") if full_year else None
     inflow = total(last4, "inflow_cr") if full_year else None
+    revenue_from = inflow_from = None
+    if full_year:
+        revenue_from = "4 quarters"
+        inflow_from = "reported" if inflow is not None else None
     books = [r for r in q if r["order_book_cr"] is not None]
     latest = books[-1] if books else None
+    if not full_year and latest:
+        trailing = rs.trailing_revenue(session, isin, latest["period_end"])
+        if trailing:
+            revenue, made_of = trailing
+            revenue_from = f"results, {made_of}"
+            year = [
+                r
+                for r in q
+                if latest["period_end"] - timedelta(days=300)
+                <= r["period_end"]
+                <= latest["period_end"]
+            ]
+            inflows = [r["inflow_cr"] for r in year if r["inflow_cr"] is not None]
+            if len(inflows) == 4:
+                inflow, inflow_from = sum(inflows), "reported"
+            else:
+                inflow, inflow_from = total(year, "announced_cr"), "announced"
     year_ago = next(
         (
             r
@@ -762,7 +797,9 @@ def summary(session: Session, isin: str, today: date | None = None) -> dict:
         "isin": isin,
         "quarters": [r["quarter"] for r in last4],
         "inflow_cr": inflow,
+        "inflow_from": inflow_from if inflow else None,
         "revenue_cr": revenue,
+        "revenue_from": revenue_from,
         "book_to_bill": inflow / revenue if inflow and revenue else None,
         "order_book_cr": latest["order_book_cr"] if latest else None,
         "order_book_quarter": latest["quarter"] if latest else None,

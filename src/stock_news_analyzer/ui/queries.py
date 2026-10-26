@@ -700,6 +700,28 @@ def order_book(session: Session, isin: str) -> dict:
     }
 
 
+RESULT_COLUMNS = [
+    "period",
+    "revenue_cr",
+    "revenue_yoy",
+    "ebitda_cr",
+    "ebitda_margin",
+    "pat_cr",
+    "pat_yoy",
+    "pat_margin",
+    "eps",
+    "basis",
+    "checked",
+]
+
+
+def results(session: Session, isin: str) -> pd.DataFrame:
+    """A company's results by quarter (or half year), oldest first (see agents/results.table)."""
+    from stock_news_analyzer.agents.results import table
+
+    return pd.DataFrame(table(session, isin), columns=RESULT_COLUMNS)
+
+
 def order_peers(session: Session) -> pd.DataFrame:
     """Order-driven watchlist companies side by side (see agents/orders.peers)."""
     from stock_news_analyzer.agents.orders import peers

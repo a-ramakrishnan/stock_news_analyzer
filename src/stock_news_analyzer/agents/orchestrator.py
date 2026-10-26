@@ -114,8 +114,8 @@ def job_explain(session: Session) -> str:
     return summary
 
 
-# The scheduled run reads transcripts filed in the last few months; `sna concalls run` goes
-# further back.
+# The scheduled runs read transcripts and results filed in the last few months; `sna concalls
+# run` and `sna results run` go further back.
 CONCALL_DAYS = 120
 
 
@@ -162,6 +162,23 @@ def job_orders(session: Session) -> str:
     summary = (
         f"{result.orders} orders from {result.filings} filings ({result.duplicates} copies), "
         f"{result.snapshots} order books, ${result.cost_usd:.4f}"
+    )
+    if result.errors:
+        raise JobError(summary, result.errors)
+    return summary
+
+
+def job_results(session: Session) -> str:
+    from stock_news_analyzer.agents import results
+    from stock_news_analyzer.llm import LLM
+
+    if not get_settings().anthropic_api_key:
+        return "skipped: ANTHROPIC_API_KEY is not set in .env"
+    since = datetime.now(IST).date() - timedelta(days=CONCALL_DAYS)
+    result = results.run(session, LLM(session), since=since)
+    summary = (
+        f"{result.periods} result periods from {result.filings} filings "
+        f"({result.duplicates} copies), ${result.cost_usd:.4f}"
     )
     if result.errors:
         raise JobError(summary, result.errors)
@@ -231,6 +248,7 @@ JOBS: dict[str, Callable[[Session], str]] = {
     "triage": job_triage,
     "deals": job_deals,
     "prices": job_prices,
+    "results": job_results,
     "explain": job_explain,
     "concalls": job_concalls,
     "promises": job_promises,
@@ -245,6 +263,7 @@ RUN_ALL = (
     "triage",
     "deals",
     "prices",
+    "results",
     "explain",
     "concalls",
     "promises",

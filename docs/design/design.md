@@ -1,6 +1,6 @@
 # Indian Market News Intelligence System — Design
 
-Version 1.6 · Oct 26, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
+Version 1.7 · Oct 26, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
 
 ## Goal and principles
 
@@ -10,7 +10,7 @@ The system is built as independent agents under an orchestrator; models, tools, 
 
 ## Status (Oct 26, 2026)
 
-Phase 1 is done and Phase 2 is under way. Fifteen build steps have shipped, each logged in [`docs/build-log/`](../build-log/). The system runs on a Mac in Docker, and its data goes back to October 2023.
+Phase 1 is done and Phase 2 is under way. Sixteen build steps have shipped, each logged in [`docs/build-log/`](../build-log/). The system runs on a Mac in Docker, and its data goes back to October 2023.
 
 A map of what is built and what is pending, agent by agent, is in [Agent design: Build status](agent-design.md#build-status-oct-26-2026).
 
@@ -22,9 +22,9 @@ A map of what is built and what is pending, agent by agent, is in [Agent design:
 | Move explainer | Built (Claude Sonnet 5.5) |
 | Event-to-return labels (1, 5, 20 days) | Built, per filing; per typed event once event extraction exists |
 | Daily digest and dashboard | Built: Markdown digest saved locally, Streamlit dashboard with 7 pages |
-| Event extraction and QA check | Not started |
+| Event extraction and QA check | Partly, step 16: results figures from every results filing (Claude Haiku 5.5). Other event types and the QA check not started |
 | Earnings call analysis and promise ledger | Built (Claude Sonnet 5.5): calls in step 12; promises checked against later results, and a credibility score per company, in step 13; every watchlist stock, owned or not, from step 15 |
-| Order and execution tracker | Built, steps 14–15: orders from filings (Claude Haiku 5.5), quarterly order books (Sonnet 5.5), metrics and peer ranks in code; coverage per stock |
+| Order and execution tracker | Built, steps 14–16: orders from filings (Claude Haiku 5.5), quarterly order books (Sonnet 5.5), metrics and peer ranks in code; coverage per stock; revenue gaps filled from results |
 | Bullion, ratings, SAST, pledges, tenders, MF holdings, macro | Not started |
 | Telegram or email delivery, Q&A, red flags, themes | Not started |
 
@@ -99,6 +99,16 @@ An LLM reads each document and returns typed events as JSON. Example: `ORDER_WIN
 | Promoter action | Buy, sell, pledge, release; quantity and % of holding |
 | Disruption | Plant shutdown, fire, strike, export ban, raw-material shock |
 
+- **As built (step 16), results only: the Results Reader** (`agents/results.py`, Haiku 5.5). It is the first event type built, and it fills the order tracker's revenue gaps.
+  - **What it reads:** every results filing of every watchlist stock. It copies the headline figures from the results statement: revenue, other income, finance costs, depreciation, profit before and after tax, and EPS.
+  - **Checking:** Haiku copies each figure as written, with the statement's unit (lakh, crore, million). The code converts the figures to Rs crore and checks each one against the filing's text, so the model does no arithmetic.
+  - **One filing, three periods:** the statement's previous-quarter and year-ago columns fill those periods at once. A period's own filing wins over a later filing's comparative column.
+  - **Periods:** quarters for main-board companies; half years (H1, H2) for SME companies, which report half-yearly; and the year.
+  - **Basis:** consolidated where given, else standalone.
+  - **Cost:** about $0.002 a quarter. Only the parts of the filing around the revenue lines are sent, not the auditors' reports and notes.
+  - **Where it shows:** `sna results run/list/coverage/reset`, the 07:20 `results` job, a "Results" section in the digest, and a **Results** tab on the Stock page (revenue, EBITDA, profit, year-on-year change, margins).
+  - **Not yet:** results vs consensus (no consensus source), and the other event types in the table above.
+
 Each event stores a sentiment score, a materiality score (event value ÷ annual revenue or market cap), the source document id and the model/prompt version.
 
 ### 2. Move explainer ("why did it move?")
@@ -141,6 +151,7 @@ The same price data labels every event with the stock's excess return over 1, 5 
     Order-win filings are recognised by their title. Since step 15 that includes single-order wordings such as "Receipt of Work Order", "Letter of Award", "L1 bidder" and "bags … contract", which smaller and SME companies use. Before that only the plural "orders" wording was caught.
   - **Order book:** for each company with at least 2 orders, Sonnet 5.5 reads one document per quarter: the investor presentation first, then the call transcript, then results. It takes the order book, the quarter's inflow and its revenue, each checked as written. A document is read once; a quarter without figures waits for a newer document.
   - **Metrics, in code:** announced vs reported inflow, book-to-bill, years of revenue in the order book, execution (revenue ÷ the order book a year earlier), the unexplained change in the order book, government/PSU and top-client share, and ranks against the other order-driven stocks.
+  - **Revenue from results (step 16):** a quarter whose order-book document gave no revenue takes it from the Results Reader. A company without four such quarters, such as an SME company reporting half-yearly, gets its revenue for the 12 months to its latest order book from results. Its book-to-bill then uses the orders it announced when it didn't report its inflow.
   - **Where it shows:** `sna orders run/list/book/peers/coverage/reset`, the 07:50 `orders` job, an "Orders" section in the digest, and an **Order book** tab on the Stock page.
   - **Coverage (step 15):** `sna orders coverage` lists every watchlist stock with its order-win filings (read, copies, not order wins, waiting for a PDF, unread), orders and order books, and whether it is tracked. Banks, consumer companies and makers of standard products have no order book, so they show none.
   - **Not yet:** using order value against revenue as materiality in the Move Explainer, and sector-wide peers beyond the watchlist.
@@ -226,7 +237,7 @@ Use PostgreSQL with the pgvector extension: structured tables for events and led
 
 #### Tables built so far
 
-The database is managed by Alembic migrations (0001–0011). Built tables and how they map to the plan above:
+The database is managed by Alembic migrations (0001–0016). Built tables and how they map to the plan above:
 
 | Built table | Plan above | Holds |
 | --- | --- | --- |
@@ -248,8 +259,9 @@ The database is managed by Alembic migrations (0001–0011). Built tables and ho
 | `promise_checks` | — | Every check of a promise against later documents: verdict, finding, the documents it rested on, and the status before it |
 | `orders`, `order_filings` | `orders` | Each order announced (client, client type, value or range in Rs crore, segment, geography, execution months), and each order-win filing read with its outcome |
 | `order_book_snapshots` | `order_book_snapshots` | Per company and quarter: order book, inflow and revenue as reported, as written and whether found, the documents tried |
+| `results`, `result_filings` | `events` (results only) | Per company and period (quarter, half year, year): revenue, other income, finance costs, depreciation, profit before and after tax, EPS in Rs crore, the basis, each figure as written and whether found, and whether it came from the period's own filing; and each results filing read with its outcome |
 
-Not built yet: `sources` (feeds are listed in config files instead), `events`. Credibility scores are computed from `promises` when shown, not stored. The `vector` extension is installed but not used yet.
+Not built yet: `sources` (feeds are listed in config files instead), and `events` beyond results. Credibility scores are computed from `promises` when shown, not stored. The `vector` extension is installed but not used yet.
 
 ### Rules that make the data usable for a model later
 

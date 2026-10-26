@@ -24,7 +24,9 @@ Every command block below can be pasted into Terminal as is; explanations are in
 | 11 | Bulk/block deals and peer moves, fed to the Move Explainer | done |
 | 12 | Earnings Call Analyst (Claude Sonnet) and the promise ledger | done |
 | 13 | Promise Ledger (Claude Sonnet): promises checked against later results; credibility per company | done |
-| 14 | Order Book Tracker: orders from filings (Claude Haiku), quarterly order books (Claude Sonnet), book-to-bill and peers | this PR |
+| 14 | Order Book Tracker: orders from filings (Claude Haiku), quarterly order books (Claude Sonnet), book-to-bill and peers | done |
+| 15 | Wider coverage: earnings calls for every watchlist stock, single-order filings, `sna orders coverage` | done |
+| 16 | Results Reader (Claude Haiku): revenue, profit and margins from quarterly and half-yearly results; fills order-book revenue gaps | this PR |
 
 ## Run it on a Mac
 
@@ -285,6 +287,31 @@ uv run sna orders peers
 
 The scheduler reads new orders and order books at 07:50. New orders appear in the digest, and the Stock page has an **Order book** tab: the measures, a chart of announced vs reported inflow, the quarterly table, the orders, and the peers.
 
+## Results (Phase 2, LLM)
+
+Claude Haiku reads each results filing of every watchlist stock and copies the headline figures from the results statement: revenue from operations, other income, finance costs, depreciation, profit before and after tax, and EPS. It copies each figure as written plus the statement's unit (lakh, crore, million); the conversion to Rs crore is done in code, and each figure is checked against the filing's text.
+
+- **One filing, three periods:** a results statement also gives the previous quarter and the same quarter a year earlier, so those fill in at once. A period's own filing wins over a later filing's comparative column.
+- **Quarters or half years:** main-board companies report quarterly; SME companies report half-yearly, and their half years are stored as H1 and H2.
+- **Consolidated first:** the consolidated statement is used where the filing has one, else standalone.
+- **Copies:** the BSE and NSE copies, the board meeting outcome and the newspaper advertisement of the same results are read once.
+- **Order books:** where an order-book document left out a quarter's revenue, the results' revenue is used (marked `*` in `sna orders book`). For a company without four quarters of figures (a half-yearly SME reporter), revenue is the 12 months to the latest order book from its results, and book-to-bill uses the orders it announced if it didn't report its inflow.
+
+```bash
+uv run sna results run
+uv run sna results list LT
+uv run sna results coverage
+```
+
+| Command | What it does |
+| --- | --- |
+| `uv run sna results run` | Read results filings of the last 800 days not read yet (Haiku, about $0.002 a quarter); shows the cost first and asks above $1 |
+| `uv run sna results list LT` | Period by period: revenue and its change on a year earlier, EBITDA and margin, profit and its change, EPS |
+| `uv run sna results coverage` | Every watchlist stock: results filings found, read, copies, without a statement, without text, waiting for a PDF; periods stored; the latest period |
+| `uv run sna results reset --symbol LT` | Forget results so they are read again |
+
+EBITDA here is profit before tax + finance costs + depreciation − other income. The scheduler reads new results at 07:20, before the order books. New results appear in a "Results" section of the digest, and the Stock page has a **Results** tab: the latest revenue, profit and margin, a revenue chart and the table.
+
 ## Prices, moves and labels
 
 ```bash
@@ -336,7 +363,7 @@ make scheduler
 | --- | --- |
 | `uv run sna orchestrator show` | The schedule and when each job runs next |
 | `make run-all` | Run every job once, now, in order: collect, triage, measure, explain, read calls, digest |
-| `uv run sna run news` | Run one job now: `filings`, `news`, `triage`, `deals`, `prices`, `explain`, `concalls`, `promises`, `orders`, `securities` or `digest` |
+| `uv run sna run news` | Run one job now: `filings`, `news`, `triage`, `deals`, `prices`, `results`, `explain`, `concalls`, `promises`, `orders`, `securities` or `digest` |
 | `uv run sna runs` | Recent runs: when, how long, result, errors |
 | `make digest` | Print the digest covering everything since the last scheduled digest (`--hours 24` for a fixed window) |
 | `make scheduler` | Start the orchestrator in Docker; it keeps running while Docker Desktop is open |
@@ -361,7 +388,7 @@ make ui
 | Page | What it shows |
 | --- | --- |
 | Today | Indices, then **Stocks I own** and **Watchlist** as separate groups of cards (move vs Nifty 50 and sector, unusual badge, 3-month sparkline), the latest digest, job health |
-| Stock | Stock vs sector vs Nifty 50 indexed to 100, key filings and unusual days marked; unusual days with their likely cause, earnings calls and the promise ledger, filings, news, deals, reactions and corporate actions |
+| Stock | Stock vs sector vs Nifty 50 indexed to 100, key filings and unusual days marked; unusual days with their likely cause, results, earnings calls and the promise ledger, the order book, filings, news, deals, reactions and corporate actions |
 | Filings | Search by stock, type, words and date; read a filing's extracted text |
 | News | Search headlines; links to the articles |
 | What moves the stock | Average return vs Nifty 50 after each kind of filing, 1, 5 and 20 trading days later |
@@ -406,6 +433,7 @@ src/stock_news_analyzer/   Python package
   agents/concalls.py       Concall Analyst (agent 11): earnings calls and the promise ledger
   agents/promises.py       Promise Ledger (agent 12): promises checked against results, credibility
   agents/orders.py         Order Book Tracker (agent 10): orders, order books, book-to-bill, peers
+  agents/results.py        Results Reader: revenue, profit, margins from results filings
   ui/queries.py            dashboard: read-only queries
   ui/charts.py             dashboard: charts
   ui/app.py                dashboard: the Streamlit pages

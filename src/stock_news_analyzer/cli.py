@@ -62,6 +62,11 @@ orders_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(orders_app, name="orders")
+results_app = typer.Typer(
+    help="Results Reader (LLM): revenue, profit and margins from quarterly results filings.",
+    no_args_is_help=True,
+)
+app.add_typer(results_app, name="results")
 deals_app = typer.Typer(help="NSE bulk and block deals.", no_args_is_help=True)
 app.add_typer(deals_app, name="deals")
 app.add_typer(triage_app, name="triage")
@@ -821,8 +826,8 @@ def labels_list(
 def run(
     job: str = typer.Argument(
         ...,
-        help="filings, news, triage, deals, prices, explain, concalls, promises, orders, "
-        "securities, digest, or all.",
+        help="filings, news, triage, deals, prices, results, explain, concalls, promises, "
+        "orders, securities, digest, or all.",
     ),
 ) -> None:
     """Run a job now (as the orchestrator would) and record it in the run log."""
@@ -1634,10 +1639,18 @@ def orders_book(symbol: str = typer.Argument(..., help="NSE symbol.")) -> None:
         f"{'book':>10} {'book/bill':>9} {'unexplained':>11}   (Rs crore)"
     )
     for r in rows:
+        revenue = _cr(r["revenue_cr"]) + ("*" if r["revenue_from"] == "results" else " ")
         typer.echo(
             f"{r['quarter']:<9} {_cr(r['announced_cr']):>10} {r['announced']:>5} "
-            f"{_cr(r['inflow_cr']):>9} {_cr(r['revenue_cr']):>9} {_cr(r['order_book_cr']):>10} "
+            f"{_cr(r['inflow_cr']):>9} {revenue:>10} {_cr(r['order_book_cr']):>9} "
             f"{_x(r['book_to_bill']):>9} {_cr(r['unexplained_cr']):>11}"
+        )
+    if any(r["revenue_from"] == "results" for r in rows):
+        typer.echo("* revenue from the results filing (the order-book document didn't give it)")
+    if s["revenue_from"] and s["revenue_from"].startswith("results"):
+        typer.echo(
+            f"Revenue below: the 12 months to {s['order_book_quarter']} from {s['revenue_from']}; "
+            f"orders won: {s['inflow_from'] or '–'}"
         )
     typer.echo(
         f"Last 4 quarters: inflow {_cr(s['inflow_cr'])}, revenue {_cr(s['revenue_cr'])}, "
@@ -1720,6 +1733,135 @@ def orders_reset(
     with get_session() as session:
         count = reset(session, symbol, snapshots_only=books_only, orders_only=orders_only)
     typer.echo(f"{count} rows removed; run `sna orders run` to read them again")
+
+
+# --- results -------------------------------------------------------------------
+
+
+@results_app.command("run")
+def results_run(
+    symbol: str = typer.Option(None, help="Only this NSE symbol."),
+    since: str = typer.Option(
+        None, help="Results filed from YYYY-MM-DD (default: the last 800 days)."
+    ),
+    limit: int = typer.Option(None, help="At most this many LLM calls."),
+    yes: bool = typer.Option(False, "--yes", help="Don't ask before spending more than $1."),
+) -> None:
+    """Read results filings not read yet (Haiku by default; LLM_MODEL_TRIAGE)."""
+    from datetime import timedelta
+
+    from stock_news_analyzer.agents import results as rs
+    from stock_news_analyzer.llm import LLM, LLMNotConfigured, month_spend
+
+    start = (
+        datetime.strptime(since, "%Y-%m-%d").date()
+        if since
+        else datetime.now(fl.IST).date() - timedelta(days=rs.RESULT_DAYS)
+    )
+    model = get_settings().llm_model_triage
+    with get_session() as session:
+        waiting = rs.pending(session, start, symbol)
+        calls, estimate = rs.estimate(session, waiting, model)
+        typer.echo(
+            f"{len(waiting)} results filings to look at since {start:%d %b %Y}: about {calls} "
+            f"company-quarters to read; roughly ${estimate:.2f} with {model}"
+        )
+        if estimate > 1 and not yes and not typer.confirm("Go ahead?"):
+            raise typer.Exit(1)
+        try:
+            result = rs.run(
+                session, LLM(session), since=start, symbol=symbol, limit=limit, progress=typer.echo
+            )
+        except LLMNotConfigured as exc:
+            typer.echo(f"{exc}: add ANTHROPIC_API_KEY=... to .env (see .env.example)")
+            raise typer.Exit(1) from exc
+        spent = month_spend(session)
+    typer.echo(
+        f"{result.periods} periods stored from {result.filings} filings ({result.duplicates} "
+        f"copies of a period already read, {result.no_figures} without a results statement, "
+        f"{result.no_text} without text); {result.calls} LLM calls, ${result.cost_usd:.4f} "
+        f"(this month ${spent:.2f} of ${get_settings().llm_monthly_budget_usd:.2f})"
+    )
+    if result.waiting:
+        typer.echo(
+            f"{result.waiting} results filings have no PDF yet: run "
+            "`sna filings attachments --pdf important`, then this again"
+        )
+    for err in result.errors:
+        typer.echo(f"error: {err}")
+    if result.errors:
+        raise typer.Exit(1)
+
+
+@results_app.command("list")
+def results_list(symbol: str = typer.Argument(..., help="NSE symbol.")) -> None:
+    """A company's results, period by period: revenue, EBITDA, profit, growth, margins."""
+    from stock_news_analyzer.agents import results as rs
+
+    with get_session() as session:
+        company = _companies_or_exit(session, symbol)[0]
+        rows = rs.table(session, company.isin)
+    if not rows:
+        typer.echo(f"no results read for {symbol} yet; run: sna results run --symbol {symbol}")
+        return
+    typer.echo(
+        f"{'period':<9} {'revenue':>10} {'y/y':>7} {'EBITDA':>9} {'margin':>7} {'PAT':>9} "
+        f"{'y/y':>7} {'EPS':>7}  basis   (Rs crore)"
+    )
+    for r in rows:
+        flags = ("" if r["checked"] else "  not all figures found as written") + (
+            "" if r["own_filing"] else "  (from a later filing's comparative column)"
+        )
+        typer.echo(
+            f"{r['period']:<9} {_cr(r['revenue_cr']):>10} {_x(r['revenue_yoy'], '{:+.0%}'):>7} "
+            f"{_cr(r['ebitda_cr']):>9} {_x(r['ebitda_margin'], '{:.1%}'):>7} "
+            f"{_cr(r['pat_cr']):>9} {_x(r['pat_yoy'], '{:+.0%}'):>7} "
+            f"{_x(r['eps'], '{:.2f}'):>7}  {r['basis']}{flags}"
+        )
+    typer.echo(
+        "EBITDA: profit before tax + finance costs + depreciation - other income. y/y: on the "
+        "same period a year earlier."
+    )
+
+
+@results_app.command("coverage")
+def results_coverage() -> None:
+    """For every watchlist stock: results filings found and read, periods stored."""
+    from stock_news_analyzer.agents import results as rs
+
+    with get_session() as session:
+        rows = rs.coverage(session)
+    typer.echo(
+        f"{'':<11} {'filings':>7} {'read':>5} {'copies':>6} {'none':>5} {'no text':>7} "
+        f"{'no PDF':>6} {'unread':>6} {'periods':>7}  latest"
+    )
+    for r in rows:
+        typer.echo(
+            f"{r['symbol']:<11} {r['filings']:>7} {r['read']:>5} {r['copies']:>6} "
+            f"{r['no_figures']:>5} {r['no_text']:>7} {r['no_pdf']:>6} {r['unread']:>6} "
+            f"{r['periods']:>7}  {r['latest'] or '–'}"
+        )
+    typer.echo(
+        "copies: the same period already read from another filing. none: no results statement "
+        "in it. no text: a scanned PDF. no PDF: run `sna filings attachments --pdf important`. "
+        "unread: run `sna results run`."
+    )
+
+
+@results_app.command("reset")
+def results_reset(
+    symbol: str = typer.Option(None, help="Only this NSE symbol (default: every stock)."),
+    yes: bool = typer.Option(False, "--yes", help="Don't ask for confirmation."),
+) -> None:
+    """Forget results read so `sna results run` reads them again."""
+    from stock_news_analyzer.agents.results import reset
+
+    what = f"{symbol}'s" if symbol else "all"
+    if not yes and not typer.confirm(f"Forget {what} results?"):
+        raise typer.Exit(1)
+    with get_session() as session:
+        count = reset(session, symbol)
+    typer.echo(f"{count} rows removed; run `sna results run` to read them again")
 
 
 # --- bulk and block deals ------------------------------------------------------

@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.6 · Oct 26, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.7 · Oct 26, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -47,14 +47,14 @@ flowchart LR
     subgraph UND["Understand"]
         direction TB
         A6["6 · Triage & Dedup"]:::built
-        A7["7 · Event Extractor"]:::pendingNext
+        A7["7 · Event Extractor<br/>results built;<br/>next: other events"]:::partlyNext
         A8["8 · QA Checker"]:::pending
     end
 
     subgraph ANA["Analyse"]
         direction TB
         A9["9 · Move Explainer"]:::built
-        A10["10 · Order Book Tracker<br/>next: quarterly revenue"]:::builtNext
+        A10["10 · Order Book Tracker"]:::built
         A11["11 · Concall Analyst"]:::built
         A12["12 · Promise Ledger"]:::built
         A13["13 · Bullion Analyst"]:::pending
@@ -68,7 +68,7 @@ flowchart LR
         A17["17 · Analyst Q&A"]:::pending
     end
 
-    DB[("Shared Postgres database, point-in-time<br/>built: filings, news, prices and labels, deals, moves,<br/>concalls, promises, orders and order books<br/>to do: quarterly revenue, typed events, bullion")]:::db
+    DB[("Shared Postgres database, point-in-time<br/>built: filings, news, prices and labels, deals, moves,<br/>concalls, promises, orders and order books, results<br/>to do: other typed events, bullion")]:::db
 
     O -. runs every agent .-> A1
     S1 --> A2
@@ -81,7 +81,7 @@ flowchart LR
     classDef built fill:#e5f3eb,stroke:#1d7a4f,color:#18202b
     classDef partly fill:#fbf0d9,stroke:#9a6200,color:#18202b
     classDef pending fill:#f5f6f8,stroke:#6b7380,stroke-dasharray:5 4,color:#5b6573
-    classDef builtNext fill:#e5f3eb,stroke:#1f5f8b,stroke-width:3px,color:#18202b
+    classDef partlyNext fill:#fbf0d9,stroke:#1f5f8b,stroke-width:3px,color:#18202b
     classDef pendingNext fill:#f5f6f8,stroke:#1f5f8b,stroke-width:3px,stroke-dasharray:5 4,color:#18202b
     classDef db fill:#e3eef7,stroke:#1f5f8b,color:#18202b
 ```
@@ -89,9 +89,9 @@ flowchart LR
 | Status | Agents |
 | --- | --- |
 | Built | 0 Orchestrator, 1, 2, 3, 5 (stocks), 6, 9, 10, 11, 12 |
-| Partly built | 4 Market Signals, 16 Reporter |
-| Not started | 7, 8, 13, 14, 15, 17 |
-| Recommended next | Quarterly revenue for the Order Book Tracker, then the Event Extractor (7) and QA Checker (8) |
+| Partly built | 4 Market Signals, 7 Event Extractor (results only), 16 Reporter |
+| Not started | 8, 13, 14, 15, 17 |
+| Recommended next | The rest of the Event Extractor (7) and the QA Checker (8) |
 
 | # | Agent | Status | Build step |
 | --- | --- | --- | --- |
@@ -102,10 +102,10 @@ flowchart LR
 | 4 | Market Signals Collector | Partly: NSE bulk and block deals only | 11 |
 | 5 | Price & Label | Built for stocks; bullion part not started | 5 |
 | 6 | Triage & Dedup | Built (Haiku 5.5) | 9 |
-| 7 | Event Extractor | Not started | — |
+| 7 | Event Extractor | Partly: results figures from every results filing (Haiku 5.5); other event types not started | 16 |
 | 8 | QA Checker | Not started | — |
 | 9 | Move Explainer | Built (Sonnet 5.5) | 10, 11 |
-| 10 | Order Book Tracker | Built: orders from filings (Haiku 5.5), quarterly order books (Sonnet 5.5), metrics and peer ranks; coverage per stock | 14, 15 |
+| 10 | Order Book Tracker | Built: orders from filings (Haiku 5.5), quarterly order books (Sonnet 5.5), metrics and peer ranks; coverage per stock; revenue gaps filled from results | 14, 15, 16 |
 | 11 | Concall Analyst | Built (Sonnet 5.5): structured reading of each call, comparison with the previous one, promises recorded; every watchlist stock | 12, 15 |
 | 12 | Promise Ledger | Built (Sonnet 5.5): promises past their date checked against later results and filings; credibility score per company | 12, 13 |
 | 13 | Bullion Analyst | Not started | — |
@@ -359,6 +359,15 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **Trigger:** after Triage.
 - **LLM:** Sonnet 5.5 (or Opus 5.5 at low effort) with structured JSON output.
 - **Reads / writes:** material documents → `events`, `orders`.
+- **As built (step 16), results only: the Results Reader** (`agents/results.py`, Haiku 5.5). It reads results, the first event type built, into `results`. The order tracker uses it to fill revenue gaps.
+  - **What it reads:** every results filing of every watchlist stock. It copies the headline figures from the results statement: revenue, other income, finance costs, depreciation, profit before and after tax, and EPS.
+  - **Checking:** Haiku copies each figure as written, with the statement's unit (lakh, crore, million). The code converts the figures to Rs crore and checks each one against the filing's text, so the model does no arithmetic.
+  - **One filing, three periods:** the statement's previous-quarter and year-ago columns fill those periods at once. A period's own filing wins over a later filing's comparative column.
+  - **Periods:** quarters for main-board companies; half years (H1, H2) for SME companies, which report half-yearly; and the year.
+  - **Basis:** consolidated where given, else standalone.
+  - **Cost:** about $0.002 a quarter. Only the parts of the filing around the revenue lines are sent, not the auditors' reports and notes.
+  - **Where it shows:** `sna results run/list/coverage/reset`, the 07:20 `results` job, a "Results" section in the digest, and a **Results** tab on the Stock page (revenue, EBITDA, profit, year-on-year change, margins).
+  - **Not yet:** results vs consensus (no consensus source), and the other event types in the table above.
 
 1. Pick the schema for the filing type (order win, capex, rating, management change, results, and so on).
 2. Extract fields: client, value in Rs crore, segment, execution period, dates.

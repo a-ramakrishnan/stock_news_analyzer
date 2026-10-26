@@ -256,6 +256,7 @@ def stock_page_body() -> None:
 
     (
         unusual_tab,
+        results_tab,
         calls_tab,
         orders_tab,
         filings_tab,
@@ -266,6 +267,7 @@ def stock_page_body() -> None:
     ) = st.tabs(
         [
             "Unusual days",
+            "Results",
             "Earnings calls",
             "Order book",
             "Filings",
@@ -326,6 +328,8 @@ def stock_page_body() -> None:
                     "morning; `sna explain run --symbol "
                     f"{s['symbol']}` explains the rest."
                 )
+    with results_tab:
+        results(s)
     with calls_tab:
         earnings_calls(s)
     with orders_tab:
@@ -494,6 +498,61 @@ def _fmt(x, fmt: str) -> str:
     return "–" if x is None or pd.isna(x) else fmt.format(x)
 
 
+def results(s: dict) -> None:
+    """Revenue, EBITDA and profit by quarter (half year for SME companies), from results."""
+    periods = load("results", isin=s["isin"])
+    if periods.empty:
+        no_data(
+            "No results read for this stock yet. The scheduler reads new results each morning; "
+            f"`sna results run --symbol {s['symbol']}` reads the last two years now."
+        )
+        return
+    latest = periods.iloc[-1]
+    m1, m2, m3 = st.columns(3)
+    m1.metric(
+        f"Revenue, {latest['period']}",
+        _fmt(latest["revenue_cr"], "Rs {:,.0f} cr"),
+        delta=_fmt(latest["revenue_yoy"], "{:+.0%} y/y")
+        if pd.notna(latest["revenue_yoy"])
+        else None,
+    )
+    m2.metric(
+        "Profit after tax",
+        _fmt(latest["pat_cr"], "Rs {:,.0f} cr"),
+        delta=_fmt(latest["pat_yoy"], "{:+.0%} y/y") if pd.notna(latest["pat_yoy"]) else None,
+    )
+    m3.metric(
+        "EBITDA margin",
+        _fmt(latest["ebitda_margin"], "{:.1%}"),
+        help="Profit before tax + finance costs + depreciation − other income, ÷ revenue.",
+    )
+    st.plotly_chart(charts.revenue_chart(periods, dark()), width="stretch", **PLOT)
+    st.dataframe(
+        periods.iloc[::-1],
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "period": st.column_config.TextColumn("Period"),
+            "revenue_cr": st.column_config.NumberColumn("Revenue", format="localized"),
+            "revenue_yoy": st.column_config.NumberColumn("Revenue y/y", format="percent"),
+            "ebitda_cr": st.column_config.NumberColumn("EBITDA", format="localized"),
+            "ebitda_margin": st.column_config.NumberColumn("EBITDA margin", format="percent"),
+            "pat_cr": st.column_config.NumberColumn("Profit after tax", format="localized"),
+            "pat_yoy": st.column_config.NumberColumn("Profit y/y", format="percent"),
+            "pat_margin": st.column_config.NumberColumn("Net margin", format="percent"),
+            "eps": st.column_config.NumberColumn("EPS (Rs)", format="%.2f"),
+            "basis": st.column_config.TextColumn("Basis"),
+            "checked": st.column_config.CheckboxColumn(
+                "Checked", help="Every figure was found as written in the filing."
+            ),
+        },
+    )
+    st.caption(
+        "Rs crore, from the results filed with the exchanges (consolidated where given). y/y: "
+        "on the same period a year earlier."
+    )
+
+
 def order_book(s: dict) -> None:
     """Orders announced, the quarterly order book, book-to-bill and peers."""
     data = load("order_book", isin=s["isin"])
@@ -526,6 +585,16 @@ def order_book(s: dict) -> None:
         help="Revenue of the last four quarters ÷ the order book a year earlier.",
     )
     st.plotly_chart(charts.order_inflow_chart(quarters, dark()), width="stretch", **PLOT)
+    if summary["revenue_from"] and summary["revenue_from"].startswith("results"):
+        st.caption(
+            f"Revenue: the 12 months to {summary['order_book_quarter']}, from the results "
+            f"filings ({summary['revenue_from'].removeprefix('results, ')}). Orders won: "
+            + (
+                "the inflow the company reported."
+                if summary["inflow_from"] == "reported"
+                else "the orders it announced, as it did not report its inflow each quarter."
+            )
+        )
     st.caption(
         "Announced: orders the company filed with the exchanges, valued in Rs crore (the "
         "midpoint where only a range was given). Reported inflow: what results or the call "
@@ -555,6 +624,9 @@ def order_book(s: dict) -> None:
             "inflow_cr": st.column_config.NumberColumn("Reported inflow", format="localized"),
             "order_book_cr": st.column_config.NumberColumn("Order book", format="localized"),
             "revenue_cr": st.column_config.NumberColumn("Revenue", format="localized"),
+            "revenue_from": st.column_config.TextColumn(
+                "Revenue from", help="The order-book document, or the results filing."
+            ),
             "book_to_bill": st.column_config.NumberColumn("Book-to-bill", format="%.2f"),
             "announced_share": st.column_config.NumberColumn(
                 "Announced ÷ reported", format="percent"

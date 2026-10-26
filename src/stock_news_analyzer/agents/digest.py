@@ -28,6 +28,7 @@ from stock_news_analyzer.models import (
     Order,
     Promise,
     PromiseCheck,
+    QuarterlyResult,
     Run,
     StockMove,
     WatchlistItem,
@@ -261,6 +262,52 @@ def _orders(session: Session, since: datetime, until: datetime) -> list[str]:
     return lines
 
 
+def _results(session: Session, since: datetime, until: datetime) -> list[str]:
+    """Quarters (or half years) read from results filings since the previous digest."""
+    from stock_news_analyzer.agents.results import table
+
+    rows = session.execute(
+        select(QuarterlyResult, Company.nse_symbol)
+        .join(Company, Company.isin == QuarterlyResult.isin)
+        .where(
+            QuarterlyResult.primary.is_(True),
+            QuarterlyResult.months.in_((3, 6)),
+            QuarterlyResult.updated_at >= since,
+            QuarterlyResult.updated_at < until,
+        )
+        .order_by(Company.nse_symbol, QuarterlyResult.period_end)
+    ).all()
+    if not rows:
+        return []
+    lines = ["", "## Results", ""]
+    for r, sym in rows:
+        shown = next((x for x in table(session, r.isin) if x["period"] == r.period), None)
+        if shown is None:
+            continue  # a half year of a company that also reports quarters
+
+        def growth(x):
+            return f" ({x:+.0%} y/y)" if x is not None else ""
+
+        revenue = (
+            f"revenue Rs {shown['revenue_cr']:,.0f} cr{growth(shown['revenue_yoy'])}"
+            if shown["revenue_cr"] is not None
+            else "revenue not given"
+        )
+        pat = (
+            f"profit Rs {shown['pat_cr']:,.0f} cr{growth(shown['pat_yoy'])}"
+            if shown["pat_cr"] is not None
+            else "profit not given"
+        )
+        margin = (
+            f", EBITDA margin {shown['ebitda_margin']:.1%}"
+            if shown["ebitda_margin"] is not None
+            else ""
+        )
+        lines.append(f"- {sym} {r.period} ({r.basis}): {revenue}, {pat}{margin}")
+    lines.append("\nEvery period: `sna results list <symbol>`")
+    return lines
+
+
 def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
     lines = [
         f"# Daily digest, {until.astimezone(IST):%d %b %Y %H:%M} IST",
@@ -278,6 +325,7 @@ def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
         close_s = f"{close:,.2f}" if close is not None else "–"
         lines.append(f"| {name} | {day} | {close_s} | {pct(change)} |")
 
+    lines += _results(session, since, until)
     lines += _earnings_calls(session, since, until)
     lines += _promises(session, since, until)
     lines += _orders(session, since, until)

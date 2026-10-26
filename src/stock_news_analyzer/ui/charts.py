@@ -219,6 +219,33 @@ def order_inflow_chart(quarters: pd.DataFrame, dark: bool = False) -> go.Figure:
     return _layout(fig, t, 300)
 
 
+def revenue_chart(periods: pd.DataFrame, dark: bool = False) -> go.Figure:
+    """Revenue per quarter (or half year), from results filings; the hover adds the change on
+    a year earlier and the profit."""
+    t = theme(dark)
+    fig = go.Figure()
+    if periods.empty:
+        return _layout(fig, t, 280)
+    yoy = periods["revenue_yoy"].map(lambda x: "–" if pd.isna(x) else f"{x:+.0%}")
+    pat = periods["pat_cr"].map(lambda x: "–" if pd.isna(x) else f"Rs {x:,.0f} cr")
+    fig.add_trace(
+        go.Bar(
+            x=periods["period"],
+            y=periods["revenue_cr"],
+            name="Revenue",
+            marker=dict(color=t.stock),
+            customdata=list(zip(yoy, pat, strict=True)),
+            hovertemplate="%{x} revenue: Rs %{y:,.0f} cr (%{customdata[0]} y/y)<br>"
+            "Profit after tax: %{customdata[1]}<extra></extra>",
+        )
+    )
+    fig.update_layout(showlegend=False, bargap=0.35)
+    fig.update_yaxes(
+        title=dict(text="Revenue, Rs crore", font=dict(color=t.muted)), tickformat=",.0f"
+    )
+    return _layout(fig, t, 280)
+
+
 HORIZONS = (("avg_1d", "1 day"), ("avg_5d", "5 days"), ("avg_20d", "20 days"))
 
 

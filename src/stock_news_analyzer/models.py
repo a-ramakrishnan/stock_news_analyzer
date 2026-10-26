@@ -533,3 +533,61 @@ class OrderBookSnapshot(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class ResultFiling(Base):
+    """Results Reader: a results filing looked at, so it is read once.
+
+    status: 'read' (its figures are in `results`), 'duplicate' (that period was already read
+    from another filing, e.g. the other exchange's copy), 'no_figures' (no results statement
+    in it, e.g. a board meeting about something else), 'no_text' (a scanned PDF).
+    """
+
+    __tablename__ = "result_filings"
+
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True
+    )
+    isin: Mapped[str] = mapped_column(ForeignKey("companies.isin"), index=True)
+    status: Mapped[str] = mapped_column(String(16))
+    period: Mapped[str | None] = mapped_column(String(16))  # 'Q2 FY27', 'H1 FY27'
+    note: Mapped[str | None] = mapped_column(Text)
+    model: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class QuarterlyResult(Base):
+    """A company's reported figures for one period, from its results statement: a quarter
+    (3 months), a half year (6 months; SME companies report half-yearly) or a year (12).
+
+    `primary` is true when the period is the filing's own; figures from a comparative column
+    (the previous quarter, the same quarter a year ago) fill periods not read directly, and
+    give way when that period's own filing is read. Rs crore, converted in code from the
+    figures as written and the statement's unit.
+    """
+
+    __tablename__ = "results"
+    __table_args__ = (UniqueConstraint("isin", "period_end", "months", name="result_period"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    isin: Mapped[str] = mapped_column(ForeignKey("companies.isin"), index=True)
+    period: Mapped[str] = mapped_column(String(16))  # 'Q2 FY27', 'H1 FY27', 'FY27'
+    period_end: Mapped[date] = mapped_column(Date, index=True)
+    months: Mapped[int] = mapped_column()
+    basis: Mapped[str] = mapped_column(String(16))  # consolidated / standalone
+    document_id: Mapped[int | None] = mapped_column(ForeignKey("documents.id", ondelete="SET NULL"))
+    primary: Mapped[bool] = mapped_column(Boolean, default=False)
+    revenue_cr: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    other_income_cr: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    finance_costs_cr: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    depreciation_cr: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    pbt_cr: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    pat_cr: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    eps: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))  # Rs, basic
+    unit: Mapped[str] = mapped_column(String(16))  # as the statement gives it: lakh, crore...
+    # Each figure as written, and whether it was found in the filing's text.
+    as_written: Mapped[dict] = mapped_column(JSONB, default=dict)
+    model: Mapped[str] = mapped_column(String(64))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

@@ -11,6 +11,15 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.7 · Oct 26, 2026
+
+- Step 16, the Results Reader:
+  - agent 7, the Event Extractor, marked partly built: results figures from every results filing (Haiku 5.5)
+  - "As built" notes under event extraction and agent 7
+  - the order tracker's revenue gaps filled from results, including half-yearly SME results
+  - the `results` and `result_filings` tables mapped to the plan
+  - status tables and the block diagram updated; the next step is the rest of the Event Extractor and the QA Checker
+
 ### 1.6 · Oct 26, 2026
 
 - A block diagram of built and pending agents (Mermaid, drawn by GitHub) under Build status in agent-design.md, with a status summary table; linked from the status section of design.md.

@@ -119,6 +119,10 @@ class ExchangeClient:
         data = self._get_json("nse", NSE_FINANCIAL_RESULTS_URL, params)
         return data if isinstance(data, list) else data.get("data", [])
 
+    def nse_json(self, url: str, params: dict):
+        """Any NSE API answer, for probes."""
+        return self._get_json("nse", url, params)
+
     def nse_corporate_actions(
         self, symbol: str, start: date, end: date, index: str = "equities"
     ) -> list:

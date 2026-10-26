@@ -540,6 +540,9 @@ def test_probe_shows_the_results_listing_and_an_xbrl_file(
                 }
             ]
 
+        def nse_json(self, url, params):
+            raise exchange_http.ExchangeError("NSE returned HTTP 404")
+
         def download(self, exchange, urls):
             assert urls == ["https://nsearchives.nseindia.com/corporate/xbrl/LT_Q1.xml"]
             return urls[0], SAMPLE, True
@@ -554,3 +557,7 @@ def test_probe_shows_the_results_listing_and_an_xbrl_file(
     assert "Half-Yearly (equities): FAILED ExchangeError" in out.stdout
     assert "3 facts" in out.stdout and "RevenueFromOperations" in out.stdout
     assert (tmp_path / "probe" / "LT.xml").read_bytes() == SAMPLE
+    assert (
+        "integrated https://www.nseindia.com/api/integrated-filing-results {}: FAILED" in out.stdout
+    )
+    assert "stored NSE announcements with XBRL:" in out.stdout

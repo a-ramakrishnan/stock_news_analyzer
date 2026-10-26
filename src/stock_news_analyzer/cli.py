@@ -1795,6 +1795,59 @@ def results_run(
         raise typer.Exit(1)
 
 
+# Where NSE may list results filed as SEBI's Integrated Filing (Financial), which replaced the
+# results listing from February 2025. Tried by `sna results probe` until one answers.
+INTEGRATED_CANDIDATES = (
+    ("https://www.nseindia.com/api/integrated-filing-results", {}),
+    (
+        "https://www.nseindia.com/api/integrated-filing-results",
+        {"type": "Integrated Filing- Financials"},
+    ),
+    ("https://www.nseindia.com/api/integrated-filing-results", {"period": "Quarterly"}),
+    ("https://www.nseindia.com/api/corporates-integrated-filing", {}),
+)
+
+
+def _probe_integrated(client, company, index: str, out_dir) -> None:
+    """Try the candidate listings of integrated filings, and show the company's stored NSE
+    announcements that carry XBRL."""
+    import json
+
+    from sqlalchemy import select
+
+    from stock_news_analyzer.models import Document, DocumentCompany
+
+    for url, extra in INTEGRATED_CANDIDATES:
+        params = {"index": index, "symbol": company.nse_symbol, **extra}
+        try:
+            data = client.nse_json(url, params)
+        except Exception as exc:
+            typer.echo(f"integrated {url} {extra}: FAILED {type(exc).__name__}: {exc}")
+            continue
+        rows = data if isinstance(data, list) else data.get("data", data)
+        name = url.rsplit("/", 1)[-1] + "".join(f"-{v}" for v in extra.values())
+        (out_dir / f"{company.nse_symbol}-{name}.json").write_text(json.dumps(data, indent=1))
+        count = len(rows) if isinstance(rows, list) else "?"
+        typer.echo(f"integrated {url} {extra}: {count} rows")
+        first = rows[0] if isinstance(rows, list) and rows else rows
+        typer.echo(f"  first: {str(first)[:600]}")
+    with get_session() as session:
+        docs = session.scalars(
+            select(Document)
+            .join(DocumentCompany, DocumentCompany.document_id == Document.id)
+            .where(
+                DocumentCompany.isin == company.isin,
+                Document.source == "nse",
+                Document.raw["hasXbrl"].astext.in_(("true", "True", "1")),
+            )
+            .order_by(Document.published_at.desc())
+            .limit(3)
+        ).all()
+        typer.echo(f"stored NSE announcements with XBRL: {len(docs)} shown")
+        for d in docs:
+            typer.echo(f"  {d.published_at:%d %b %Y} {d.doc_type}: {str(d.raw)[:600]}")
+
+
 @results_app.command("probe")
 def results_probe(
     symbol: str = typer.Argument(..., help="NSE symbol."),
@@ -1831,6 +1884,7 @@ def results_probe(
             xml = next((v for v in row.values() if isinstance(v, str) and v.endswith(".xml")), None)
             if xml and not link:
                 link = xml
+    _probe_integrated(client, company, index, out_dir)
     if not link:
         typer.echo("no XBRL link found in the listings above")
         return
@@ -1856,6 +1910,28 @@ def results_probe(
         typer.echo(f"  {tag:<60} {context:<14} {value[:40]}")
 
 
+@results_app.command("xbrl")
+def results_xbrl(
+    symbol: str = typer.Option(None, help="Only this NSE symbol."),
+    since: str = typer.Option(None, help="Periods ending from YYYY-MM-DD (default: 800 days)."),
+) -> None:
+    """Take results from NSE's XBRL files (exact figures, no LLM) for every period listed."""
+    from stock_news_analyzer.agents import xbrl_results
+    from stock_news_analyzer.sources.exchange_http import ExchangeClient
+
+    start = datetime.strptime(since, "%Y-%m-%d").date() if since else None
+    with get_session() as session:
+        result = xbrl_results.import_results(
+            session, ExchangeClient(), symbol=symbol, since=start, progress=typer.echo
+        )
+    typer.echo(
+        f"{result.periods} periods from XBRL ({result.corrected} replaced a figure read from "
+        f"the PDF that differed by more than 1%); {result.skipped} already from XBRL"
+    )
+    for err in result.errors:
+        typer.echo(f"error: {err}")
+
+
 @results_app.command("list")
 def results_list(symbol: str = typer.Argument(..., help="NSE symbol.")) -> None:
     """A company's results, period by period: revenue, EBITDA, profit, growth, margins."""
@@ -1875,6 +1951,7 @@ def results_list(symbol: str = typer.Argument(..., help="NSE symbol.")) -> None:
         flags = ("" if r["checked"] else "  not all figures found as written") + (
             "" if r["own_filing"] else "  (from a later filing's comparative column)"
         )
+        flags = "  XBRL" if r["from_xbrl"] else flags
         typer.echo(
             f"{r['period']:<9} {_cr(r['revenue_cr']):>10} {_x(r['revenue_yoy'], '{:+.0%}'):>7} "
             f"{_cr(r['ebitda_cr']):>9} {_x(r['ebitda_margin'], '{:.1%}'):>7} "

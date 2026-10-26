@@ -77,6 +77,7 @@ UNITS = {
     "rupees": Decimal("0.0000001"),
 }
 MONEY = ("revenue", "other_income", "finance_costs", "depreciation", "pbt", "pat")
+XBRL = "xbrl"  # the `model` of a period taken from the exchange's XBRL file (agents/xbrl_results)
 FIELDS = (*MONEY, "eps")
 
 SYSTEM = """You read the financial results that Indian listed companies file with the stock
@@ -520,6 +521,8 @@ def check_scale(session: Session, isin: str) -> int:
         revenues = sorted(abs(r.revenue_cr) for r in rows if r.revenue_cr)
         usual = revenues[len(revenues) // 2] if len(revenues) >= 3 else None
         for r in rows:
+            if r.model == XBRL:
+                continue  # tagged figures from the exchange: nothing was read from text
             if usual and r.revenue_cr:
                 ratio = abs(r.revenue_cr) / usual
                 if LOST_POINT[0] <= ratio <= LOST_POINT[1] and _no_point(r, "revenue"):
@@ -618,6 +621,7 @@ def table(session: Session, isin: str) -> list[dict]:
                 "basis": r.basis,
                 "checked": all(v.get("found") for v in (r.as_written or {}).values()),
                 "own_filing": r.primary,
+                "from_xbrl": r.model == XBRL,
             }
         )
     return out

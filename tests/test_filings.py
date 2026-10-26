@@ -47,14 +47,16 @@ class FakeClient:
         self.nse = json.loads((FIXTURES / "nse_announcements_LT.json").read_text())
         self.fail_nse = fail_nse
         self.calls = []
+        self.indexes = {}
         self.downloads = []
 
     def bse_announcements(self, scrip_code, start, end, page=1):
         self.calls.append(("bse", scrip_code, start, end, page))
         return self.bse if scrip_code == "500510" else {"Table": [], "Table1": [{"ROWCNT": 0}]}
 
-    def nse_announcements(self, symbol, start, end):
+    def nse_announcements(self, symbol, start, end, index="equities"):
         self.calls.append(("nse", symbol, start, end))
+        self.indexes[symbol] = index
         if self.fail_nse:
             raise ExchangeError("NSE returned HTTP 403")
         return self.nse if symbol == "LT" else []
@@ -79,6 +81,19 @@ def watchlist(session):
     wl.add_equity(session, wl.resolve(session, "LT"), owned=True)
     wl.add_equity(session, wl.resolve(session, "KARURVYSYA"), owned=True)
     return session
+
+
+@pytest.mark.db
+def test_sme_companies_are_asked_for_from_nse_sme_section(watchlist, tmp_path):
+    sme = parse_nse_equity_list((FIXTURES / "SME_EQUITY_L.csv").read_text())
+    wl.load_master(watchlist, sme)
+    wl.add_equity(watchlist, wl.resolve(watchlist, "SSEGL"))
+    client = FakeClient()
+    collector = fl.FilingsCollector(watchlist, client, tmp_path, pdf_policy="none")
+    collector.collect(
+        fl.watchlist_companies(watchlist), start=date(2026, 10, 1), end=date(2026, 10, 21)
+    )
+    assert client.indexes == {"LT": "equities", "KARURVYSYA": "equities", "SSEGL": "sme"}
 
 
 def test_date_chunks_cover_range_newest_first():

@@ -89,9 +89,13 @@ class ExchangeClient:
         }
         return self._get_json("bse", BSE_ANNOUNCEMENTS_URL, params, headers=BSE_HEADERS)
 
-    def nse_announcements(self, symbol: str, start: date, end: date) -> list:
+    def nse_announcements(
+        self, symbol: str, start: date, end: date, index: str = "equities"
+    ) -> list:
+        """A symbol's announcements. NSE keeps SME (Emerge) companies' filings apart: pass
+        index='sme' for them, or the answer is empty."""
         params = {
-            "index": "equities",
+            "index": index,
             "symbol": symbol,
             "from_date": start.strftime("%d-%m-%Y"),
             "to_date": end.strftime("%d-%m-%Y"),

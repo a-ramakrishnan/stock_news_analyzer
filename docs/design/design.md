@@ -1,6 +1,6 @@
 # Indian Market News Intelligence System — Design
 
-Version 1.8 · Oct 26, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
+Version 1.9 · Oct 26, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
 
 ## Goal and principles
 
@@ -22,7 +22,7 @@ A map of what is built and what is pending, agent by agent, is in [Agent design:
 | Move explainer | Built (Claude Sonnet 5.5) |
 | Event-to-return labels (1, 5, 20 days) | Built, per filing; per typed event once event extraction exists |
 | Daily digest and dashboard | Built: Markdown digest saved locally, Streamlit dashboard with 7 pages |
-| Event extraction and QA check | Partly, step 16: results figures from every results filing (Claude Haiku 5.5). Other event types and the QA check not started |
+| Event extraction and QA check | Partly, step 16: results figures for every stock, from the exchange's XBRL files where filed, else read from the PDF (Claude Haiku 5.5), each checked. Other event types and the QA check not started |
 | Earnings call analysis and promise ledger | Built (Claude Sonnet 5.5): calls in step 12; promises checked against later results, and a credibility score per company, in step 13; every watchlist stock, owned or not, from step 15 |
 | Order and execution tracker | Built, steps 14–16: orders from filings (Claude Haiku 5.5), quarterly order books (Sonnet 5.5), metrics and peer ranks in code; coverage per stock; revenue gaps filled from results |
 | Bullion, ratings, SAST, pledges, tenders, MF holdings, macro | Not started |
@@ -99,7 +99,7 @@ An LLM reads each document and returns typed events as JSON. Example: `ORDER_WIN
 | Promoter action | Buy, sell, pledge, release; quantity and % of holding |
 | Disruption | Plant shutdown, fire, strike, export ban, raw-material shock |
 
-- **As built (step 16), results only: the Results Reader** (`agents/results.py`, Haiku 5.5). It is the first event type built, and it fills the order tracker's revenue gaps.
+- **As built (step 16), results only.** The first event type built; it fills the order tracker's revenue gaps. Two sources: the exchange's XBRL files (exact, no LLM) first, and the **Results Reader** (`agents/results.py`, Haiku 5.5) reading the PDF where XBRL has nothing.
   - **What it reads:** every results filing of every watchlist stock. It copies the headline figures from the results statement: revenue, other income, finance costs, depreciation, profit before and after tax, and EPS.
   - **Checking:** Haiku copies each figure as written, with the statement's unit (lakh, crore, million). The code converts the figures to Rs crore, so the model does no arithmetic, and checks them in two ways:
     - **Against the filing:** a figure is kept only if that exact number, decimal point included, is in the filing's text.
@@ -111,6 +111,14 @@ An LLM reads each document and returns typed events as JSON. Example: `ORDER_WIN
   - **Basis:** consolidated where given, else standalone.
   - **Cost:** about $0.002 a quarter. Only the parts of the filing around the statement's revenue rows are sent, not the auditors' reports, notes or press-release text. A full re-read of two years for 15 stocks cost $0.42.
   - **Where it shows:** `sna results run/list/coverage/reset`, the 07:20 `results` job, a "Results" section in the digest, and a **Results** tab on the Stock page (revenue, EBITDA, profit, year-on-year change, margins).
+  - **XBRL first (step 16, later):** most results now come from the exchange's XBRL files (`agents/xbrl_results.py`, no LLM), where each figure is tagged, in rupees.
+    - **Where:** NSE's results listing for filings up to January 2025, and its Integrated Filing (Financial) listing from February 2025, consolidated where filed. In an integrated filing each period is read from its context dates, so a Q4 filing gives the quarter and the year.
+    - **Checks, because companies fill the tags themselves:**
+      - profit must be within 25% of EPS × shares (paid-up capital ÷ face value, both in the file); KMEW's profit-attributable line was off by orders of magnitude
+      - a "quarter" with revenue above 1.75× the company's nearby quarters is an SME half year under a quarter's label; it is rejected and the PDF reading put back
+      - XBRL writes only the figures that pass and keeps each replaced value; the rest keep the PDF reading
+    - **Daily:** the `xbrl` job at 07:15 runs before the PDF reader at 07:20, which then skips the periods XBRL covered.
+    - **Coverage:** on the full rebuild, 236 periods across the 15 stocks came from XBRL, and 26 PDF readings were corrected. A few 2023 bank files are no longer on NSE; those quarters keep the PDF reading.
   - **Not yet:** results vs consensus (no consensus source), and the other event types in the table above.
 
 Each event stores a sentiment score, a materiality score (event value ÷ annual revenue or market cap), the source document id and the model/prompt version.
@@ -263,7 +271,7 @@ The database is managed by Alembic migrations (0001–0016). Built tables and ho
 | `promise_checks` | — | Every check of a promise against later documents: verdict, finding, the documents it rested on, and the status before it |
 | `orders`, `order_filings` | `orders` | Each order announced (client, client type, value or range in Rs crore, segment, geography, execution months), and each order-win filing read with its outcome |
 | `order_book_snapshots` | `order_book_snapshots` | Per company and quarter: order book, inflow and revenue as reported, as written and whether found, the documents tried |
-| `results`, `result_filings` | `events` (results only) | Per company and period (quarter, half year, year): revenue, other income, finance costs, depreciation, profit before and after tax, EPS in Rs crore, the basis, each figure as written and whether found, and whether it came from the period's own filing; and each results filing read with its outcome |
+| `results`, `result_filings` | `events` (results only) | Per company and period (quarter, half year, year): revenue, other income, finance costs, depreciation, profit before and after tax, EPS in Rs crore, the basis, each figure as written and whether found, and whether it came from the period's own filing; `model` is `xbrl` for figures from XBRL (with the PDF value each replaced) or `xbrl-rejected` for a half year put back; and each results filing read with its outcome |
 
 Not built yet: `sources` (feeds are listed in config files instead), and `events` beyond results. Credibility scores are computed from `promises` when shown, not stored. The `vector` extension is installed but not used yet.
 

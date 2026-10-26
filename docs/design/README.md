@@ -11,6 +11,15 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.9 · Oct 26, 2026
+
+- Results from the exchange's XBRL files (no LLM) as the first source, the PDF reader as the fallback:
+  - NSE's results listing (to January 2025) and its Integrated Filing (Financial) listing (from February 2025)
+  - XBRL figures checked too: profit against EPS × shares, half years under a quarter's label rejected; failed figures keep the PDF reading
+  - a daily `xbrl` job at 07:15, before the PDF reader
+- SME corporate actions fetched from NSE's SME section
+- Status tables and the block diagram updated
+
 ### 1.8 · Oct 26, 2026
 
 - The Results Reader after its first real runs:

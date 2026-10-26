@@ -213,3 +213,103 @@ def test_integrated_filings_give_the_quarter_and_the_year(loaded):  # noqa: F811
     assert rows[12].period == "FY26" and rows[12].revenue_cr == Decimal("286000.00")
     again = xr.import_results(loaded, FakeNSE(), since=date(2025, 1, 1))
     assert (again.periods, again.skipped) == (0, 1)
+
+
+def test_profit_must_fit_eps_times_shares():
+    shares = {"PaidUpValueOfEquityShareCapital": "2750000000", "FaceValueOfEquityShareCapital": "2"}
+    wrong_owner_line = instance(
+        {
+            **shares,
+            "RevenueFromOperations": "349842800000",
+            "ProfitOrLossAttributableToOwnersOfParent": "2248000",  # filed in the wrong unit
+            "ProfitLossForPeriod": "24193800000",
+            "BasicEarningsLossPerShareFromContinuingAndDiscontinuedOperations": "17.60",
+        }
+    )
+    # 1,375,000,000 shares x Rs 17.60 = Rs 2,420 crore: the period's profit fits, not the line
+    assert xr.figures(wrong_owner_line, bank=False)["pat"][0] == Decimal("2419.38")
+    nothing_fits = instance(
+        {
+            **shares,
+            "ProfitLossForPeriod": "2248000",
+            "BasicEarningsLossPerShareFromContinuingAndDiscontinuedOperations": "17.60",
+        }
+    )
+    assert "pat" not in xr.figures(nothing_fits, bank=False)
+
+
+@pytest.mark.db
+def test_xbrl_fills_only_what_passes_and_half_years_go_back(loaded):  # noqa: F811
+    def pdf(end, revenue, pat):
+        loaded.add(
+            QuarterlyResult(
+                isin=LT,
+                period=rs.period_label(end, 3),
+                period_end=end,
+                months=3,
+                basis="consolidated",
+                primary=True,
+                revenue_cr=revenue,
+                pat_cr=pat,
+                eps=Decimal("10.00"),
+                unit="crore",
+                as_written={},
+                model="claude-haiku-5-5",
+            )
+        )
+
+    pdf(date(2024, 9, 30), Decimal("52.00"), Decimal("12.00"))
+    pdf(date(2024, 12, 31), Decimal("58.00"), Decimal("16.00"))
+    pdf(date(2025, 3, 31), Decimal("47.00"), Decimal("11.00"))
+    loaded.commit()
+    shares = {"PaidUpValueOfEquityShareCapital": "10800000", "FaceValueOfEquityShareCapital": "10"}
+    files = {
+        # A half year under Q2's label: revenue and EPS about double.
+        "https://x/q2.xml": instance(
+            {
+                **shares,
+                "RevenueFromOperations": "956245000",
+                "ProfitLossForPeriod": "228000000",
+                "BasicEarningsPerShare": "21.17",
+            }
+        ),
+        # Q3 with its profit line in the wrong unit: revenue taken, profit kept from the PDF.
+        "https://x/q3.xml": instance(
+            {
+                **shares,
+                "RevenueFromOperations": "576073000",
+                "ProfitLossForPeriod": "2248000",
+                "BasicEarningsPerShare": "14.77",
+            }
+        ),
+    }
+
+    class FakeNSE:
+        def nse_financial_results(self, symbol, period="Quarterly", index="equities"):
+            if symbol != "LT" or period != "Quarterly":
+                return []
+            return [
+                {"fromDate": "01-Jul-2024", "toDate": "30-Sep-2024", "xbrl": "https://x/q2.xml"},
+                {"fromDate": "01-Oct-2024", "toDate": "31-Dec-2024", "xbrl": "https://x/q3.xml"},
+            ]
+
+        def nse_integrated_results(self, symbol, index="equities"):
+            return []
+
+        def download(self, exchange, urls):
+            return urls[0], files[urls[0]], True
+
+    result = xr.import_results(loaded, FakeNSE(), since=date(2024, 1, 1))
+    assert result.rejected == 1
+    rows = {r.period: r for r in rs.periods(loaded, LT, 3)}
+    q2, q3 = rows["Q2 FY25"], rows["Q3 FY25"]
+    assert (q2.revenue_cr, q2.eps, q2.model) == (
+        Decimal("52.00"),
+        Decimal("10.00"),
+        "xbrl-rejected",
+    )
+    assert q3.revenue_cr == Decimal("57.61") and q3.model == "xbrl"
+    assert q3.pat_cr == Decimal("16.00")  # the PDF's profit: XBRL's didn't fit EPS x shares
+    assert q3.as_written["revenue"]["before"] == "58.00"
+    again = xr.import_results(loaded, FakeNSE(), since=date(2024, 1, 1))
+    assert (again.periods, again.skipped) == (0, 2)

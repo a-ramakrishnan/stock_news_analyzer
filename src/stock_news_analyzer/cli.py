@@ -57,6 +57,11 @@ promises_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(promises_app, name="promises")
+orders_app = typer.Typer(
+    help="Order Book Tracker (LLM): order wins, order books, book-to-bill, peers.",
+    no_args_is_help=True,
+)
+app.add_typer(orders_app, name="orders")
 deals_app = typer.Typer(help="NSE bulk and block deals.", no_args_is_help=True)
 app.add_typer(deals_app, name="deals")
 app.add_typer(triage_app, name="triage")
@@ -816,8 +821,8 @@ def labels_list(
 def run(
     job: str = typer.Argument(
         ...,
-        help="filings, news, triage, deals, prices, explain, concalls, promises, securities, "
-        "digest, or all.",
+        help="filings, news, triage, deals, prices, explain, concalls, promises, orders, "
+        "securities, digest, or all.",
     ),
 ) -> None:
     """Run a job now (as the orchestrator would) and record it in the run log."""
@@ -1517,6 +1522,176 @@ def promises_reset(
     with get_session() as session:
         count = reset(session, symbol)
     typer.echo(f"{count} promises reopened; run `sna promises check` to check them again")
+
+
+# --- orders and order books -----------------------------------------------------
+
+
+def _cr(x) -> str:
+    return "–" if x is None else f"{x:,.0f}"
+
+
+def _x(x, fmt="{:.2f}x") -> str:
+    return "–" if x is None else fmt.format(x)
+
+
+@orders_app.command("run")
+def orders_run(
+    symbol: str = typer.Option(None, help="Only this NSE symbol."),
+    since: str = typer.Option(None, help="Filings from YYYY-MM-DD (default: all not read yet)."),
+    limit: int = typer.Option(None, help="At most this many LLM calls."),
+) -> None:
+    """Read new order-win filings (Haiku), then order books by quarter (Sonnet)."""
+    from stock_news_analyzer.agents import orders
+    from stock_news_analyzer.llm import LLM, LLMNotConfigured, month_spend
+
+    start = datetime.strptime(since, "%Y-%m-%d").date() if since else None
+    with get_session() as session:
+        waiting = len(orders.pending_filings(session, start, symbol))
+        typer.echo(
+            f"{waiting} order-win filings not read yet (Haiku, a fraction of a cent each); "
+            "then order books for order-driven companies (Sonnet, about $0.03 a quarter)"
+        )
+        try:
+            result = orders.run(
+                session,
+                LLM(session),
+                since=start,
+                symbol=symbol,
+                limit=limit,
+                progress=typer.echo,
+            )
+        except LLMNotConfigured as exc:
+            typer.echo(f"{exc}: add ANTHROPIC_API_KEY=... to .env (see .env.example)")
+            raise typer.Exit(1) from exc
+        spent = month_spend(session)
+    typer.echo(
+        f"{result.orders} orders from {result.filings} filings ({result.duplicates} copies of "
+        f"the same announcement, {result.not_orders} not order wins); {result.snapshots} "
+        f"quarterly order books; {result.calls} LLM calls, ${result.cost_usd:.4f} (this month "
+        f"${spent:.2f} of ${get_settings().llm_monthly_budget_usd:.2f})"
+    )
+    if result.waiting:
+        typer.echo(
+            f"{result.waiting} order filings have no PDF yet: run "
+            "`sna filings attachments --pdf important`, then this again"
+        )
+    for err in result.errors:
+        typer.echo(f"error: {err}")
+    if result.errors:
+        raise typer.Exit(1)
+
+
+@orders_app.command("list")
+def orders_list(
+    symbol: str = typer.Argument(..., help="NSE symbol."),
+    days: int = typer.Option(365, help="How many days back."),
+) -> None:
+    """A company's orders, newest first."""
+    from datetime import timedelta
+
+    from sqlalchemy import select
+
+    from stock_news_analyzer.models import Company, Order
+
+    since = datetime.now(fl.IST) - timedelta(days=days)
+    with get_session() as session:
+        rows = session.scalars(
+            select(Order)
+            .join(Company, Company.isin == Order.isin)
+            .where(Company.nse_symbol == symbol.upper(), Order.announced_at >= since)
+            .order_by(Order.announced_at.desc())
+        ).all()
+        if not rows:
+            typer.echo(f"no orders for {symbol} in that window; run: sna orders run")
+            return
+        for o in rows:
+            value = f"Rs {o.value_cr:,.0f} cr" if o.value_cr is not None else "value not disclosed"
+            if o.value_low_cr is not None and o.value_high_cr is not None:
+                value += f" ({o.value_low_cr:,.0f}-{o.value_high_cr:,.0f})"
+            check = "" if o.value_found or o.value_cr is None else "  (value not found as written)"
+            typer.echo(
+                f"{o.announced_at.astimezone(fl.IST):%d %b %Y}  {o.kind:<9} {value:<28} "
+                f"{o.client_type:<10} {o.client or 'client not named'}{check}"
+            )
+            typer.echo(f"{'':<12}{o.description}")
+
+
+@orders_app.command("book")
+def orders_book(symbol: str = typer.Argument(..., help="NSE symbol.")) -> None:
+    """Quarter by quarter: orders announced, inflow, order book, revenue, book-to-bill."""
+    from stock_news_analyzer.agents import orders
+
+    with get_session() as session:
+        company = _companies_or_exit(session, symbol)[0]
+        rows = orders.quarterly(session, company.isin)
+        s = orders.summary(session, company.isin)
+    if not rows:
+        typer.echo(f"nothing for {symbol} yet; run: sna orders run --symbol {symbol}")
+        return
+    typer.echo(
+        f"{'quarter':<9} {'announced':>10} {'(n)':>5} {'inflow':>9} {'revenue':>9} "
+        f"{'book':>10} {'book/bill':>9} {'unexplained':>11}   (Rs crore)"
+    )
+    for r in rows:
+        typer.echo(
+            f"{r['quarter']:<9} {_cr(r['announced_cr']):>10} {r['announced']:>5} "
+            f"{_cr(r['inflow_cr']):>9} {_cr(r['revenue_cr']):>9} {_cr(r['order_book_cr']):>10} "
+            f"{_x(r['book_to_bill']):>9} {_cr(r['unexplained_cr']):>11}"
+        )
+    typer.echo(
+        f"Last 4 quarters: inflow {_cr(s['inflow_cr'])}, revenue {_cr(s['revenue_cr'])}, "
+        f"book-to-bill {_x(s['book_to_bill'])}; order book {_cr(s['order_book_cr'])} "
+        f"({s['order_book_quarter'] or '-'}) = {_x(s['years_of_revenue'], '{:.1f}')} years of "
+        f"revenue; execution {_x(s['execution'], '{:.0%}')} of the book a year earlier; "
+        f"government/PSU {_x(s['government_share'], '{:.0%}')} of orders announced, top client "
+        f"{s['top_client'] or '-'} {_x(s['top_client_share'], '{:.0%}')}"
+    )
+
+
+@orders_app.command("peers")
+def orders_peers() -> None:
+    """Order-driven watchlist companies side by side, ranked (1 = best)."""
+    from stock_news_analyzer.agents import orders
+
+    with get_session() as session:
+        rows = orders.peers(session)
+    if not rows:
+        typer.echo(f"no company has {orders.MIN_ORDERS}+ orders yet; run: sna orders run")
+        return
+    typer.echo(
+        f"{'':<11} {'book/bill':>9} {'(rank)':>6} {'years':>6} {'(rank)':>6} "
+        f"{'growth':>7} {'(rank)':>6} {'order book':>11} {'govt':>5}"
+    )
+    for r in rows:
+        typer.echo(
+            f"{r['symbol'] or '-':<11} {_x(r['book_to_bill']):>9} "
+            f"{r.get('book_to_bill_rank', '-'):>6} {_x(r['years_of_revenue'], '{:.1f}'):>6} "
+            f"{r.get('years_of_revenue_rank', '-'):>6} "
+            f"{_x(r['announced_growth'], '{:+.0%}'):>7} {r.get('announced_growth_rank', '-'):>6} "
+            f"{_cr(r['order_book_cr']):>11} {_x(r['government_share'], '{:.0%}'):>5}"
+        )
+    typer.echo(
+        "book/bill: inflow / revenue, last 4 quarters. years: latest order book / last 4 "
+        "quarters' revenue. growth: orders announced, last 4 quarters vs the 4 before."
+    )
+
+
+@orders_app.command("reset")
+def orders_reset(
+    symbol: str = typer.Option(None, help="Only this NSE symbol (default: every stock)."),
+    books_only: bool = typer.Option(False, "--books-only", help="Only the order-book figures."),
+    yes: bool = typer.Option(False, "--yes", help="Don't ask for confirmation."),
+) -> None:
+    """Forget extracted orders and order books so `sna orders run` reads them again."""
+    from stock_news_analyzer.agents.orders import reset
+
+    what = f"{symbol}'s" if symbol else "all"
+    if not yes and not typer.confirm(f"Forget {what} order data?"):
+        raise typer.Exit(1)
+    with get_session() as session:
+        count = reset(session, symbol, snapshots_only=books_only)
+    typer.echo(f"{count} rows removed; run `sna orders run` to read them again")
 
 
 # --- bulk and block deals ------------------------------------------------------

@@ -1,4 +1,4 @@
-.PHONY: setup up down health migrate securities watchlist filings news triage explain concalls promises prices digest backfill run-all scheduler scheduler-logs scheduler-stop ui ui-docker ui-stop test lint format docker-health
+.PHONY: setup up down health migrate securities watchlist filings news triage explain concalls promises orders prices digest backfill run-all scheduler scheduler-logs scheduler-stop ui ui-docker ui-stop test lint format docker-health
 
 setup:          ## Install Python dependencies and create .env
 	uv sync
@@ -37,6 +37,10 @@ explain:        ## LLM explanation of unusual days not explained yet (up to yest
 
 concalls:       ## LLM reading of earnings call transcripts of stocks you own (last 400 days)
 	uv run sna concalls run
+
+orders:         ## LLM reading of order wins and order books, then the peer table
+	uv run sna orders run
+	uv run sna orders peers
 
 promises:       ## LLM check of promises past their date, then credibility scores
 	uv run sna promises check

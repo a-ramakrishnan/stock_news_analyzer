@@ -456,3 +456,77 @@ class PromiseCheck(Base):
     # The promise's status and note before this check, so a reset can put them back.
     previous_status: Mapped[str] = mapped_column(String(16))
     previous_note: Mapped[str | None] = mapped_column(Text)
+
+
+class OrderFiling(Base):
+    """Order Book Tracker (agent 10): an order-win filing looked at, so it is read once.
+
+    status: 'extracted' (its orders are in `orders`), 'duplicate' (the same announcement on the
+    other exchange), 'not_order' (e.g. a regulator's order), 'no_text'.
+    """
+
+    __tablename__ = "order_filings"
+
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True
+    )
+    isin: Mapped[str] = mapped_column(ForeignKey("companies.isin"), index=True)
+    status: Mapped[str] = mapped_column(String(16))
+    note: Mapped[str | None] = mapped_column(Text)
+    model: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Order(Base):
+    """An order a company announced: who gave it, for how much, and how long it runs."""
+
+    __tablename__ = "orders"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    isin: Mapped[str] = mapped_column(ForeignKey("companies.isin"), index=True)
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
+    announced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    kind: Mapped[str] = mapped_column(String(16))  # order, loi, l1, extension
+    client: Mapped[str | None] = mapped_column(Text)
+    client_type: Mapped[str] = mapped_column(String(16))  # government/psu/private/export/unknown
+    segment: Mapped[str | None] = mapped_column(Text)
+    geography: Mapped[str] = mapped_column(String(16))  # domestic / export / unknown
+    # Rs crore. When the filing gives only a range (e.g. L&T's "large": 2,500-5,000), value_cr
+    # is its midpoint. None when no value is disclosed.
+    value_cr: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    value_low_cr: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    value_high_cr: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    value_as_written: Mapped[str | None] = mapped_column(Text)
+    value_found: Mapped[bool] = mapped_column(Boolean, default=False)  # as written, in the text
+    execution_months: Mapped[int | None] = mapped_column()
+    description: Mapped[str] = mapped_column(Text)
+    model: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class OrderBookSnapshot(Base):
+    """The order book a company reported for a quarter, with that quarter's order inflow and
+    revenue, read from an investor presentation, call transcript or results. One per quarter;
+    `tried` lists the documents read so a better one filed later is still tried."""
+
+    __tablename__ = "order_book_snapshots"
+    __table_args__ = (UniqueConstraint("isin", "quarter", name="order_book_quarter"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    isin: Mapped[str] = mapped_column(ForeignKey("companies.isin"), index=True)
+    quarter: Mapped[str] = mapped_column(String(16))  # 'Q2 FY27'
+    period_end: Mapped[date] = mapped_column(Date)
+    document_id: Mapped[int | None] = mapped_column(ForeignKey("documents.id", ondelete="SET NULL"))
+    order_book_cr: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    inflow_cr: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))  # orders won that quarter
+    revenue_cr: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))  # revenue that quarter
+    # The figures as written in the document, and whether each was found in its text.
+    as_written: Mapped[dict] = mapped_column(JSONB, default=dict)
+    note: Mapped[str | None] = mapped_column(Text)
+    tried: Mapped[list[int]] = mapped_column(ARRAY(BigInteger), default=list)  # document ids
+    model: Mapped[str | None] = mapped_column(String(64))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

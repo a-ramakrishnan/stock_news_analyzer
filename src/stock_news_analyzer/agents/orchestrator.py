@@ -152,6 +152,22 @@ def job_promises(session: Session) -> str:
     return summary
 
 
+def job_orders(session: Session) -> str:
+    from stock_news_analyzer.agents import orders
+    from stock_news_analyzer.llm import LLM
+
+    if not get_settings().anthropic_api_key:
+        return "skipped: ANTHROPIC_API_KEY is not set in .env"
+    result = orders.run(session, LLM(session))
+    summary = (
+        f"{result.orders} orders from {result.filings} filings ({result.duplicates} copies), "
+        f"{result.snapshots} order books, ${result.cost_usd:.4f}"
+    )
+    if result.errors:
+        raise JobError(summary, result.errors)
+    return summary
+
+
 def job_prices(session: Session) -> str:
     from stock_news_analyzer.agents.prices import (
         PriceCollector,
@@ -218,6 +234,7 @@ JOBS: dict[str, Callable[[Session], str]] = {
     "explain": job_explain,
     "concalls": job_concalls,
     "promises": job_promises,
+    "orders": job_orders,
     "securities": job_securities,
     "digest": job_digest,
 }
@@ -231,6 +248,7 @@ RUN_ALL = (
     "explain",
     "concalls",
     "promises",
+    "orders",
     "digest",
 )
 

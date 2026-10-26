@@ -11,6 +11,13 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.4 · Oct 26, 2026
+
+- Step 14, the Order Book Tracker:
+  - agent 10 marked built
+  - "As built" notes on orders, order books, metrics and peers
+  - the `orders`, `order_filings` and `order_book_snapshots` tables mapped to the plan
+
 ### 1.3 · Oct 25, 2026
 
 - Step 13, the rest of the Promise Ledger:

@@ -1,6 +1,6 @@
 # Indian Market News Intelligence System — Design
 
-Version 1.3 · Oct 25, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
+Version 1.4 · Oct 26, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
 
 ## Goal and principles
 
@@ -10,7 +10,7 @@ The system is built as independent agents under an orchestrator; models, tools, 
 
 ## Status (Oct 25, 2026)
 
-Phase 1 is done and Phase 2 is under way. Thirteen build steps have shipped, each logged in [`docs/build-log/`](../build-log/). The system runs on a Mac in Docker, and its data goes back to October 2023.
+Phase 1 is done and Phase 2 is under way. Fourteen build steps have shipped, each logged in [`docs/build-log/`](../build-log/). The system runs on a Mac in Docker, and its data goes back to October 2023.
 
 | Module | Status |
 | --- | --- |
@@ -22,7 +22,7 @@ Phase 1 is done and Phase 2 is under way. Thirteen build steps have shipped, eac
 | Daily digest and dashboard | Built: Markdown digest saved locally, Streamlit dashboard with 7 pages |
 | Event extraction and QA check | Not started |
 | Earnings call analysis and promise ledger | Built (Claude Sonnet 5.5): calls in step 12; promises checked against later results, and a credibility score per company, in step 13 |
-| Order and execution tracker | Not started |
+| Order and execution tracker | Built, step 14: orders from filings (Claude Haiku 5.5), quarterly order books (Sonnet 5.5), metrics and peer ranks in code |
 | Bullion, ratings, SAST, pledges, tenders, MF holdings, macro | Not started |
 | Telegram or email delivery, Q&A, red flags, themes | Not started |
 
@@ -127,6 +127,19 @@ The same price data labels every event with the stock's excess return over 1, 5 
 
 ### 3. Order and execution tracker
 
+- **As built (step 14):**
+  - **Orders:** Haiku 5.5 reads each order-win filing, up to 8 per call, and records each order:
+    - client and client type (government, PSU, private, export)
+    - value in Rs crore; when only a range is given (L&T's "large": 2,500-5,000), the midpoint
+    - segment, domestic or export, execution period
+    - the value as written, checked against the filing's text
+
+    Filings that aren't order wins (a regulator's "order") are dropped. A copy of an announcement on the other exchange is caught by an identical file, a similar title, or the same value within 2 days.
+  - **Order book:** for each company with at least 2 orders, Sonnet 5.5 reads one document per quarter: the investor presentation first, then the call transcript, then results. It takes the order book, the quarter's inflow and its revenue, each checked as written. A document is read once; a quarter without figures waits for a newer document.
+  - **Metrics, in code:** announced vs reported inflow, book-to-bill, years of revenue in the order book, execution (revenue ÷ the order book a year earlier), the unexplained change in the order book, government/PSU and top-client share, and ranks against the other order-driven stocks.
+  - **Where it shows:** `sna orders run/list/book/peers/reset`, the 07:50 `orders` job, an "Orders" section in the digest, and an **Order book** tab on the Stock page.
+  - **Not yet:** using order value against revenue as materiality in the Move Explainer, and sector-wide peers beyond the watchlist.
+
 - **Order inflow:** total announced orders per company per quarter, by client type (government, private, export).
 - **Order book check:** compare announced orders with the order book reported in results or concalls. A gap means unannounced small orders, or cancellations.
 - **Book-to-bill:** new orders ÷ revenue. Above 1 means the order book is growing.
@@ -227,8 +240,10 @@ The database is managed by Alembic migrations (0001–0011). Built tables and ho
 | `concall_points` | `concall_points` | Key points by category, sentiment, quote and whether the quote was found in the transcript |
 | `promises` | `promises` | The promise ledger: statement, metric, target, due as said and as a date, status, latest update |
 | `promise_checks` | — | Every check of a promise against later documents: verdict, finding, the documents it rested on, and the status before it |
+| `orders`, `order_filings` | `orders` | Each order announced (client, client type, value or range in Rs crore, segment, geography, execution months), and each order-win filing read with its outcome |
+| `order_book_snapshots` | `order_book_snapshots` | Per company and quarter: order book, inflow and revenue as reported, as written and whether found, the documents tried |
 
-Not built yet: `sources` (feeds are listed in config files instead), `events`, `orders`, `order_book_snapshots`. Credibility scores are computed from `promises` when shown, not stored. The `vector` extension is installed but not used yet.
+Not built yet: `sources` (feeds are listed in config files instead), `events`. Credibility scores are computed from `promises` when shown, not stored. The `vector` extension is installed but not used yet.
 
 ### Rules that make the data usable for a model later
 

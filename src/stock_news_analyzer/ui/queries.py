@@ -22,6 +22,7 @@ from stock_news_analyzer.models import (
     LlmCall,
     MoveExplanation,
     NewsTriage,
+    Order,
     PriceDaily,
     Promise,
     PromiseCheck,
@@ -651,6 +652,71 @@ def promise_checks(session: Session, isin: str) -> pd.DataFrame:
             for c, p in rows
         ],
         columns=["checked", "promise", "verdict", "note", "based_on"],
+    )
+
+
+def order_book(session: Session, isin: str) -> dict:
+    """A company's order data: quarterly rows, the last-four-quarters summary, and its orders
+    (newest first). Empty `quarters` when it has none."""
+    from stock_news_analyzer.agents import orders as ob
+
+    rows = session.scalars(
+        select(Order).where(Order.isin == isin).order_by(Order.announced_at.desc())
+    ).all()
+    return {
+        "quarters": pd.DataFrame(ob.quarterly(session, isin)),
+        "summary": ob.summary(session, isin),
+        "orders": pd.DataFrame(
+            [
+                {
+                    "announced": o.announced_at.astimezone(IST).replace(tzinfo=None),
+                    "kind": o.kind,
+                    "value_cr": float(o.value_cr) if o.value_cr is not None else None,
+                    "range": (
+                        f"{o.value_low_cr:,.0f}-{o.value_high_cr:,.0f}"
+                        if o.value_low_cr is not None and o.value_high_cr is not None
+                        else None
+                    ),
+                    "client": o.client,
+                    "client_type": o.client_type,
+                    "segment": o.segment,
+                    "months": o.execution_months,
+                    "description": o.description,
+                }
+                for o in rows
+            ],
+            columns=[
+                "announced",
+                "kind",
+                "value_cr",
+                "range",
+                "client",
+                "client_type",
+                "segment",
+                "months",
+                "description",
+            ],
+        ),
+    }
+
+
+def order_peers(session: Session) -> pd.DataFrame:
+    """Order-driven watchlist companies side by side (see agents/orders.peers)."""
+    from stock_news_analyzer.agents.orders import peers
+
+    return pd.DataFrame(
+        peers(session),
+        columns=[
+            "symbol",
+            "book_to_bill",
+            "years_of_revenue",
+            "execution",
+            "announced_growth",
+            "order_book_cr",
+            "government_share",
+            "top_client_share",
+            "orders_last_year",
+        ],
     )
 
 

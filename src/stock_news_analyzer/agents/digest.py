@@ -25,6 +25,7 @@ from stock_news_analyzer.models import (
     IndexDaily,
     MoveExplanation,
     NewsTriage,
+    Order,
     Promise,
     PromiseCheck,
     Run,
@@ -229,6 +230,37 @@ def _promises(session: Session, since: datetime, until: datetime) -> list[str]:
     return lines
 
 
+def _orders(session: Session, since: datetime, until: datetime) -> list[str]:
+    """Orders read from filings since the previous digest, largest first."""
+    rows = session.execute(
+        select(Order, Company.nse_symbol)
+        .join(Company, Company.isin == Order.isin)
+        .where(Order.created_at >= since, Order.created_at < until)
+        .order_by(Company.nse_symbol, Order.value_cr.desc().nulls_last())
+    ).all()
+    if not rows:
+        return []
+    lines = ["", "## Orders", ""]
+    for o, sym in rows:
+        if o.value_low_cr is not None and o.value_high_cr is not None and o.value_cr is not None:
+            value = f"Rs {o.value_low_cr:,.0f}-{o.value_high_cr:,.0f} cr"
+        elif o.value_cr is not None:
+            value = f"Rs {o.value_cr:,.0f} cr"
+        else:
+            value = "value not disclosed"
+        kind = (
+            ""
+            if o.kind == "order"
+            else f" ({o.kind.upper() if o.kind != 'extension' else 'extension'})"
+        )
+        lines.append(
+            f"- {sym} {o.announced_at.astimezone(IST):%d %b}: {value}{kind} from "
+            f"{o.client or 'an unnamed client'} ({o.client_type}). {o.description}"
+        )
+    lines.append("\nOrder books and book-to-bill: `sna orders book <symbol>`")
+    return lines
+
+
 def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
     lines = [
         f"# Daily digest, {until.astimezone(IST):%d %b %Y %H:%M} IST",
@@ -248,6 +280,7 @@ def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
 
     lines += _earnings_calls(session, since, until)
     lines += _promises(session, since, until)
+    lines += _orders(session, since, until)
 
     owned = dict(session.execute(select(WatchlistItem.isin, WatchlistItem.owned)).all())
     total_filings = total_news = total_unusual = 0
@@ -392,6 +425,7 @@ def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
         "explain",
         "concalls",
         "promises",
+        "orders",
         "securities",
     ):
         run = session.scalars(

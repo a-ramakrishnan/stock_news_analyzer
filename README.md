@@ -23,7 +23,8 @@ Every command block below can be pasted into Terminal as is; explanations are in
 | 10 | Move Explainer agent (Claude Sonnet): the likely cause of each unusual day | done |
 | 11 | Bulk/block deals and peer moves, fed to the Move Explainer | done |
 | 12 | Earnings Call Analyst (Claude Sonnet) and the promise ledger | done |
-| 13 | Promise Ledger (Claude Sonnet): promises checked against later results; credibility per company | this PR |
+| 13 | Promise Ledger (Claude Sonnet): promises checked against later results; credibility per company | done |
+| 14 | Order Book Tracker: orders from filings (Claude Haiku), quarterly order books (Claude Sonnet), book-to-bill and peers | this PR |
 
 ## Run it on a Mac
 
@@ -245,6 +246,42 @@ uv run sna promises list GRAVITA
 
 The scheduler checks promises at 07:40, after reading new calls. Settled promises and those due in the next 30 days appear in the digest. The Stock page's **Earnings calls** tab shows the score and how each promise was checked.
 
+## Order book (Phase 2, LLM)
+
+For order-driven companies (EPC, capital goods, defence, marine, power T&D):
+
+- **Orders:** Claude Haiku reads each order-win filing and records the client, client type (government, PSU, private, export), value in Rs crore, segment, domestic or export, and execution period. When only a range is given (L&T's "large": Rs 2,500-5,000 crore), the midpoint is used. An announcement filed on both BSE and NSE is stored once, and filings that aren't order wins are dropped.
+- **Order book:** once a company has 2 or more orders, Claude Sonnet reads its order book, the quarter's order inflow and revenue, one document per quarter. It tries the investor presentation first, then the call transcript, then results.
+
+From those, in code:
+
+| Measure | What it is |
+| --- | --- |
+| Announced vs reported inflow | A gap means orders that weren't announced (often many small ones) or orders with no value given |
+| Book-to-bill | Orders won ÷ revenue, last four quarters; above 1 means the order book is growing |
+| Years of revenue | Latest order book ÷ last four quarters' revenue |
+| Execution | Last four quarters' revenue ÷ the order book a year earlier |
+| Unexplained change | Closing book − (opening book + inflow − revenue). Negative suggests cancellations or revenue from outside the book |
+| Concentration | Share of the last year's orders from government/PSU clients, and from the largest client |
+| Peers | The order-driven stocks on your watchlist side by side, ranked |
+
+```bash
+make migrate
+uv run sna orders run
+uv run sna orders book LT
+uv run sna orders peers
+```
+
+| Command | What it does |
+| --- | --- |
+| `uv run sna orders run` | Read order-win filings not read yet (Haiku, a fraction of a cent each), then order books (Sonnet, about $0.03 a quarter) |
+| `uv run sna orders list KMEW` | A company's orders, newest first, with value, client and what they are for |
+| `uv run sna orders book LT` | Quarter by quarter: orders announced, inflow, revenue, order book, book-to-bill, unexplained change; then the four-quarter summary |
+| `uv run sna orders peers` | Order-driven stocks side by side, ranked on book-to-bill, years of revenue and order growth |
+| `uv run sna orders reset --symbol LT` | Forget orders and order books so they are read again (`--books-only` for the order books only) |
+
+The scheduler reads new orders and order books at 07:50. New orders appear in the digest, and the Stock page has an **Order book** tab: the measures, a chart of announced vs reported inflow, the quarterly table, the orders, and the peers.
+
 ## Prices, moves and labels
 
 ```bash
@@ -296,7 +333,7 @@ make scheduler
 | --- | --- |
 | `uv run sna orchestrator show` | The schedule and when each job runs next |
 | `make run-all` | Run every job once, now, in order: collect, triage, measure, explain, read calls, digest |
-| `uv run sna run news` | Run one job now: `filings`, `news`, `triage`, `deals`, `prices`, `explain`, `concalls`, `promises`, `securities` or `digest` |
+| `uv run sna run news` | Run one job now: `filings`, `news`, `triage`, `deals`, `prices`, `explain`, `concalls`, `promises`, `orders`, `securities` or `digest` |
 | `uv run sna runs` | Recent runs: when, how long, result, errors |
 | `make digest` | Print the digest covering everything since the last scheduled digest (`--hours 24` for a fixed window) |
 | `make scheduler` | Start the orchestrator in Docker; it keeps running while Docker Desktop is open |
@@ -365,6 +402,7 @@ src/stock_news_analyzer/   Python package
   agents/deals.py          Deals Collector: bulk and block deals for every stock
   agents/concalls.py       Concall Analyst (agent 11): earnings calls and the promise ledger
   agents/promises.py       Promise Ledger (agent 12): promises checked against results, credibility
+  agents/orders.py         Order Book Tracker (agent 10): orders, order books, book-to-bill, peers
   ui/queries.py            dashboard: read-only queries
   ui/charts.py             dashboard: charts
   ui/app.py                dashboard: the Streamlit pages

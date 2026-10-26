@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.7 · Oct 26, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.8 · Oct 26, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -27,7 +27,7 @@ flowchart LR
 
     subgraph SRC["Sources"]
         direction TB
-        S1["BSE + NSE filings, PDFs"]:::built
+        S1["BSE + NSE filings, PDFs<br/>main board and SME"]:::built
         S2["News: RSS + Google News"]:::built
         S3["NSE prices, indices,<br/>corporate actions"]:::built
         S4["NSE bulk and block deals"]:::built
@@ -277,7 +277,7 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 
 - **Job:** pull every new corporate announcement for watchlist companies.
 - **Trigger:** every 15 minutes in market hours; hourly otherwise.
-- **As built (step 3):** BSE and NSE announcements every 30 minutes. PDFs are downloaded for important filing types; text extracted with pypdf (NUL characters stripped). History since Oct 2023.
+- **As built (step 3):** BSE and NSE announcements every 30 minutes. PDFs are downloaded for important filing types; text extracted with pypdf (NUL characters stripped). History since Oct 2023. NSE keeps SME (Emerge) companies' announcements apart, so they are fetched from NSE's SME section; until step 16, SSEGL had none stored.
 - **LLM:** none.
 - **Reads / writes:** `documents`, raw PDF storage.
 
@@ -361,11 +361,15 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **Reads / writes:** material documents → `events`, `orders`.
 - **As built (step 16), results only: the Results Reader** (`agents/results.py`, Haiku 5.5). It reads results, the first event type built, into `results`. The order tracker uses it to fill revenue gaps.
   - **What it reads:** every results filing of every watchlist stock. It copies the headline figures from the results statement: revenue, other income, finance costs, depreciation, profit before and after tax, and EPS.
-  - **Checking:** Haiku copies each figure as written, with the statement's unit (lakh, crore, million). The code converts the figures to Rs crore and checks each one against the filing's text, so the model does no arithmetic.
+  - **Checking:** Haiku copies each figure as written, with the statement's unit (lakh, crore, million). The code converts the figures to Rs crore, so the model does no arithmetic, and checks them in two ways:
+    - **Against the filing:** a figure is kept only if that exact number, decimal point included, is in the filing's text.
+    - **Against each other:** after each run, revenue is compared with the company's other periods, and costs and profit with the period's revenue. Some PDFs lose a decimal point in their text layer; L&T's "67,078.68" came out as "6707868". A figure 50–200 times too large and written without the point its neighbours have is divided by 100. Anything else far out of scale is left out.
+  - **No statement:** some filings (L&T's latest) attach only the results press release. Its key-figures annexure (revenue, finance costs, depreciation, profit) is used instead, and the figures it doesn't give stay empty.
+  - **Unusable answers:** when Haiku's answer is cut off or malformed, as with long bank statements, Sonnet 5.5 tries the same filing once. If that fails too, the filing is marked `failed` and the period's next filing is tried.
   - **One filing, three periods:** the statement's previous-quarter and year-ago columns fill those periods at once. A period's own filing wins over a later filing's comparative column.
   - **Periods:** quarters for main-board companies; half years (H1, H2) for SME companies, which report half-yearly; and the year.
   - **Basis:** consolidated where given, else standalone.
-  - **Cost:** about $0.002 a quarter. Only the parts of the filing around the revenue lines are sent, not the auditors' reports and notes.
+  - **Cost:** about $0.002 a quarter. Only the parts of the filing around the statement's revenue rows are sent, not the auditors' reports, notes or press-release text. A full re-read of two years for 15 stocks cost $0.42.
   - **Where it shows:** `sna results run/list/coverage/reset`, the 07:20 `results` job, a "Results" section in the digest, and a **Results** tab on the Stock page (revenue, EBITDA, profit, year-on-year change, margins).
   - **Not yet:** results vs consensus (no consensus source), and the other event types in the table above.
 
@@ -432,6 +436,7 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
     Order-win filings are recognised by their title. Since step 15 that includes single-order wordings such as "Receipt of Work Order", "Letter of Award", "L1 bidder" and "bags … contract", which smaller and SME companies use. Before that only the plural "orders" wording was caught.
   - **Order book:** for each company with at least 2 orders, Sonnet 5.5 reads one document per quarter: the investor presentation first, then the call transcript, then results. It takes the order book, the quarter's inflow and its revenue, each checked as written. A document is read once; a quarter without figures waits for a newer document.
   - **Metrics, in code:** announced vs reported inflow, book-to-bill, years of revenue in the order book, execution (revenue ÷ the order book a year earlier), the unexplained change in the order book, government/PSU and top-client share, and ranks against the other order-driven stocks.
+  - **Revenue from results (step 16):** a quarter whose order-book document gave no revenue takes it from the Results Reader. A company without four such quarters gets its revenue for the 12 months to its latest order book from results: four quarters, two half years, two quarters and a half year, or the year. If even that isn't covered yet, the measures use the latest order book that is. Book-to-bill then uses the orders announced when the company didn't report its inflow.
   - **Where it shows:** `sna orders run/list/book/peers/coverage/reset`, the 07:50 `orders` job, an "Orders" section in the digest, and an **Order book** tab on the Stock page.
   - **Coverage (step 15):** `sna orders coverage` lists every watchlist stock with its order-win filings (read, copies, not order wins, waiting for a PDF, unread), orders and order books, and whether it is tracked. Banks, consumer companies and makers of standard products have no order book, so they show none.
   - **Not yet:** using order value against revenue as materiality in the Move Explainer, and sector-wide peers beyond the watchlist.

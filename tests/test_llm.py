@@ -94,12 +94,21 @@ def test_refusal_cutoff_and_api_errors_are_logged_and_raised(session):
         request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
         raise anthropic.APIConnectionError(request=request)
 
-    for reply, message in ((refused, "declined"), (cut_off, "cut off"), (down, "Connection")):
+    def broken_json(_kw):
+        Answer.model_validate_json('{"word": "h')  # what the SDK raises on a cut-off answer
+
+    replies = (
+        (refused, "declined"),
+        (cut_off, "cut off"),
+        (down, "Connection"),
+        (broken_json, "did not match the schema"),
+    )
+    for reply, message in replies:
         llm = LLM(session, client=FakeAnthropic(reply), settings=settings())
         with pytest.raises(LLMError, match=message):
             llm.structured("triage", "claude-haiku-5-5", "s", "p", Answer)
     calls = session.query(LlmCall).order_by(LlmCall.id).all()
-    assert [c.ok for c in calls] == [False, False, False]
+    assert [c.ok for c in calls] == [False, False, False, False]
     assert calls[0].cost_usd > 0 and calls[2].cost_usd == 0  # tokens used vs nothing sent
 
 

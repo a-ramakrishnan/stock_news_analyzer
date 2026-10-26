@@ -293,7 +293,7 @@ Claude Haiku reads each results filing of every watchlist stock and copies the h
 
 - **One filing, three periods:** a results statement also gives the previous quarter and the same quarter a year earlier, so those fill in at once. A period's own filing wins over a later filing's comparative column.
 - **Quarters or half years:** main-board companies report quarterly; SME companies report half-yearly, and their half years are stored as H1 and H2.
-- **Consolidated first:** the consolidated statement is used where the filing has one, else standalone.
+- **Consolidated first:** the consolidated statement is used where the filing has one, else standalone. Profit is the profit attributable to the company's owners (the one EPS is based on), not the total including minority interests.
 - **Copies:** the BSE and NSE copies, the board meeting outcome and the newspaper advertisement of the same results are read once.
 - **Order books:** where an order-book document left out a quarter's revenue, the results' revenue is used (marked `*` in `sna orders book`). For a company without four quarters of figures (a half-yearly SME reporter), revenue is the 12 months to the latest order book from its results, and book-to-bill uses the orders it announced if it didn't report its inflow.
 

@@ -46,6 +46,11 @@ make scheduler
 
 `results run` reads two years of results, shows its cost estimate first (well under $1) and asks before spending more than $1.
 
+## After the first real run
+
+- **A cut-off answer stopped the run.** The SDK checks the answer against the schema before returning it, so a malformed answer raised a pydantic error the agents didn't catch. It is now an ordinary LLM error: that filing is skipped and tried again on the next run, and the rest carry on. Nine-month columns, which aren't stored, are no longer asked for, so answers are shorter.
+- **Profit included minority interests.** KMEW's consolidated profit didn't match its EPS (Q3 FY26: Rs 33 crore profit but EPS 13.35, against Rs 12 crore and 10.37 the quarter before), because its subsidiaries have outside partners. Profit is now the profit attributable to owners, the figure EPS is based on.
+
 ## Next
 
 The rest of the Event Extractor (capex, guidance, management, ratings, fundraises), with the QA Checker.

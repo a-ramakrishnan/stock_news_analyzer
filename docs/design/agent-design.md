@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.4 · Oct 26, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.5 · Oct 26, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -17,7 +17,7 @@ Orchestrator (0)
 └─ Deliver:     16 Reporter · 17 Analyst Q&A
 ```
 
-### Build status (Oct 25, 2026)
+### Build status (Oct 26, 2026)
 
 | # | Agent | Status | Build step |
 | --- | --- | --- | --- |
@@ -31,8 +31,8 @@ Orchestrator (0)
 | 7 | Event Extractor | Not started | — |
 | 8 | QA Checker | Not started | — |
 | 9 | Move Explainer | Built (Sonnet 5.5) | 10, 11 |
-| 10 | Order Book Tracker | Built: orders from filings (Haiku 5.5), quarterly order books (Sonnet 5.5), metrics and peer ranks | 14 |
-| 11 | Concall Analyst | Built (Sonnet 5.5): structured reading of each call, comparison with the previous one, promises recorded | 12 |
+| 10 | Order Book Tracker | Built: orders from filings (Haiku 5.5), quarterly order books (Sonnet 5.5), metrics and peer ranks; coverage per stock | 14, 15 |
+| 11 | Concall Analyst | Built (Sonnet 5.5): structured reading of each call, comparison with the previous one, promises recorded; every watchlist stock | 12, 15 |
 | 12 | Promise Ledger | Built (Sonnet 5.5): promises past their date checked against later results and filings; credibility score per company | 12, 13 |
 | 13 | Bullion Analyst | Not started | — |
 | 14 | Theme & Peer Analyst | Not started (peers exist for the Move Explainer) | — |
@@ -77,7 +77,7 @@ Prices are Anthropic's API list prices as of Oct 2026.
 | --- | --- | --- |
 | Triage (Haiku 5.5) | 4,230 articles back to Oct 2023, batches of 15 | $0.28 in total, about $0.00007 an article |
 | Move Explainer (Sonnet 5.5) | 562 unusual days back to Oct 2023 | $2.42 in total, about $0.004 a day explained |
-| Concall Analyst (Sonnet 5.5) | Estimate before the first run: about 50 calls a year for 12 owned stocks | about $0.10 a call, about $5 a year of calls |
+| Concall Analyst (Sonnet 5.5) | First runs on owned stocks; from step 15 every watchlist stock, about 4 calls a year each | about $0.10 a call, about $6 a year for 15 stocks |
 
 The daily run costs a few cents, well under the estimate below, because the watchlist has about 15 stocks rather than 50 and the Opus agents aren't built yet.
 
@@ -337,7 +337,7 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **Trigger:** on each new order event; quarterly after results.
 - **LLM:** Sonnet 5.5 to read order book figures from results and presentations.
 - **Reads / writes:** `orders`, `order_book_snapshots`, results data → `order_metrics`.
-- **As built (step 14):** metrics are computed when shown, not stored in `order_metrics`.
+- **As built (steps 14, 15):** metrics are computed when shown, not stored in `order_metrics`.
   - **Orders:** Haiku 5.5 reads each order-win filing, up to 8 per call, and records each order:
     - client and client type (government, PSU, private, export)
     - value in Rs crore; when only a range is given (L&T's "large": 2,500-5,000), the midpoint
@@ -345,9 +345,12 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
     - the value as written, checked against the filing's text
 
     Filings that aren't order wins (a regulator's "order") are dropped. A copy of an announcement on the other exchange is caught by an identical file, a similar title, or the same value within 2 days.
+
+    Order-win filings are recognised by their title. Since step 15 that includes single-order wordings such as "Receipt of Work Order", "Letter of Award", "L1 bidder" and "bags … contract", which smaller and SME companies use. Before that only the plural "orders" wording was caught.
   - **Order book:** for each company with at least 2 orders, Sonnet 5.5 reads one document per quarter: the investor presentation first, then the call transcript, then results. It takes the order book, the quarter's inflow and its revenue, each checked as written. A document is read once; a quarter without figures waits for a newer document.
   - **Metrics, in code:** announced vs reported inflow, book-to-bill, years of revenue in the order book, execution (revenue ÷ the order book a year earlier), the unexplained change in the order book, government/PSU and top-client share, and ranks against the other order-driven stocks.
-  - **Where it shows:** `sna orders run/list/book/peers/reset`, the 07:50 `orders` job, an "Orders" section in the digest, and an **Order book** tab on the Stock page.
+  - **Where it shows:** `sna orders run/list/book/peers/coverage/reset`, the 07:50 `orders` job, an "Orders" section in the digest, and an **Order book** tab on the Stock page.
+  - **Coverage (step 15):** `sna orders coverage` lists every watchlist stock with its order-win filings (read, copies, not order wins, waiting for a PDF, unread), orders and order books, and whether it is tracked. Banks, consumer companies and makers of standard products have no order book, so they show none.
   - **Not yet:** using order value against revenue as materiality in the Move Explainer, and sector-wide peers beyond the watchlist.
 
 1. Add up announced orders per company per quarter, by client type.
@@ -360,11 +363,12 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 
 #### 11. Concall Analyst
 
-- **Job:** read each earnings call of stocks you own and pull out what matters.
+- **Job:** read each earnings call of the watchlist stocks and pull out what matters.
 - **Trigger:** when the Filings Collector flags a new transcript or audio file.
 - **LLM:** Opus 5.5; faster-whisper for audio-only calls.
 - **Reads / writes:** transcript documents → `concalls`, `concall_points`.
 - **As built (step 12):**
+  - **Scope:** every watchlist stock, owned or not, from step 15; step 12 read owned stocks only.
   - **Model:** Sonnet 5.5 at medium effort instead of Opus. Runs daily at 07:30 for transcripts of the last 120 days; `sna concalls run --since` goes further back.
   - **Finding transcripts:** BSE and NSE copies filed within 7 days are read once. Covering letters under 4,000 characters have their links followed, both links in the text and link annotations in the PDF. Scanned PDFs and AGM transcripts are recorded with the reason.
   - **One call per transcript** returns summary, tone, key points with quotes, promises, updates to earlier promises, analyst concerns, changes since the previous call, and action points. Quotes are checked against the text.

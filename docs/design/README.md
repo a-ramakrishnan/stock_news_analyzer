@@ -11,6 +11,14 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.5 · Oct 26, 2026
+
+- Step 15, wider coverage:
+  - the Concall Analyst, and so the Promise Ledger, reads every watchlist stock, not only owned ones
+  - order-win filings recognised by single-order wordings too ("Receipt of Work Order", "Letter of Award", "L1 bidder"), so smaller and SME companies' orders reach the Order Book Tracker
+  - `sna orders coverage` shows per stock what was found, and why a company has no order book
+  - status tables and the Concall Analyst cost line updated
+
 ### 1.4 · Oct 26, 2026
 
 - Step 14, the Order Book Tracker:

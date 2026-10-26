@@ -325,6 +325,10 @@ def test_metrics_and_peers(filings):
     assert s["execution"] == pytest.approx(277000 / 520000)  # book at Q2 FY26
     assert s["announced_growth"] == pytest.approx(80000 / 20000 - 1)
     assert s["government_share"] == pytest.approx(0.5) and s["orders_last_year"] == 2
+    assert s["top_client"] == "Client 0" and s["top_client_share"] == pytest.approx(0.5)
+    filings.query(Order).filter(Order.client == "Client 0").update({"client": None})
+    assert ob.summary(filings, LT, today=date(2026, 10, 26))["top_client"] == "Client 1"
+    filings.query(Order).filter(Order.client.is_(None)).update({"client": "Client 0"})
 
     assert ob.summary(filings, LT, today=date(2026, 3, 1))["years_of_revenue"] is None  # 3 quarters
     # A quarter that ended but has no results yet does not blank the measures.
@@ -376,6 +380,8 @@ def test_orders_reach_digest_dashboard_cli_and_scheduler(
     runner = CliRunner()
     out = runner.invoke(app, ["orders", "list", "LT", "--days", "36500"])
     assert out.exit_code == 0 and "Rs 3,750 cr (2,500-5,000)" in out.stdout
+    line = next(x for x in out.stdout.splitlines() if "3,750" in x)
+    assert "not found as written" not in line  # valued from its size class, not a number
     out = runner.invoke(app, ["orders", "book", "LT"])
     assert out.exit_code == 0 and "650,000" in out.stdout and "Q2 FY27" in out.stdout
     out = runner.invoke(app, ["orders", "peers"])

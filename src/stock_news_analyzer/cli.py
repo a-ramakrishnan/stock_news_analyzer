@@ -1609,7 +1609,9 @@ def orders_list(
             value = f"Rs {o.value_cr:,.0f} cr" if o.value_cr is not None else "value not disclosed"
             if o.value_low_cr is not None and o.value_high_cr is not None:
                 value += f" ({o.value_low_cr:,.0f}-{o.value_high_cr:,.0f})"
-            check = "" if o.value_found or o.value_cr is None else "  (value not found as written)"
+            # A value from a size class ("large") is not written as a number in the filing.
+            checkable = o.value_cr is not None and not o.size_class
+            check = "" if o.value_found or not checkable else "  (value not found as written)"
             typer.echo(
                 f"{o.announced_at.astimezone(fl.IST):%d %b %Y}  {o.kind:<9} {value:<28} "
                 f"{o.client_type:<10} {o.client or 'client not named'}{check}"

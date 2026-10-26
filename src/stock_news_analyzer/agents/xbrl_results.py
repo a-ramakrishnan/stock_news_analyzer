@@ -13,6 +13,7 @@ quarter and the year.
 """
 
 import logging
+import statistics
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
@@ -21,7 +22,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from stock_news_analyzer.agents.results import FIELDS, RESULT_DAYS, XBRL, period_label
+from stock_news_analyzer.agents.results import FIELDS, RESULT_DAYS, XBRL, period_label, periods
 from stock_news_analyzer.models import Company, QuarterlyResult, WatchlistItem
 from stock_news_analyzer.sources import xbrl
 from stock_news_analyzer.sources.announcements import IST
@@ -64,6 +65,12 @@ BANK_REVENUE = ("Income",)
 
 
 INTEGRATED_FINANCIALS = "Integrated Filing- Financials"
+# Profit within this share of EPS x shares counts as consistent.
+PROFIT_TOLERANCE = Decimal("0.25")
+# An XBRL quarter with revenue above this multiple of the company's nearby quarters is a
+# half year under a quarter's label.
+HALF_YEAR_RATIO = Decimal("1.75")
+XBRL_REJECTED = "xbrl-rejected"  # the `model` of a period whose XBRL figures were put back
 
 
 @dataclass
@@ -71,6 +78,7 @@ class XbrlResult:
     periods: int = 0  # stored or replaced
     corrected: int = 0  # replaced a Results Reader figure that differed by more than 1%
     skipped: int = 0  # already from XBRL
+    rejected: int = 0  # quarters found to be half years, put back to the PDF reading
     errors: list[str] = field(default_factory=list)
 
 
@@ -160,14 +168,30 @@ def contexts_for(content: bytes, filing: dict) -> list[tuple[int, str]]:
     return sorted(chosen.items())
 
 
+def _shares(facts: dict[str, str]) -> Decimal | None:
+    """Number of equity shares: paid-up equity capital / face value, both in the file."""
+    paid = next((v for t, v in facts.items() if "PaidUp" in t and "EquityShareCapital" in t), None)
+    face = next((v for t, v in facts.items() if "FaceValue" in t and "EquityShare" in t), None)
+    try:
+        paid_up, face_value = Decimal(paid), Decimal(face)
+    except (ArithmeticError, TypeError):
+        return None
+    return paid_up / face_value if paid_up > 0 and face_value > 0 else None
+
+
 def figures(content: bytes, bank: bool, context: str = CONTEXT) -> dict[str, tuple[Decimal, str]]:
-    """{field: (value, as written)} for one context. Money in Rs crore."""
+    """{field: (value, as written)} for one context. Money in Rs crore.
+
+    Profit is checked against EPS: it should be close to EPS x the number of shares. The
+    first profit tag that fits is taken; if none does (a company that filled the tag in the
+    wrong unit), profit is left out."""
     facts = {}
     for tag, ctx, value in xbrl.facts(content):
         if ctx == context:
             facts.setdefault(tag, value)
     bank = bank or "RevenueOnInvestments" in facts  # a tag only banks' results carry
-    out = {}
+    out: dict[str, tuple[Decimal, str]] = {}
+    profits = []
     for f, tags in TAGS.items():
         if f == "revenue" and bank:
             tags = BANK_REVENUE + tags
@@ -181,13 +205,28 @@ def figures(content: bytes, bank: bool, context: str = CONTEXT) -> dict[str, tup
                 continue
             if f == "pat" and tag.endswith("OwnersOfParent") and value == 0:
                 continue  # a standalone filing leaves the attributable line at zero
+            if f == "pat":
+                profits.append((value / RUPEES_PER_CRORE, raw))
+                continue
             out[f] = (value if f == "eps" else value / RUPEES_PER_CRORE, raw)
             break
+    shares, eps = _shares(facts), out.get("eps", (None,))[0]
+    if shares and eps:
+        expected = eps * shares / RUPEES_PER_CRORE
+        fits = [p for p in profits if abs(p[0] - expected) <= abs(expected) * PROFIT_TOLERANCE]
+        if fits:
+            out["pat"] = fits[0]
+    elif profits:
+        out["pat"] = profits[0]
     return out
 
 
 def _store(session, company, filing: dict, months: int, found: dict) -> bool:
-    """Write one period; True if it replaced a Results Reader figure off by more than 1%."""
+    """Write one period; True if it replaced a Results Reader figure off by more than 1%.
+
+    Only the figures the file gave (and that passed the profit check) are written; the
+    others keep what the Results Reader read. Each figure replaced keeps its old value, so a
+    period found wrong later (check_periods) can be put back."""
     end = filing["end"]
     label = period_label(end, months)
     if not label or "revenue" not in found and "pat" not in found:
@@ -202,19 +241,52 @@ def _store(session, company, filing: dict, months: int, found: dict) -> bool:
     old = stored.revenue_cr if stored else None
     stored = stored or QuarterlyResult(isin=company.isin, period_end=end, months=months)
     session.add(stored)
+    written = dict(stored.as_written or {})
     for f in FIELDS:
-        value = found.get(f, (None, None))[0]
-        rounded = None if value is None else round(value, 2)
-        setattr(stored, "eps" if f == "eps" else f"{f}_cr", rounded)
+        if f not in found:
+            continue
+        column = "eps" if f == "eps" else f"{f}_cr"
+        before = getattr(stored, column)
+        setattr(stored, column, round(found[f][0], 2))
+        written[f] = {"as_written": found[f][1], "found": True, "source": filing["xbrl"]}
+        if before is not None:
+            written[f]["before"] = str(before)
     stored.period, stored.primary = label, True
     stored.basis = "consolidated" if filing["consolidated"] else "standalone"
     stored.unit, stored.model, stored.document_id = "rupees", XBRL, None
-    stored.as_written = {
-        f: {"as_written": raw, "found": True, "source": filing["xbrl"]}
-        for f, (_, raw) in found.items()
-    }
+    stored.as_written = written
     new = stored.revenue_cr
     return bool(old and new and abs(old - new) > abs(new) * Decimal("0.01"))
+
+
+def check_periods(session: Session, isin: str) -> int:
+    """Reject XBRL quarters whose revenue is far above the company's nearby quarters (an
+    SME company's half year filed under a quarter's label): their figures go back to what
+    the Results Reader read. Returns the number rejected."""
+    rows = periods(session, isin, 3)
+    rejected = 0
+    for r in rows:
+        if r.model != XBRL or not r.revenue_cr:
+            continue
+        near = sorted(
+            o.revenue_cr
+            for o in rows
+            if o is not r and o.revenue_cr and abs((o.period_end - r.period_end).days) <= 280
+        )
+        if len(near) < 2 or r.revenue_cr <= statistics.median(near) * HALF_YEAR_RATIO:
+            continue
+        written = dict(r.as_written or {})
+        for f in FIELDS:
+            entry = written.get(f)
+            if not entry or not entry.get("source"):
+                continue
+            before = entry.get("before")
+            setattr(r, "eps" if f == "eps" else f"{f}_cr", Decimal(before) if before else None)
+            written[f] = {**entry, "note": "XBRL rejected: a half year under a quarter's label"}
+        r.model = XBRL_REJECTED
+        r.as_written = written
+        rejected += 1
+    return rejected
 
 
 def _done(session, isin: str, filing: dict) -> bool:
@@ -226,7 +298,7 @@ def _done(session, isin: str, filing: dict) -> bool:
                 QuarterlyResult.isin == isin,
                 QuarterlyResult.period_end == filing["end"],
                 QuarterlyResult.months.in_(months),
-                QuarterlyResult.model == XBRL,
+                QuarterlyResult.model.in_((XBRL, XBRL_REJECTED)),
             )
         )
     )
@@ -270,8 +342,8 @@ def import_results(
                 continue
             try:
                 _, content, _ = client.download("nse", [filing["xbrl"]])
-                periods = contexts_for(content, filing)
-                found = [(m, figures(content, filing["bank"], c)) for m, c in periods]
+                spans = contexts_for(content, filing)
+                found = [(m, figures(content, filing["bank"], c)) for m, c in spans]
             except (ExchangeError, ValueError, SyntaxError) as exc:
                 result.errors.append(f"{company.nse_symbol} {filing['end']}: {exc}")
                 continue
@@ -284,6 +356,7 @@ def import_results(
                 result.corrected += _store(session, company, filing, months, figs)
                 result.periods += 1
                 stored += 1
+        result.rejected += check_periods(session, company.isin)
         session.commit()
         if stored:
             say(f"{company.nse_symbol}: {stored} periods from XBRL")

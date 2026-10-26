@@ -1949,7 +1949,8 @@ def results_xbrl(
         )
     typer.echo(
         f"{result.periods} periods from XBRL ({result.corrected} replaced a figure read from "
-        f"the PDF that differed by more than 1%); {result.skipped} already from XBRL"
+        f"the PDF that differed by more than 1%); {result.skipped} already from XBRL; "
+        f"{result.rejected} quarters rejected as half years"
     )
     for err in result.errors:
         typer.echo(f"error: {err}")

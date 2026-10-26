@@ -795,6 +795,49 @@ def peers(session: Session, today: date | None = None) -> list[dict]:
     return rows
 
 
+def coverage(session: Session) -> list[dict]:
+    """Per watchlist company: order-win filings found, how each was handled, orders stored,
+    quarters with an order book, and whether its order book is tracked (MIN_ORDERS orders)."""
+    tracked = {c.isin for c in order_driven(session)}
+    out = []
+    for company in session.scalars(
+        select(Company)
+        .join(WatchlistItem, WatchlistItem.isin == Company.isin)
+        .order_by(Company.nse_symbol)
+    ):
+        docs = session.execute(
+            select(Document.id, Document.text_status, OrderFiling.status)
+            .join(DocumentCompany, DocumentCompany.document_id == Document.id)
+            .outerjoin(OrderFiling, OrderFiling.document_id == Document.id)
+            .where(DocumentCompany.isin == company.isin, Document.doc_type == "order_win")
+        ).all()
+        status = [s for _, _, s in docs]
+        out.append(
+            {
+                "symbol": company.nse_symbol or company.isin,
+                "filings": len(docs),
+                "extracted": status.count("extracted"),
+                "copies": status.count("duplicate"),
+                "not_orders": status.count("not_order"),
+                "no_pdf": sum(1 for _, t, s in docs if s is None and t == "pending"),
+                "unread": sum(1 for _, t, s in docs if s is None and t != "pending"),
+                "orders": session.scalar(
+                    select(func.count()).select_from(Order).where(Order.isin == company.isin)
+                ),
+                "order_books": session.scalar(
+                    select(func.count())
+                    .select_from(OrderBookSnapshot)
+                    .where(
+                        OrderBookSnapshot.isin == company.isin,
+                        OrderBookSnapshot.order_book_cr.is_not(None),
+                    )
+                ),
+                "tracked": company.isin in tracked,
+            }
+        )
+    return out
+
+
 def reset(
     session: Session,
     symbol: str | None = None,

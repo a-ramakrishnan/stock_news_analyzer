@@ -48,7 +48,7 @@ explain_app = typer.Typer(
 )
 app.add_typer(explain_app, name="explain")
 concalls_app = typer.Typer(
-    help="Concall Analyst (LLM): earnings calls of stocks you own, and the promise ledger.",
+    help="Concall Analyst (LLM): earnings calls of watchlist stocks, and the promise ledger.",
     no_args_is_help=True,
 )
 app.add_typer(concalls_app, name="concalls")
@@ -1224,9 +1224,7 @@ def explain_reset(
 
 @concalls_app.command("run")
 def concalls_run(
-    symbol: str = typer.Option(
-        None, help="Only this NSE symbol (also works for a stock you only watch)."
-    ),
+    symbol: str = typer.Option(None, help="Only this NSE symbol."),
     since: str = typer.Option(
         None, help="Transcripts filed from YYYY-MM-DD (default: the last 400 days)."
     ),
@@ -1676,6 +1674,31 @@ def orders_peers() -> None:
     typer.echo(
         "book/bill: inflow / revenue, last 4 quarters. years: latest order book / last 4 "
         "quarters' revenue. growth: orders announced, last 4 quarters vs the 4 before."
+    )
+
+
+@orders_app.command("coverage")
+def orders_coverage() -> None:
+    """For every watchlist stock: order filings found and read, orders, order books."""
+    from stock_news_analyzer.agents import orders
+
+    with get_session() as session:
+        rows = orders.coverage(session)
+    typer.echo(
+        f"{'':<11} {'filings':>7} {'read':>5} {'copies':>6} {'not':>4} {'no PDF':>6} "
+        f"{'unread':>6} {'orders':>6} {'books':>5}  order book tracked"
+    )
+    for r in rows:
+        typer.echo(
+            f"{r['symbol']:<11} {r['filings']:>7} {r['extracted']:>5} {r['copies']:>6} "
+            f"{r['not_orders']:>4} {r['no_pdf']:>6} {r['unread']:>6} {r['orders']:>6} "
+            f"{r['order_books']:>5}  {'yes' if r['tracked'] else 'no'}"
+        )
+    typer.echo(
+        f"filings: classified as order wins. not: read but not an order win. no PDF: run "
+        f"`sna filings attachments --pdf important`. unread: run `sna orders run`. An order "
+        f"book is tracked from {orders.MIN_ORDERS} orders. If a company's order wins are "
+        "missing, run `sna filings reclassify` first: it re-reads each filing's type."
     )
 
 

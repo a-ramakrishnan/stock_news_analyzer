@@ -67,6 +67,12 @@ def test_parsers_skip_rows_without_id_or_time():
         ("Credit Rating", "credit_rating"),
         ("Board Meeting Intimation", "board_meeting"),
         ("Change in Directors", "other"),
+        # Single orders, as smaller companies word them.
+        ("Receipt of Work Order from Tamil Nadu Housing Board", "order_win"),
+        ("Intimation of Letter of Award", "order_win"),
+        ("Company emerges as L1 bidder for a Rs 120 crore project", "order_win"),
+        ("Receipt of order worth Rs 45 crore", "order_win"),
+        ("ABC Ltd bags Rs 300 crore contract", "order_win"),
     ],
 )
 def test_classify(subject, expected):

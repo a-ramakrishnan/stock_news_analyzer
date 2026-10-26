@@ -373,9 +373,6 @@ def earnings_calls(s: dict) -> None:
         how = (
             "The scheduler reads new transcripts each morning; "
             f"`sna concalls run --symbol {s['symbol']} --since 2023-10-01` reads older ones."
-            if s["owned"]
-            else "Earnings calls are read for stocks you own: mark it owned on Manage stocks, "
-            f"or run `sna concalls run --symbol {s['symbol']}`."
         )
         no_data(f"No earnings calls analysed yet. {how}")
     else:

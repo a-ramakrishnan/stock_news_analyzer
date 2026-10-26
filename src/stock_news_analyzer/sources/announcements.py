@@ -112,14 +112,40 @@ _RULES = [
     ("investor_presentation", ("investor presentation", "presentation")),
     ("results", ("financial result", "results for the quarter", "outcome of board meeting")),
     ("concall_schedule", ("analyst", "investor meet", "earnings call", "conference call")),
-    ("order_win", ("bagging", "receiving of order", "order win", "wins order", "orders")),
+    (
+        "order_win",
+        (
+            "bagging",
+            "receiving of order",
+            "order win",
+            "wins order",
+            "orders",
+            # One order at a time, as smaller companies (and NSE SME filings) word it.
+            "work order",
+            "letter of award",
+            "letter of intent",
+            "award of contract",
+            "award of work",
+            "contract award",
+            "receipt of order",
+            "receipt of purchase order",
+            "order received",
+            "received an order",
+            "secured an order",
+            "secures order",
+            "new order",
+            "lowest bidder",
+            "l1 bidder",
+            "bags ",
+        ),
+    ),
     ("credit_rating", ("credit rating",)),
     ("board_meeting", ("board meeting",)),
     ("shareholding", ("shareholding",)),
     ("insider_trading", ("insider trading", "sast", "acquisition of shares")),
 ]
 
-# Documents the Concall Analyst (agent 11) will read for stocks you own.
+# Documents the Concall Analyst (agent 11) reads.
 CONCALL_MATERIAL = {"concall_transcript", "concall_audio", "investor_presentation", "results"}
 
 

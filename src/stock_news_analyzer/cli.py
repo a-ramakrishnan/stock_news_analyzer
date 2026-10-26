@@ -826,7 +826,7 @@ def labels_list(
 def run(
     job: str = typer.Argument(
         ...,
-        help="filings, news, triage, deals, prices, results, explain, concalls, promises, "
+        help="filings, news, triage, deals, prices, xbrl, results, explain, concalls, promises, "
         "orders, securities, digest, or all.",
     ),
 ) -> None:
@@ -1808,6 +1808,26 @@ INTEGRATED_CANDIDATES = (
 )
 
 
+def _probe_xbrl(client, link: str, path) -> None:
+    """Download one XBRL file and show its periods and main figures."""
+    from stock_news_analyzer.sources import xbrl
+
+    try:
+        _, content, _ = client.download("nse", [link])
+        path.write_bytes(content)
+        found, contexts = xbrl.facts(content), xbrl.contexts(content)
+    except Exception as exc:
+        typer.echo(f"  XBRL {link}: FAILED {type(exc).__name__}: {exc}")
+        return
+    typer.echo(f"  XBRL {link}: {len(content):,} bytes, {len(found)} facts, saved to {path}")
+    plain = {k: v for k, v in contexts.items() if "[" not in v}
+    typer.echo("  contexts without dimensions: " + "; ".join(f"{k}={v}" for k, v in plain.items()))
+    wanted = ("RevenueFromOperations", "Income", "ProfitLossForPeriod", "ProfitBeforeTax")
+    for tag, context, value in found:
+        if tag in wanted or "OwnersOfParent" in tag or tag.startswith("BasicEarnings"):
+            typer.echo(f"    {tag:<55} {context:<12} {value[:30]}")
+
+
 def _probe_integrated(client, company, index: str, out_dir) -> None:
     """Try the candidate listings of integrated filings, and show the company's stored NSE
     announcements that carry XBRL."""
@@ -1831,6 +1851,9 @@ def _probe_integrated(client, company, index: str, out_dir) -> None:
         typer.echo(f"integrated {url} {extra}: {count} rows")
         first = rows[0] if isinstance(rows, list) and rows else rows
         typer.echo(f"  first: {str(first)[:600]}")
+        link = first.get("xbrl") if isinstance(first, dict) else None
+        if extra and link and link.endswith(".xml"):
+            _probe_xbrl(client, link, out_dir / f"{company.nse_symbol}-integrated.xml")
     with get_session() as session:
         docs = session.scalars(
             select(Document)

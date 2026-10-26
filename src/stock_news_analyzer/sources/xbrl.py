@@ -35,3 +35,16 @@ def contexts(content: bytes) -> dict[str, str]:
         members = [m.text for m in el.iter() if m.tag.rsplit("}", 1)[-1] == "explicitMember"]
         out[el.get("id")] = "..".join(d for d in dates if d) + (f" {members}" if members else "")
     return out
+
+
+def periods(content: bytes) -> dict[str, tuple[str | None, str | None, bool]]:
+    """{context id: (start date, end date, has dimensions)}. An instant context has no start."""
+    root = ET.fromstring(content)
+    out = {}
+    for el in root.iter():
+        if el.tag.rsplit("}", 1)[-1] != "context" or not el.get("id"):
+            continue
+        found = {d.tag.rsplit("}", 1)[-1]: d.text for d in el.iter()}
+        dims = any(d.tag.rsplit("}", 1)[-1] == "explicitMember" for d in el.iter())
+        out[el.get("id")] = (found.get("startDate"), found.get("endDate"), dims)
+    return out

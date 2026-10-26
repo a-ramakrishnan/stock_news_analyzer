@@ -92,7 +92,7 @@ def test_one_filing_per_period_consolidated_first():
     ]
     picked = xr.filings(rows, since=date(2024, 1, 1))
     assert [r["xbrl"] for r in picked] == ["https://x/c.xml", "https://x/b.xml"]
-    assert xr._months(picked[0]["_start"], picked[0]["_end"]) == 6
+    assert [r["months"] for r in picked] == [6, 3] and picked[1]["consolidated"]
 
 
 @pytest.mark.db
@@ -129,6 +129,9 @@ def test_import_replaces_the_pdf_reading_and_skips_next_time(loaded):  # noqa: F
                 }
             ]
 
+        def nse_integrated_results(self, symbol, index="equities"):
+            return []
+
         def download(self, exchange, urls):
             self.downloads += 1
             return urls[0], LT_Q3, True
@@ -146,3 +149,67 @@ def test_import_replaces_the_pdf_reading_and_skips_next_time(loaded):  # noqa: F
     )
     again = xr.import_results(loaded, client)
     assert (again.periods, again.skipped, client.downloads) == (0, 1, 1)
+
+
+def q4_file() -> bytes:
+    """An integrated filing for Q4 FY26: the quarter (OneD) and the year (FourD), with dates."""
+    contexts = "".join(
+        f'<xbrli:context id="{cid}"><xbrli:period><xbrli:startDate>{s}</xbrli:startDate>'
+        f"<xbrli:endDate>2026-03-31</xbrli:endDate></xbrli:period></xbrli:context>"
+        for cid, s in (("OneD", "2026-01-01"), ("FourD", "2025-04-01"))
+    )
+    facts = (
+        '<in-capmkt:RevenueFromOperations contextRef="OneD">827620000000'
+        "</in-capmkt:RevenueFromOperations>"
+        '<in-capmkt:ProfitOrLossAttributableToOwnersOfParent contextRef="OneD">53260000000'
+        "</in-capmkt:ProfitOrLossAttributableToOwnersOfParent>"
+        '<in-capmkt:RevenueFromOperations contextRef="FourD">2860000000000'
+        "</in-capmkt:RevenueFromOperations>"
+    )
+    return (
+        '<xbrli:xbrl xmlns:xbrli="http://www.xbrl.org/2003/instance" '
+        f'xmlns:in-capmkt="http://example/in-capmkt">{contexts}{facts}</xbrli:xbrl>'
+    ).encode()
+
+
+@pytest.mark.db
+def test_integrated_filings_give_the_quarter_and_the_year(loaded):  # noqa: F811
+    class FakeNSE:
+        def nse_financial_results(self, symbol, period="Quarterly", index="equities"):
+            return []
+
+        def nse_integrated_results(self, symbol, index="equities"):
+            if symbol != "LT":
+                return []
+            return [
+                {
+                    "type": "Integrated Filing- Governance",
+                    "qe_Date": "31-MAR-2026",
+                    "xbrl": "https://x/gov.xml",
+                },
+                {
+                    "type": "Integrated Filing- Financials",
+                    "qe_Date": "31-MAR-2026",
+                    "consolidated": "Standalone",
+                    "xbrl": "https://x/standalone.xml",
+                },
+                {
+                    "type": "Integrated Filing- Financials",
+                    "qe_Date": "31-MAR-2026",
+                    "consolidated": "Consolidated",
+                    "xbrl": "https://x/consolidated.xml",
+                },
+            ]
+
+        def download(self, exchange, urls):
+            assert urls == ["https://x/consolidated.xml"]
+            return urls[0], q4_file(), True
+
+    result = xr.import_results(loaded, FakeNSE(), since=date(2025, 1, 1))
+    assert (result.periods, result.errors) == (2, [])
+    rows = {r.months: r for r in rs.periods(loaded, LT)}
+    assert rows[3].period == "Q4 FY26" and rows[3].revenue_cr == Decimal("82762.00")
+    assert rows[3].pat_cr == Decimal("5326.00") and rows[3].basis == "consolidated"
+    assert rows[12].period == "FY26" and rows[12].revenue_cr == Decimal("286000.00")
+    again = xr.import_results(loaded, FakeNSE(), since=date(2025, 1, 1))
+    assert (again.periods, again.skipped) == (0, 1)

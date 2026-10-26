@@ -168,6 +168,20 @@ def job_orders(session: Session) -> str:
     return summary
 
 
+def job_xbrl(session: Session) -> str:
+    from stock_news_analyzer.agents import xbrl_results
+    from stock_news_analyzer.sources.exchange_http import ExchangeClient
+
+    result = xbrl_results.import_results(session, ExchangeClient())
+    summary = (
+        f"{result.periods} result periods from XBRL ({result.corrected} corrected a PDF "
+        f"reading), {result.skipped} already from XBRL"
+    )
+    if result.errors:
+        raise JobError(summary, result.errors)
+    return summary
+
+
 def job_results(session: Session) -> str:
     from stock_news_analyzer.agents import results
     from stock_news_analyzer.llm import LLM
@@ -248,6 +262,7 @@ JOBS: dict[str, Callable[[Session], str]] = {
     "triage": job_triage,
     "deals": job_deals,
     "prices": job_prices,
+    "xbrl": job_xbrl,
     "results": job_results,
     "explain": job_explain,
     "concalls": job_concalls,
@@ -263,6 +278,7 @@ RUN_ALL = (
     "triage",
     "deals",
     "prices",
+    "xbrl",
     "results",
     "explain",
     "concalls",

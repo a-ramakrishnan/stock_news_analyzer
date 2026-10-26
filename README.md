@@ -308,7 +308,7 @@ uv run sna results coverage
 | `uv run sna results run` | Read results filings of the last 800 days not read yet (Haiku, about $0.002 a quarter); shows the cost first and asks above $1 |
 | `uv run sna results list LT` | Period by period: revenue and its change on a year earlier, EBITDA and margin, profit and its change, EPS |
 | `uv run sna results coverage` | Every watchlist stock: results filings found, read, copies, without a statement, without text, waiting for a PDF; periods stored; the latest period |
-| `uv run sna results xbrl` | Take results from NSE's XBRL files: exact tagged figures, no LLM. Replaces the PDF reading of the same period. NSE lists these up to January 2025 |
+| `uv run sna results xbrl` | Take results from NSE's XBRL files: exact tagged figures, no LLM. Replaces the PDF reading of the same period. Covers the results listing (to January 2025) and the integrated filings (from February 2025); runs daily at 07:15 |
 | `uv run sna results probe LT` | Show NSE's results listing and one XBRL file for a stock, to check their format |
 | `uv run sna results reset --symbol LT` | Forget results so they are read again |
 
@@ -365,7 +365,7 @@ make scheduler
 | --- | --- |
 | `uv run sna orchestrator show` | The schedule and when each job runs next |
 | `make run-all` | Run every job once, now, in order: collect, triage, measure, explain, read calls, digest |
-| `uv run sna run news` | Run one job now: `filings`, `news`, `triage`, `deals`, `prices`, `results`, `explain`, `concalls`, `promises`, `orders`, `securities` or `digest` |
+| `uv run sna run news` | Run one job now: `filings`, `news`, `triage`, `deals`, `prices`, `xbrl`, `results`, `explain`, `concalls`, `promises`, `orders`, `securities` or `digest` |
 | `uv run sna runs` | Recent runs: when, how long, result, errors |
 | `make digest` | Print the digest covering everything since the last scheduled digest (`--hours 24` for a fixed window) |
 | `make scheduler` | Start the orchestrator in Docker; it keeps running while Docker Desktop is open |

@@ -12,6 +12,8 @@ jobs:
     cron: "30 19,21 * * 1-5"
   deals:         # NSE bulk and block deals (published in the evening)
     cron: "0 19,22 * * 1-5"
+  xbrl:          # results from NSE's XBRL files (exact figures, no LLM), before the PDF reader
+    cron: "15 7 * * *"
   results:       # LLM (Haiku): revenue and profit from results filings, before the order books
     cron: "20 7 * * *"
   explain:       # LLM (Sonnet): likely cause of each unusual day, before the morning digest

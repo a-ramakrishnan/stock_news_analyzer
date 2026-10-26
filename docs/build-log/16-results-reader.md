@@ -62,6 +62,13 @@ make scheduler
 
 L&T's Q4 FY26 and Q1 FY27 results filings, on both exchanges and under several titles, all attach the same PDF: the results press release with its annexures. The statement pages either aren't in it or aren't text. The press release's "Group Performance – Key Parameters" annexure still gives revenue, EBITDA, finance costs, depreciation and profit after tax for the quarter and a year earlier. Haiku had seen it but said "no results statement", because the prompt asked for one. The prompt now takes such a key-figures table when a filing has no statement. Figures the table doesn't give (other income, profit before tax, EPS) stay empty, so EBITDA isn't worked out for those quarters.
 
+## A dropped decimal point
+
+On the full re-run, three L&T quarters came out 100 times too large: Q4 FY24 revenue of Rs 6,707,868 crore instead of Rs 67,079 crore. Haiku had copied "67,078.68" as "6707868". The check compared the figures with the text ignoring punctuation, so it passed. The same filings had been read correctly the run before.
+
+- **Exact numbers only:** a figure is now kept only if the same number, decimal point included, appears in the filing. A figure that doesn't is left empty and marked as not found.
+- **Sonnet as a second try:** KARURVYSYA's long bank statements still made Haiku repeat itself or break off in 9 of its filings, and BLACKBUCK's in 4. When Haiku's answer is unusable, the analysis model now tries the same filing once before it is marked `failed`.
+
 ## Next
 
 The rest of the Event Extractor (capex, guidance, management, ratings, fundraises), with the QA Checker.

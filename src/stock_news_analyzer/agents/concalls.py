@@ -263,6 +263,13 @@ def quarter_name(text: str | None) -> str | None:
     return f"{m.group(1).upper()} FY{_fy_end_year(m.group(2)) % 100:02d}"
 
 
+def quarter_of(day: date) -> str:
+    """The Indian fiscal quarter `day` falls in: 15 Aug 2026 -> 'Q2 FY27'."""
+    fiscal_q = (day.month - 4) % 12 // 3 + 1
+    fy_end = day.year + 1 if day.month >= 4 else day.year
+    return f"Q{fiscal_q} FY{fy_end % 100:02d}"
+
+
 def quarter_before(day: date) -> str:
     """The quarter that ended most recently before `day`: the one a call on `day` discusses."""
     month = (day.month - 1) // 3 * 3  # last month of the previous calendar quarter (0 = Dec)

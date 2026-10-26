@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.3 · Oct 25, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.4 · Oct 26, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -31,7 +31,7 @@ Orchestrator (0)
 | 7 | Event Extractor | Not started | — |
 | 8 | QA Checker | Not started | — |
 | 9 | Move Explainer | Built (Sonnet 5.5) | 10, 11 |
-| 10 | Order Book Tracker | Not started | — |
+| 10 | Order Book Tracker | Built: orders from filings (Haiku 5.5), quarterly order books (Sonnet 5.5), metrics and peer ranks | 14 |
 | 11 | Concall Analyst | Built (Sonnet 5.5): structured reading of each call, comparison with the previous one, promises recorded | 12 |
 | 12 | Promise Ledger | Built (Sonnet 5.5): promises past their date checked against later results and filings; credibility score per company | 12, 13 |
 | 13 | Bullion Analyst | Not started | — |
@@ -337,6 +337,18 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **Trigger:** on each new order event; quarterly after results.
 - **LLM:** Sonnet 5.5 to read order book figures from results and presentations.
 - **Reads / writes:** `orders`, `order_book_snapshots`, results data → `order_metrics`.
+- **As built (step 14):** metrics are computed when shown, not stored in `order_metrics`.
+  - **Orders:** Haiku 5.5 reads each order-win filing, up to 8 per call, and records each order:
+    - client and client type (government, PSU, private, export)
+    - value in Rs crore; when only a range is given (L&T's "large": 2,500-5,000), the midpoint
+    - segment, domestic or export, execution period
+    - the value as written, checked against the filing's text
+
+    Filings that aren't order wins (a regulator's "order") are dropped. A copy of an announcement on the other exchange is caught by an identical file, a similar title, or the same value within 2 days.
+  - **Order book:** for each company with at least 2 orders, Sonnet 5.5 reads one document per quarter: the investor presentation first, then the call transcript, then results. It takes the order book, the quarter's inflow and its revenue, each checked as written. A document is read once; a quarter without figures waits for a newer document.
+  - **Metrics, in code:** announced vs reported inflow, book-to-bill, years of revenue in the order book, execution (revenue ÷ the order book a year earlier), the unexplained change in the order book, government/PSU and top-client share, and ranks against the other order-driven stocks.
+  - **Where it shows:** `sna orders run/list/book/peers/reset`, the 07:50 `orders` job, an "Orders" section in the digest, and an **Order book** tab on the Stock page.
+  - **Not yet:** using order value against revenue as materiality in the Move Explainer, and sector-wide peers beyond the watchlist.
 
 1. Add up announced orders per company per quarter, by client type.
 2. Read the reported order book from results, presentations and concalls.
@@ -466,7 +478,7 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 
 ## Build-in-public plan
 
-Each build step has a log with a draft post in [`docs/build-log/`](../build-log/) (steps 1–13 so far).
+Each build step has a log with a draft post in [`docs/build-log/`](../build-log/) (steps 1–14 so far).
 
 Post one agent per post, in build order, with something visual each time: a screenshot of real output does better than a description. The tweet drafts above are starting points; rewrite them with real numbers once each agent runs.
 

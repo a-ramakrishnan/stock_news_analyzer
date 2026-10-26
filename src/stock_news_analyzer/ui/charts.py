@@ -194,6 +194,31 @@ def excess_bars(perf: pd.DataFrame, threshold_note: str = "", dark: bool = False
     return _layout(fig, t, 220)
 
 
+def order_inflow_chart(quarters: pd.DataFrame, dark: bool = False) -> go.Figure:
+    """Orders per quarter: the value of orders the company announced, beside the inflow it
+    reported. A gap means orders not announced (often many small ones) or no value given."""
+    t = theme(dark)
+    fig = go.Figure()
+    if quarters.empty:
+        return _layout(fig, t, 300)
+    for col, name, color in (
+        ("announced_cr", "Announced", t.stock),
+        ("inflow_cr", "Reported inflow", t.sector),
+    ):
+        fig.add_trace(
+            go.Bar(
+                x=quarters["quarter"],
+                y=quarters[col],
+                name=name,
+                marker=dict(color=color),
+                hovertemplate=f"%{{x}} {name}: Rs %{{y:,.0f}} cr<extra></extra>",
+            )
+        )
+    fig.update_layout(barmode="group", bargap=0.25, bargroupgap=0.08)
+    fig.update_yaxes(title=dict(text="Rs crore", font=dict(color=t.muted)), tickformat=",.0f")
+    return _layout(fig, t, 300)
+
+
 HORIZONS = (("avg_1d", "1 day"), ("avg_5d", "5 days"), ("avg_20d", "20 days"))
 
 

@@ -257,6 +257,7 @@ def stock_page_body() -> None:
     (
         unusual_tab,
         calls_tab,
+        orders_tab,
         filings_tab,
         news_tab,
         deals_tab,
@@ -266,6 +267,7 @@ def stock_page_body() -> None:
         [
             "Unusual days",
             "Earnings calls",
+            "Order book",
             "Filings",
             "News",
             "Bulk/block deals",
@@ -326,6 +328,8 @@ def stock_page_body() -> None:
                 )
     with calls_tab:
         earnings_calls(s)
+    with orders_tab:
+        order_book(s)
     with filings_tab:
         filings_table(load("filings", isin=s["isin"], dedupe=True, limit=200), key="stock")
     with news_tab:
@@ -487,6 +491,118 @@ def earnings_calls(s: dict) -> None:
     if not gaps.empty:
         with st.expander(f"Transcripts not read ({len(gaps)})"):
             st.dataframe(gaps, hide_index=True, width="stretch")
+
+
+def _fmt(x, fmt: str) -> str:
+    return "–" if x is None or pd.isna(x) else fmt.format(x)
+
+
+def order_book(s: dict) -> None:
+    """Orders announced, the quarterly order book, book-to-bill and peers."""
+    data = load("order_book", isin=s["isin"])
+    quarters, summary, orders = data["quarters"], data["summary"], data["orders"]
+    if quarters.empty:
+        no_data(
+            "No orders read for this stock yet. The scheduler reads order-win filings each "
+            f"morning; `sna orders run --symbol {s['symbol']}` reads them now."
+        )
+        return
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric(
+        "Order book",
+        _fmt(summary["order_book_cr"], "Rs {:,.0f} cr"),
+        help=f"As reported for {summary['order_book_quarter'] or '–'}.",
+    )
+    m2.metric(
+        "Years of revenue",
+        _fmt(summary["years_of_revenue"], "{:.1f}"),
+        help="Latest order book ÷ revenue of the last four quarters.",
+    )
+    m3.metric(
+        "Book-to-bill",
+        _fmt(summary["book_to_bill"], "{:.2f}x"),
+        help="Orders won ÷ revenue, last four quarters. Above 1: the order book is growing.",
+    )
+    m4.metric(
+        "Execution",
+        _fmt(summary["execution"], "{:.0%}"),
+        help="Revenue of the last four quarters ÷ the order book a year earlier.",
+    )
+    st.plotly_chart(charts.order_inflow_chart(quarters, dark()), width="stretch", **PLOT)
+    st.caption(
+        "Announced: orders the company filed with the exchanges, valued in Rs crore (the "
+        "midpoint where only a range was given). Reported inflow: what results or the call "
+        "said was won in the quarter. "
+        + (
+            f"Government and PSU clients gave {summary['government_share']:.0%} of the value "
+            "announced in the last year"
+            if summary["government_share"] is not None
+            else ""
+        )
+        + (
+            f"; the largest client, {summary['top_client']}, {summary['top_client_share']:.0%}."
+            if summary["top_client"]
+            else ""
+        )
+    )
+    shown = quarters.drop(columns=["period_end"]).iloc[::-1]
+    st.dataframe(
+        shown,
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "quarter": st.column_config.TextColumn("Quarter"),
+            "announced_cr": st.column_config.NumberColumn("Announced", format="localized"),
+            "announced": st.column_config.NumberColumn("Orders"),
+            "unvalued": st.column_config.NumberColumn("No value"),
+            "inflow_cr": st.column_config.NumberColumn("Reported inflow", format="localized"),
+            "order_book_cr": st.column_config.NumberColumn("Order book", format="localized"),
+            "revenue_cr": st.column_config.NumberColumn("Revenue", format="localized"),
+            "book_to_bill": st.column_config.NumberColumn("Book-to-bill", format="%.2f"),
+            "announced_share": st.column_config.NumberColumn(
+                "Announced ÷ reported", format="percent"
+            ),
+            "unexplained_cr": st.column_config.NumberColumn(
+                "Unexplained change",
+                format="localized",
+                help="Closing book − (opening book + inflow − revenue). Negative: cancellations "
+                "or revenue from outside the order book; positive: orders not counted.",
+            ),
+        },
+    )
+    with st.expander(f"Orders announced ({len(orders)})"):
+        st.dataframe(
+            orders,
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "announced": st.column_config.DatetimeColumn("Date", format="DD MMM YYYY"),
+                "value_cr": st.column_config.NumberColumn("Rs crore", format="localized"),
+                "range": st.column_config.TextColumn("Range given"),
+                "client_type": st.column_config.TextColumn("Client type"),
+                "months": st.column_config.NumberColumn("Months"),
+                "description": st.column_config.TextColumn("What for", width="large"),
+            },
+        )
+    peers = load("order_peers")
+    if len(peers) > 1:
+        st.markdown("**Compared with your other order-driven stocks**")
+        st.dataframe(
+            peers,
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "symbol": st.column_config.TextColumn("Stock"),
+                "book_to_bill": st.column_config.NumberColumn("Book-to-bill", format="%.2f"),
+                "years_of_revenue": st.column_config.NumberColumn("Years", format="%.1f"),
+                "execution": st.column_config.NumberColumn("Execution", format="percent"),
+                "announced_growth": st.column_config.NumberColumn("Order growth", format="percent"),
+                "order_book_cr": st.column_config.NumberColumn("Order book", format="localized"),
+                "government_share": st.column_config.NumberColumn("Govt", format="percent"),
+                "top_client_share": st.column_config.NumberColumn("Top client", format="percent"),
+                "orders_last_year": st.column_config.NumberColumn("Orders (1y)"),
+            },
+        )
 
 
 def filings_table(df: pd.DataFrame, key: str) -> None:

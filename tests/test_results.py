@@ -157,11 +157,8 @@ def test_excerpt_finds_the_statement_behind_a_long_press_release():
     assert "Revenue from operations 67,00,000.00 60,00,000.00" in part
 
 
-@pytest.mark.db
-def test_an_unusable_answer_is_recorded_and_the_next_filing_tried(loaded):  # noqa: F811
-    first = results_filing(loaded)
-    second = results_filing(loaded, OCT.replace(minute=20), "Outcome of Board Meeting")
-    answers = [None, answer()]
+def broken_then(answers):
+    """Replies with each of `answers` in turn; None stands for a cut-off, malformed answer."""
 
     def reply(_kwargs):
         parsed = answers.pop(0)
@@ -171,9 +168,45 @@ def test_an_unusable_answer_is_recorded_and_the_next_filing_tried(loaded):  # no
             usage=usage(8000, 1200), parsed_output=parsed, stop_reason="end_turn"
         )
 
-    llm, client = _llm(loaded, reply)
+    return reply
+
+
+@pytest.mark.db
+def test_sonnet_reads_what_haiku_could_not(loaded):  # noqa: F811
+    first = results_filing(loaded)
+    llm, client = _llm(loaded, broken_then([None, answer()]))
     result = rs.read_results(loaded, llm)
-    assert (result.failed, result.periods, result.calls) == (1, 4, 2)
+    assert (result.failed, result.periods, result.calls) == (0, 4, 2)
+    filing = loaded.get(ResultFiling, first.id)
+    assert (filing.status, filing.model) == ("read", "claude-sonnet-5-5")
+
+
+@pytest.mark.db
+def test_a_figure_not_in_the_filing_is_not_stored(loaded):  # noqa: F811
+    results_filing(loaded)
+    dropped = Q2.model_copy(update={"revenue": "6700000000"})  # "67,00,000.00" without its point
+    llm, _ = _llm(loaded, replying(answer([dropped, Q1])))
+    rs.read_results(loaded, llm)
+    q2 = loaded.query(QuarterlyResult).filter_by(period="Q2 FY27").one()
+    assert q2.revenue_cr is None and q2.pat_cr == Decimal("4400.00")
+    assert q2.as_written["revenue"] == {"as_written": "6700000000", "found": False}
+    assert rs.numbers_in("Revenue 67,078.68 (234.10)") == {Decimal("67078.68"), Decimal("234.10")}
+
+
+@pytest.mark.db
+def test_an_unusable_answer_is_recorded_and_the_next_filing_tried(loaded):  # noqa: F811
+    first = results_filing(loaded)
+    second = results_filing(loaded, OCT.replace(minute=20), "Outcome of Board Meeting")
+    answers = [None, None, answer()]  # Haiku and Sonnet both fail on the first filing
+
+    llm, client = _llm(loaded, broken_then(answers))
+    result = rs.read_results(loaded, llm)
+    assert (result.failed, result.periods, result.calls) == (1, 4, 3)
+    assert [r["model"] for r in client.requests] == [
+        "claude-haiku-5-5",
+        "claude-sonnet-5-5",
+        "claude-haiku-5-5",
+    ]
     assert client.requests[0]["max_tokens"] == rs.MAX_TOKENS
     assert loaded.get(ResultFiling, first.id).status == "failed"
     assert loaded.get(ResultFiling, second.id).status == "read"
@@ -253,13 +286,14 @@ def test_a_periods_own_filing_wins_over_a_comparative_column(loaded):  # noqa: F
         loaded,
         datetime(2026, 7, 30, 16, 0, tzinfo=IST),
         "Financial Results for the quarter ended 30.06.2026",
+        text=STATEMENT + "Revenue from operations (restated) 59,50,000.00\n" + PADDING,
     )
     restated = Q1.model_copy(update={"revenue": "59,50,000.00"})
     llm, _ = _llm(loaded, replying(answer([restated]), answer()))
     rs.read_results(loaded, llm)  # Q1's own filing first (oldest period first)
     q1 = loaded.query(QuarterlyResult).filter_by(period="Q1 FY27").one()
     assert (q1.revenue_cr, q1.primary, q1.document_id) == (Decimal("59500.00"), True, july.id)
-    assert q1.as_written["revenue"]["found"] is False  # 59,50,000 is not in the filing's text
+    assert q1.as_written["revenue"]["found"] is True
 
 
 @pytest.mark.db

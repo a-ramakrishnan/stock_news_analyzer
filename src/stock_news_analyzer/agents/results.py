@@ -29,7 +29,6 @@ from sqlalchemy.orm import Session
 
 from stock_news_analyzer.agents.concalls import (
     _month_end,
-    _norm,
     period_end,
     quarter_before,
     quarter_of,
@@ -176,9 +175,12 @@ def period_label(end: date, months: int) -> str | None:
     return None
 
 
-def _found(as_written: str | None, text_norm: str) -> bool:
-    q = _norm(as_written or "")
-    return len(q) >= 3 and q in text_norm
+_NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
+
+
+def numbers_in(text: str) -> set[Decimal]:
+    """Every number written in `text`, as a value: '67,078.68' -> 67078.68."""
+    return {Decimal(n.replace(",", "")) for n in _NUMBER.findall(text)}
 
 
 # --- finding filings -------------------------------------------------------------
@@ -330,13 +332,17 @@ def _store(session, doc, company, text, answer: ResultsAnswer, model) -> tuple[s
             columns.append((end, c, label))
     if not columns:
         return "", 0
-    text_norm = _norm(text)
+    in_text = numbers_in(text)
     factor = UNITS[answer.unit]
     latest = max(end for end, _, _ in columns)
     own, stored = "", 0
     for end, c, label in columns:
         primary = end == latest
-        values = {f: number(getattr(c, f)) for f in FIELDS}
+        # A figure is kept only if that exact number is in the filing: copying "67,078.68"
+        # as "6707868" (a dropped decimal point) would otherwise pass as found.
+        written = {f: number(getattr(c, f)) for f in FIELDS}
+        found = {f: v is not None and abs(v) in in_text for f, v in written.items()}
+        values = {f: v if found[f] else None for f, v in written.items()}
         if values["revenue"] is None and values["pat"] is None:
             continue
         row = session.scalars(
@@ -359,15 +365,29 @@ def _store(session, doc, company, text, answer: ResultsAnswer, model) -> tuple[s
         row.period, row.basis, row.unit = label, answer.basis, answer.unit
         row.document_id, row.primary, row.model = doc.id, primary, model
         row.as_written = {
-            f: {"as_written": getattr(c, f), "found": _found(getattr(c, f), text_norm)}
-            for f in FIELDS
-            if getattr(c, f)
+            f: {"as_written": getattr(c, f), "found": found[f]} for f in FIELDS if getattr(c, f)
         }
         stored += 1
         if primary and c.months in (3, 6) and (not own or c.months == 3):
             own = label
     session.flush()
     return own, stored
+
+
+def _ask(llm: LLM, models: tuple, prompt: str) -> tuple[ResultsAnswer, str]:
+    """(answer, model that gave it): Haiku first; if its answer is unusable (cut off or
+    malformed, as happens with long bank statements), the analysis model once."""
+    *first, last = [m for m in models if m]
+    for model in first:
+        try:
+            return llm.structured(
+                "results", model, SYSTEM, prompt, ResultsAnswer, max_tokens=MAX_TOKENS
+            ), model
+        except BadAnswer:
+            pass
+    return llm.structured(
+        "results", last, SYSTEM, prompt, ResultsAnswer, max_tokens=MAX_TOKENS
+    ), last
 
 
 def read_results(
@@ -383,6 +403,8 @@ def read_results(
     """Read results filings not read yet: for each company and period, the best filing
     first; the period's other filings are then marked as copies."""
     model = model or get_settings().llm_model_triage
+    analysis = llm.settings.llm_model_analysis
+    fallback = analysis if analysis != model else None
     say = progress or (lambda _line: None)
     result = result or ResultsResult()
     since = since or datetime.now(IST).date() - timedelta(days=RESULT_DAYS)
@@ -414,23 +436,15 @@ def read_results(
                 session.commit()
                 return result
             try:
-                answer = llm.structured(
-                    "results",
-                    model,
-                    SYSTEM,
-                    _prompt(company, quarter, doc, text),
-                    ResultsAnswer,
-                    max_tokens=MAX_TOKENS,
-                )
+                answer, used = _ask(llm, (model, fallback), _prompt(company, quarter, doc, text))
             except BudgetExceeded as exc:
                 result.errors.append(str(exc))
                 say(f"stopped: {exc}")
                 session.commit()
                 return result
             except BadAnswer as exc:
-                # Asking again would likely fail the same way: record it and try the
-                # period's next filing.
-                result.calls += 1
+                # Both models failed: record it and try the period's next filing.
+                result.calls += 2 if fallback else 1
                 tries += 1
                 result.failed += 1
                 result.errors.append(f"{company.nse_symbol or isin} {quarter}: {exc}")
@@ -439,16 +453,16 @@ def read_results(
             except LLMError as exc:  # the API was unreachable: try again on the next run
                 result.errors.append(f"{company.nse_symbol or isin} {quarter}: {exc}")
                 break
-            result.calls += 1
+            result.calls += 1 if used == model else 2
             tries += 1
-            own, stored = _store(session, doc, company, text, answer, model)
+            own, stored = _store(session, doc, company, text, answer, used)
             result.filings += 1
             result.periods += stored
             if own or stored:
-                _mark(session, doc, company, "read", own or None, answer.note.strip(), model)
+                _mark(session, doc, company, "read", own or None, answer.note.strip(), used)
                 say(f"{company.nse_symbol or company.name} {own or quarter}: {stored} periods")
             else:
-                _mark(session, doc, company, "no_figures", None, answer.note.strip(), model)
+                _mark(session, doc, company, "no_figures", None, answer.note.strip(), used)
                 result.no_figures += 1
         session.commit()
     return result

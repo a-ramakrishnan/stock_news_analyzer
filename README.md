@@ -308,6 +308,8 @@ uv run sna results coverage
 | `uv run sna results run` | Read results filings of the last 800 days not read yet (Haiku, about $0.002 a quarter); shows the cost first and asks above $1 |
 | `uv run sna results list LT` | Period by period: revenue and its change on a year earlier, EBITDA and margin, profit and its change, EPS |
 | `uv run sna results coverage` | Every watchlist stock: results filings found, read, copies, without a statement, without text, waiting for a PDF; periods stored; the latest period |
+| `uv run sna results xbrl` | Take results from NSE's XBRL files: exact tagged figures, no LLM. Replaces the PDF reading of the same period. NSE lists these up to January 2025 |
+| `uv run sna results probe LT` | Show NSE's results listing and one XBRL file for a stock, to check their format |
 | `uv run sna results reset --symbol LT` | Forget results so they are read again |
 
 EBITDA here is profit before tax + finance costs + depreciation − other income. The scheduler reads new results at 07:20, before the order books. New results appear in a "Results" section of the digest, and the Stock page has a **Results** tab: the latest revenue, profit and margin, a revenue chart and the table.

@@ -490,7 +490,8 @@ def quarter_revenue(session: Session, isin: str) -> dict[str, float]:
 
 def trailing_revenue(session: Session, isin: str, end: date) -> tuple[float, str] | None:
     """Revenue of the 12 months to `end` and how it was made up: four quarters, two half
-    years, or the year. None if the results read don't cover those months."""
+    years, two quarters and a half year, or the year. None if the results read don't cover
+    those months."""
     by = {(r.period_end, r.months): r.revenue_cr for r in periods(session, isin)}
     quarters = [by.get((_months_before(end, 3 * i), 3)) for i in range(4)]
     if all(v is not None for v in quarters):
@@ -498,6 +499,11 @@ def trailing_revenue(session: Session, isin: str, end: date) -> tuple[float, str
     halves = [by.get((end, 6)), by.get((_months_before(end, 6), 6))]
     if all(v is not None for v in halves):
         return float(sum(halves)), "2 half years"
+    # A company that moved from half-yearly to quarterly results: two quarters and the half
+    # year before them.
+    mixed = [quarters[0], quarters[1], by.get((_months_before(end, 6), 6))]
+    if all(v is not None for v in mixed):
+        return float(sum(mixed)), "2 quarters and a half year"
     if by.get((end, 12)) is not None:
         return float(by[(end, 12)]), "the year"
     return None

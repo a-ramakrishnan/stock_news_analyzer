@@ -75,6 +75,20 @@ The exact-number check didn't stop it. On the next run the same three L&T quarte
 - **Restored when it fits a lost point:** a figure 50-200 times too large, written without a decimal point while the others in its column have one, is divided by 100 and noted "decimal point restored".
 - **Left out otherwise:** revenue over 20 times the usual, or costs or profit above revenue for another reason, is left out and noted "out of scale, left out".
 
+## XBRL: the exchange's own figures
+
+Companies file every set of results in XBRL as well as PDF: each figure tagged, in rupees. Read from there, a figure needs no LLM and no check against PDF text.
+
+- **Two listings:** NSE's results listing has filings up to January 2025. From February 2025 results are filed as SEBI's Integrated Filing (Financial), listed at `/api/integrated-filing-results`. `sna results probe` found both.
+- **Which context:** the listing's files put the filing's period in context `OneD`; their context dates aren't reliable. Integrated filings are read by their context dates, so a Q4 filing gives the quarter and the year.
+- **XBRL is filed by the company, so it is checked too.** KMEW's profit-attributable line didn't fit its EPS (Q3 FY26: Rs 0.22 crore against EPS 13.35), and its H1 FY25 was filed under Q2's label (revenue Rs 95.62 crore). Two checks were added:
+  - profit must be within 25% of EPS × shares, where shares are paid-up capital ÷ face value from the same file
+  - a "quarter" more than 1.75 times the company's nearby quarters is rejected and the PDF reading put back
+
+  XBRL writes only the figures that pass and keeps each replaced value. The half-year check also caught KMEW's genuinely strong Q3 FY26 (Rs 90 crore against about Rs 50 crore around it); its PDF reading was the same, so nothing was lost.
+- **Result:** on a full rebuild, 236 periods came from XBRL and 26 PDF readings were corrected. L&T is exact from Q1 FY24 to Q1 FY27. KARURVYSYA's missing revenue and odd EPS are fixed. Four 2023 bank files are no longer on NSE.
+- **Daily:** the `xbrl` job at 07:15 runs before the PDF reader, which then skips the periods XBRL covered.
+
 ## Next
 
 The rest of the Event Extractor (capex, guidance, management, ratings, fundraises), with the QA Checker.

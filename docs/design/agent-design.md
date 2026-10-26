@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.8 · Oct 26, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.9 · Oct 26, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -27,7 +27,7 @@ flowchart LR
 
     subgraph SRC["Sources"]
         direction TB
-        S1["BSE + NSE filings, PDFs<br/>main board and SME"]:::built
+        S1["BSE + NSE filings, PDFs, XBRL<br/>main board and SME"]:::built
         S2["News: RSS + Google News"]:::built
         S3["NSE prices, indices,<br/>corporate actions"]:::built
         S4["NSE bulk and block deals"]:::built
@@ -47,7 +47,7 @@ flowchart LR
     subgraph UND["Understand"]
         direction TB
         A6["6 · Triage & Dedup"]:::built
-        A7["7 · Event Extractor<br/>results built;<br/>next: other events"]:::partlyNext
+        A7["7 · Event Extractor<br/>results built (XBRL + PDF);<br/>next: other events"]:::partlyNext
         A8["8 · QA Checker"]:::pending
     end
 
@@ -102,7 +102,7 @@ flowchart LR
 | 4 | Market Signals Collector | Partly: NSE bulk and block deals only | 11 |
 | 5 | Price & Label | Built for stocks; bullion part not started | 5 |
 | 6 | Triage & Dedup | Built (Haiku 5.5) | 9 |
-| 7 | Event Extractor | Partly: results figures from every results filing (Haiku 5.5); other event types not started | 16 |
+| 7 | Event Extractor | Partly: results figures for every stock, from XBRL where filed, else the PDF (Haiku 5.5); other event types not started | 16 |
 | 8 | QA Checker | Not started | — |
 | 9 | Move Explainer | Built (Sonnet 5.5) | 10, 11 |
 | 10 | Order Book Tracker | Built: orders from filings (Haiku 5.5), quarterly order books (Sonnet 5.5), metrics and peer ranks; coverage per stock; revenue gaps filled from results | 14, 15, 16 |
@@ -359,7 +359,7 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **Trigger:** after Triage.
 - **LLM:** Sonnet 5.5 (or Opus 5.5 at low effort) with structured JSON output.
 - **Reads / writes:** material documents → `events`, `orders`.
-- **As built (step 16), results only: the Results Reader** (`agents/results.py`, Haiku 5.5). It reads results, the first event type built, into `results`. The order tracker uses it to fill revenue gaps.
+- **As built (step 16), results only.** Results, the first event type built, go into `results`; the order tracker uses them to fill revenue gaps. Two sources: the exchange's XBRL files (exact, no LLM) first, and the **Results Reader** (`agents/results.py`, Haiku 5.5) reading the PDF where XBRL has nothing.
   - **What it reads:** every results filing of every watchlist stock. It copies the headline figures from the results statement: revenue, other income, finance costs, depreciation, profit before and after tax, and EPS.
   - **Checking:** Haiku copies each figure as written, with the statement's unit (lakh, crore, million). The code converts the figures to Rs crore, so the model does no arithmetic, and checks them in two ways:
     - **Against the filing:** a figure is kept only if that exact number, decimal point included, is in the filing's text.
@@ -371,6 +371,14 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
   - **Basis:** consolidated where given, else standalone.
   - **Cost:** about $0.002 a quarter. Only the parts of the filing around the statement's revenue rows are sent, not the auditors' reports, notes or press-release text. A full re-read of two years for 15 stocks cost $0.42.
   - **Where it shows:** `sna results run/list/coverage/reset`, the 07:20 `results` job, a "Results" section in the digest, and a **Results** tab on the Stock page (revenue, EBITDA, profit, year-on-year change, margins).
+  - **XBRL first (step 16, later):** most results now come from the exchange's XBRL files (`agents/xbrl_results.py`, no LLM), where each figure is tagged, in rupees.
+    - **Where:** NSE's results listing for filings up to January 2025, and its Integrated Filing (Financial) listing from February 2025, consolidated where filed. In an integrated filing each period is read from its context dates, so a Q4 filing gives the quarter and the year.
+    - **Checks, because companies fill the tags themselves:**
+      - profit must be within 25% of EPS × shares (paid-up capital ÷ face value, both in the file); KMEW's profit-attributable line was off by orders of magnitude
+      - a "quarter" with revenue above 1.75× the company's nearby quarters is an SME half year under a quarter's label; it is rejected and the PDF reading put back
+      - XBRL writes only the figures that pass and keeps each replaced value; the rest keep the PDF reading
+    - **Daily:** the `xbrl` job at 07:15 runs before the PDF reader at 07:20, which then skips the periods XBRL covered.
+    - **Coverage:** on the full rebuild, 236 periods across the 15 stocks came from XBRL, and 26 PDF readings were corrected. A few 2023 bank files are no longer on NSE; those quarters keep the PDF reading.
   - **Not yet:** results vs consensus (no consensus source), and the other event types in the table above.
 
 1. Pick the schema for the filing type (order win, capex, rating, management change, results, and so on).

@@ -289,7 +289,9 @@ The scheduler reads new orders and order books at 07:50. New orders appear in th
 
 ## Results (Phase 2, LLM)
 
-Claude Haiku reads each results filing of every watchlist stock and copies the headline figures from the results statement: revenue from operations, other income, finance costs, depreciation, profit before and after tax, and EPS. It copies each figure as written plus the statement's unit (lakh, crore, million); the conversion to Rs crore is done in code, and each figure is checked against the filing's text.
+**XBRL first.** Most results come from the exchange's XBRL files: every figure tagged, in rupees, no LLM. `sna results xbrl` (daily at 07:15) reads NSE's results listing (filings up to January 2025) and its Integrated Filing (Financial) listing (from February 2025), consolidated where filed. The figures are checked too, since companies fill the tags themselves: profit must fit EPS × shares (paid-up capital ÷ face value), and a "quarter" far above the company's nearby quarters (an SME half year under a quarter's label) is rejected. Figures that fail keep the PDF reading below. `sna results list` marks periods from XBRL.
+
+**The PDF reader** fills what XBRL doesn't cover. Claude Haiku reads each results filing of every watchlist stock and copies the headline figures from the results statement: revenue from operations, other income, finance costs, depreciation, profit before and after tax, and EPS. It copies each figure as written plus the statement's unit (lakh, crore, million); the conversion to Rs crore is done in code, and each figure is checked against the filing's text.
 
 - **One filing, three periods:** a results statement also gives the previous quarter and the same quarter a year earlier, so those fill in at once. A period's own filing wins over a later filing's comparative column.
 - **Quarters or half years:** main-board companies report quarterly; SME companies report half-yearly, and their half years are stored as H1 and H2.

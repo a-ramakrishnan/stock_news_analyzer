@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.5 · Oct 26, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.6 · Oct 26, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -18,6 +18,80 @@ Orchestrator (0)
 ```
 
 ### Build status (Oct 26, 2026)
+
+The map below shows what is built and what is pending. Data flows left to right, and every layer reads from and writes to the shared database. Green is built, amber partly built, dashed grey not started; a thick blue border marks the recommended next step.
+
+```mermaid
+flowchart LR
+    O["0 · Orchestrator<br/>fixed daily schedule"]:::built
+
+    subgraph SRC["Sources"]
+        direction TB
+        S1["BSE + NSE filings, PDFs"]:::built
+        S2["News: RSS + Google News"]:::built
+        S3["NSE prices, indices,<br/>corporate actions"]:::built
+        S4["NSE bulk and block deals"]:::built
+        S5["Bullion prices, macro"]:::pending
+        S6["SAST, pledges, ratings,<br/>tenders, MF holdings"]:::pending
+    end
+
+    subgraph COL["Collect"]
+        direction TB
+        A1["1 · Watchlist Manager"]:::built
+        A2["2 · Filings Collector"]:::built
+        A3["3 · News Collector"]:::built
+        A4["4 · Market Signals<br/>deals only"]:::partly
+        A5["5 · Price & Label<br/>stocks; bullion to do"]:::built
+    end
+
+    subgraph UND["Understand"]
+        direction TB
+        A6["6 · Triage & Dedup"]:::built
+        A7["7 · Event Extractor"]:::pendingNext
+        A8["8 · QA Checker"]:::pending
+    end
+
+    subgraph ANA["Analyse"]
+        direction TB
+        A9["9 · Move Explainer"]:::built
+        A10["10 · Order Book Tracker<br/>next: quarterly revenue"]:::builtNext
+        A11["11 · Concall Analyst"]:::built
+        A12["12 · Promise Ledger"]:::built
+        A13["13 · Bullion Analyst"]:::pending
+        A14["14 · Theme & Peer Analyst"]:::pending
+        A15["15 · Red-flag Monitor"]:::pending
+    end
+
+    subgraph DEL["Deliver"]
+        direction TB
+        A16["16 · Reporter<br/>digest + dashboard;<br/>Telegram to do"]:::partly
+        A17["17 · Analyst Q&A"]:::pending
+    end
+
+    DB[("Shared Postgres database, point-in-time<br/>built: filings, news, prices and labels, deals, moves,<br/>concalls, promises, orders and order books<br/>to do: quarterly revenue, typed events, bullion")]:::db
+
+    O -. runs every agent .-> A1
+    S1 --> A2
+    S2 --> A3
+    A3 --> A6
+    A6 --> A9
+    A9 --> A16
+    A16 -. every layer reads and writes .- DB
+
+    classDef built fill:#e5f3eb,stroke:#1d7a4f,color:#18202b
+    classDef partly fill:#fbf0d9,stroke:#9a6200,color:#18202b
+    classDef pending fill:#f5f6f8,stroke:#6b7380,stroke-dasharray:5 4,color:#5b6573
+    classDef builtNext fill:#e5f3eb,stroke:#1f5f8b,stroke-width:3px,color:#18202b
+    classDef pendingNext fill:#f5f6f8,stroke:#1f5f8b,stroke-width:3px,stroke-dasharray:5 4,color:#18202b
+    classDef db fill:#e3eef7,stroke:#1f5f8b,color:#18202b
+```
+
+| Status | Agents |
+| --- | --- |
+| Built | 0 Orchestrator, 1, 2, 3, 5 (stocks), 6, 9, 10, 11, 12 |
+| Partly built | 4 Market Signals, 16 Reporter |
+| Not started | 7, 8, 13, 14, 15, 17 |
+| Recommended next | Quarterly revenue for the Order Book Tracker, then the Event Extractor (7) and QA Checker (8) |
 
 | # | Agent | Status | Build step |
 | --- | --- | --- | --- |

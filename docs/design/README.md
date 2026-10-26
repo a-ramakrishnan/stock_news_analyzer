@@ -11,6 +11,10 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.6 · Oct 26, 2026
+
+- A block diagram of built and pending agents (Mermaid, drawn by GitHub) under Build status in agent-design.md, with a status summary table; linked from the status section of design.md.
+
 ### 1.5 · Oct 26, 2026
 
 - Step 15, wider coverage:

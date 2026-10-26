@@ -1,6 +1,6 @@
 # Indian Market News Intelligence System — Design
 
-Version 1.4 · Oct 26, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
+Version 1.5 · Oct 26, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
 
 ## Goal and principles
 
@@ -8,9 +8,9 @@ Build a personal system that tracks news and filings for a watchlist of Indian s
 
 The system is built as independent agents under an orchestrator; models, tools, data, hosting and a step-by-step guide per agent are in [Agent design](agent-design.md).
 
-## Status (Oct 25, 2026)
+## Status (Oct 26, 2026)
 
-Phase 1 is done and Phase 2 is under way. Fourteen build steps have shipped, each logged in [`docs/build-log/`](../build-log/). The system runs on a Mac in Docker, and its data goes back to October 2023.
+Phase 1 is done and Phase 2 is under way. Fifteen build steps have shipped, each logged in [`docs/build-log/`](../build-log/). The system runs on a Mac in Docker, and its data goes back to October 2023.
 
 | Module | Status |
 | --- | --- |
@@ -21,8 +21,8 @@ Phase 1 is done and Phase 2 is under way. Fourteen build steps have shipped, eac
 | Event-to-return labels (1, 5, 20 days) | Built, per filing; per typed event once event extraction exists |
 | Daily digest and dashboard | Built: Markdown digest saved locally, Streamlit dashboard with 7 pages |
 | Event extraction and QA check | Not started |
-| Earnings call analysis and promise ledger | Built (Claude Sonnet 5.5): calls in step 12; promises checked against later results, and a credibility score per company, in step 13 |
-| Order and execution tracker | Built, step 14: orders from filings (Claude Haiku 5.5), quarterly order books (Sonnet 5.5), metrics and peer ranks in code |
+| Earnings call analysis and promise ledger | Built (Claude Sonnet 5.5): calls in step 12; promises checked against later results, and a credibility score per company, in step 13; every watchlist stock, owned or not, from step 15 |
+| Order and execution tracker | Built, steps 14–15: orders from filings (Claude Haiku 5.5), quarterly order books (Sonnet 5.5), metrics and peer ranks in code; coverage per stock |
 | Bullion, ratings, SAST, pledges, tenders, MF holdings, macro | Not started |
 | Telegram or email delivery, Q&A, red flags, themes | Not started |
 
@@ -127,7 +127,7 @@ The same price data labels every event with the stock's excess return over 1, 5 
 
 ### 3. Order and execution tracker
 
-- **As built (step 14):**
+- **As built (steps 14, 15):**
   - **Orders:** Haiku 5.5 reads each order-win filing, up to 8 per call, and records each order:
     - client and client type (government, PSU, private, export)
     - value in Rs crore; when only a range is given (L&T's "large": 2,500-5,000), the midpoint
@@ -135,9 +135,12 @@ The same price data labels every event with the stock's excess return over 1, 5 
     - the value as written, checked against the filing's text
 
     Filings that aren't order wins (a regulator's "order") are dropped. A copy of an announcement on the other exchange is caught by an identical file, a similar title, or the same value within 2 days.
+
+    Order-win filings are recognised by their title. Since step 15 that includes single-order wordings such as "Receipt of Work Order", "Letter of Award", "L1 bidder" and "bags … contract", which smaller and SME companies use. Before that only the plural "orders" wording was caught.
   - **Order book:** for each company with at least 2 orders, Sonnet 5.5 reads one document per quarter: the investor presentation first, then the call transcript, then results. It takes the order book, the quarter's inflow and its revenue, each checked as written. A document is read once; a quarter without figures waits for a newer document.
   - **Metrics, in code:** announced vs reported inflow, book-to-bill, years of revenue in the order book, execution (revenue ÷ the order book a year earlier), the unexplained change in the order book, government/PSU and top-client share, and ranks against the other order-driven stocks.
-  - **Where it shows:** `sna orders run/list/book/peers/reset`, the 07:50 `orders` job, an "Orders" section in the digest, and an **Order book** tab on the Stock page.
+  - **Where it shows:** `sna orders run/list/book/peers/coverage/reset`, the 07:50 `orders` job, an "Orders" section in the digest, and an **Order book** tab on the Stock page.
+  - **Coverage (step 15):** `sna orders coverage` lists every watchlist stock with its order-win filings (read, copies, not order wins, waiting for a PDF, unread), orders and order books, and whether it is tracked. Banks, consumer companies and makers of standard products have no order book, so they show none.
   - **Not yet:** using order value against revenue as materiality in the Move Explainer, and sector-wide peers beyond the watchlist.
 
 - **Order inflow:** total announced orders per company per quarter, by client type (government, private, export).
@@ -160,6 +163,7 @@ Audio is a fallback: when only audio exists, transcribe it with a speech-to-text
 
 **As built (step 12):**
 
+- **Scope:** every watchlist stock, owned or not (step 15; step 12 read owned stocks only).
 - **Source:** transcripts come from exchange filings only. BSE and NSE copies of one call are read once. When the filing is just a letter with a link, the link is followed.
 - **One structured reading per call (Sonnet 5.5, medium effort):**
   - summary, tone, 6-15 key points with the speaker's own words

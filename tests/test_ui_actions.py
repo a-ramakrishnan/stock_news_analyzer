@@ -20,9 +20,9 @@ class FakeExchange(FakeFilings, FakeActions):
         super().__init__()
         self.action_symbols = []
 
-    def nse_corporate_actions(self, symbol, start, end):
+    def nse_corporate_actions(self, symbol, start, end, index="equities"):
         self.action_symbols.append(symbol)
-        return super().nse_corporate_actions(symbol, start, end)
+        return super().nse_corporate_actions(symbol, start, end, index)
 
 
 def rows_after(session):

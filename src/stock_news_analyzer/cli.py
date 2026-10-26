@@ -1795,6 +1795,67 @@ def results_run(
         raise typer.Exit(1)
 
 
+@results_app.command("probe")
+def results_probe(
+    symbol: str = typer.Argument(..., help="NSE symbol."),
+    period: str = typer.Option(
+        None, help="Quarterly, Half-Yearly, Annual or Others (default: all)."
+    ),
+) -> None:
+    """Show NSE's results listing and one XBRL file for a stock, to check their format."""
+    import json
+
+    from stock_news_analyzer.sources import xbrl
+    from stock_news_analyzer.sources.exchange_http import SME_SERIES, ExchangeClient
+
+    with get_session() as session:
+        company = _companies_or_exit(session, symbol)[0]
+    index = "sme" if company.nse_series in SME_SERIES else "equities"
+    out_dir = get_settings().data_dir / "probe"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    client = ExchangeClient()
+    link = None
+    for p in [period] if period else ["Quarterly", "Half-Yearly", "Annual", "Others"]:
+        try:
+            rows = client.nse_financial_results(company.nse_symbol, p, index)
+        except Exception as exc:  # a probe reports any failure and carries on
+            typer.echo(f"{p} ({index}): FAILED {type(exc).__name__}: {exc}")
+            continue
+        typer.echo(f"{p} ({index}): {len(rows)} filings")
+        (out_dir / f"{company.nse_symbol}-{p}.json").write_text(json.dumps(rows, indent=1))
+        if rows:
+            typer.echo(f"  fields: {', '.join(rows[0])}")
+        for row in rows[:3]:
+            typer.echo("  " + "; ".join(f"{k}={str(v)[:60]}" for k, v in row.items() if v))
+        for row in rows:
+            xml = next((v for v in row.values() if isinstance(v, str) and v.endswith(".xml")), None)
+            if xml and not link:
+                link = xml
+    if not link:
+        typer.echo("no XBRL link found in the listings above")
+        return
+    if link.startswith("/"):
+        link = "https://nsearchives.nseindia.com" + link
+    try:
+        _, content, _ = client.download("nse", [link])
+    except Exception as exc:
+        typer.echo(f"XBRL {link}: FAILED {type(exc).__name__}: {exc}")
+        return
+    path = out_dir / f"{company.nse_symbol}.xml"
+    path.write_bytes(content)
+    try:
+        found, periods = xbrl.facts(content), xbrl.contexts(content)
+    except Exception as exc:  # not XML after all: show what came back
+        typer.echo(f"XBRL {link}: not readable as XML ({exc}); first bytes: {content[:300]!r}")
+        return
+    typer.echo(f"XBRL {link}: {len(content):,} bytes, {len(found)} facts, saved to {path}")
+    typer.echo("contexts: " + "; ".join(f"{k}={v}" for k, v in list(periods.items())[:12]))
+    wanted = ("revenue", "income", "profit", "finance", "depreciation", "earningspershare", "tax")
+    shown = [f for f in found if any(w in f[0].lower() for w in wanted)]
+    for tag, context, value in (shown or found)[:60]:
+        typer.echo(f"  {tag:<60} {context:<14} {value[:40]}")
+
+
 @results_app.command("list")
 def results_list(symbol: str = typer.Argument(..., help="NSE symbol.")) -> None:
     """A company's results, period by period: revenue, EBITDA, profit, growth, margins."""

@@ -27,7 +27,7 @@ from stock_news_analyzer.sources.announcements import (
     parse_bse,
     parse_nse,
 )
-from stock_news_analyzer.sources.exchange_http import ExchangeError
+from stock_news_analyzer.sources.exchange_http import SME_SERIES, ExchangeError
 
 log = logging.getLogger(__name__)
 
@@ -35,8 +35,6 @@ SOURCES = ("bse", "nse")
 CHUNK_DAYS = 30
 # Attachments downloaded under the 'important' policy (backfills default to this).
 IMPORTANT_TYPES = CONCALL_MATERIAL | {"order_win", "credit_rating", "concall_schedule"}
-# NSE series of SME (Emerge) companies, whose announcements NSE serves separately.
-SME_SERIES = {"SM", "ST", "SZ"}
 
 
 class Client(Protocol):

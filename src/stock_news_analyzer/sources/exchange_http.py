@@ -25,9 +25,17 @@ NSE_WARMUP_URL = "https://www.nseindia.com/companies-listing/corporate-filings-a
 NSE_ARCHIVES = "https://nsearchives.nseindia.com"
 NSE_ANNOUNCEMENTS_URL = "https://www.nseindia.com/api/corporate-announcements"
 NSE_CORPORATE_ACTIONS_URL = "https://www.nseindia.com/api/corporates-corporateActions"
+# The list behind NSE's "Financial Results" page: one row per results filing, with links to
+# the PDF and to the XBRL file (the same figures, tagged).
+NSE_FINANCIAL_RESULTS_URL = "https://www.nseindia.com/api/corporates-financial-results"
 # The API behind NSE's "Bulk & block deals" report; it answers only after that page is opened.
 NSE_DEALS_URL = "https://www.nseindia.com/api/historicalOR/bulk-block-short-deals"
 NSE_DEALS_PAGE = "https://www.nseindia.com/report-detail/display-bulk-and-block-deals"
+
+
+# NSE series of SME (Emerge) companies. NSE serves their announcements, corporate actions and
+# results under index=sme; asked under index=equities it answers with nothing.
+SME_SERIES = {"SM", "ST", "SZ"}
 
 
 class ExchangeError(Exception):
@@ -102,9 +110,20 @@ class ExchangeClient:
         }
         return self._get_json("nse", NSE_ANNOUNCEMENTS_URL, params)
 
-    def nse_corporate_actions(self, symbol: str, start: date, end: date) -> list:
+    def nse_financial_results(
+        self, symbol: str, period: str = "Quarterly", index: str = "equities"
+    ) -> list:
+        """A symbol's results filings as NSE lists them. period: Quarterly, Half-Yearly,
+        Annual or Others; index='sme' for SME companies."""
+        params = {"index": index, "period": period, "symbol": symbol}
+        data = self._get_json("nse", NSE_FINANCIAL_RESULTS_URL, params)
+        return data if isinstance(data, list) else data.get("data", [])
+
+    def nse_corporate_actions(
+        self, symbol: str, start: date, end: date, index: str = "equities"
+    ) -> list:
         params = {
-            "index": "equities",
+            "index": index,
             "symbol": symbol,
             "from_date": start.strftime("%d-%m-%Y"),
             "to_date": end.strftime("%d-%m-%Y"),

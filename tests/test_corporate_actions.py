@@ -54,7 +54,7 @@ def test_parse_live_records():
 
 
 class FakeNSE:
-    def nse_corporate_actions(self, symbol, start, end):
+    def nse_corporate_actions(self, symbol, start, end, index="equities"):
         return [a for a in ACTIONS if a["symbol"] == symbol]
 
 

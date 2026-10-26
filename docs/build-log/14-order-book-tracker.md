@@ -19,6 +19,12 @@
 - **Ranges, not values.** L&T discloses orders as "significant", "large", "major" or "mega", each a range in Rs crore. The range is stored, and the midpoint counts toward inflow. The value as written is kept and checked against the filing's text.
 - **"Orders" that aren't orders.** The filing classifier catches the word "orders", so a SEBI order or a purchase order the company placed can arrive as an order win. Haiku marks those as not order wins, and nothing is stored for them.
 
+## After the first real run
+
+- **L&T's size labels.** Most L&T filings say only "large" or "major", with the range in a footnote that is usually left out, so the announced value showed 0 in most quarters. Each order now records the size class it was given. The company's scale is learned from the filings that do state a range, and applied to the orders that don't.
+- **The four-quarter measures need reported quarters.** The last four calendar quarters included one whose results weren't out yet, which blanked revenue, years of revenue, execution and the peer ranks. These measures now use the last four quarters with a reported order book and revenue.
+- **No value is not zero.** A quarter with orders but none valued now shows "–".
+
 ## Order books
 
 A company is tracked once it has at least 2 orders. For each quarter, the order book, the quarter's order inflow and its revenue are read from one document, best first:

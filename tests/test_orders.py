@@ -73,6 +73,7 @@ def large_order(client="Delhi Metro Rail Corporation"):
         value_low_cr=2500,
         value_high_cr=5000,
         value_as_written="Rs 2,500 crore and Rs 5,000 crore",
+        size_class="large",
         execution_months=36,
         description="Metro line in New Delhi and a highway in Andhra Pradesh.",
     )
@@ -131,6 +132,31 @@ def test_an_order_filed_on_both_exchanges_is_stored_once(filings):
     assert statuses == ["duplicate", "extracted"]
     assert ob.pending_filings(filings) == []
     assert filings.query(LlmCall).filter_by(task="orders").count() == 1
+
+
+@pytest.mark.db
+def test_size_classes_get_the_range_the_company_states_elsewhere(filings):
+    llm, _ = _llm(filings, reply())
+    ob.extract_orders(filings, llm)  # a "large" order, with its range in the footnote
+    later = doc(
+        filings,
+        LT,
+        datetime(2026, 11, 5, 9, 0, tzinfo=IST),
+        "order_win",
+        "L&T wins large order",
+        "L&T has won a large order for a refinery.",
+    )
+    unpriced = large_order("Indian Oil")
+    unpriced.value_low_cr = unpriced.value_high_cr = unpriced.value_as_written = None
+    llm, _ = _llm(filings, reply(orders=[unpriced]))
+    ob.extract_orders(filings, llm)
+    order = filings.query(Order).filter_by(document_id=later.id).one()
+    assert order.value_cr is None and order.size_class == "large"
+    assert ob.apply_scales(filings) == 1
+    filings.refresh(order)
+    assert (order.value_low_cr, order.value_high_cr, order.value_cr) == (2500, 5000, 3750)
+    assert "scale from" in order.value_as_written and not order.value_found
+    assert ob.apply_scales(filings) == 0  # learned values are not a source for others
 
 
 @pytest.mark.db
@@ -301,6 +327,13 @@ def test_metrics_and_peers(filings):
     assert s["government_share"] == pytest.approx(0.5) and s["orders_last_year"] == 2
 
     assert ob.summary(filings, LT, today=date(2026, 3, 1))["years_of_revenue"] is None  # 3 quarters
+    # A quarter that ended but has no results yet does not blank the measures.
+    _orders(filings, 1, when=datetime(2026, 11, 2, 10, 0, tzinfo=IST), value=5000)  # Q3 FY27
+    later = ob.summary(filings, LT, today=date(2027, 1, 10))
+    assert later["quarters"] == ["Q3 FY26", "Q4 FY26", "Q1 FY27", "Q2 FY27"]
+    assert later["years_of_revenue"] == pytest.approx(650000 / 277000)
+    filings.query(Order).filter(Order.value_cr == 5000).delete()
+    filings.commit()
 
     _orders(filings, 2, isin=KVB, value=100)
     ranked = {r["symbol"]: r for r in ob.peers(filings, today=date(2026, 10, 26))}

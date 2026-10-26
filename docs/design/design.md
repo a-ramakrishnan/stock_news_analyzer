@@ -1,6 +1,6 @@
 # Indian Market News Intelligence System — Design
 
-Version 1.5 · Oct 26, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
+Version 1.6 · Oct 26, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
 
 ## Goal and principles
 
@@ -11,6 +11,8 @@ The system is built as independent agents under an orchestrator; models, tools, 
 ## Status (Oct 26, 2026)
 
 Phase 1 is done and Phase 2 is under way. Fifteen build steps have shipped, each logged in [`docs/build-log/`](../build-log/). The system runs on a Mac in Docker, and its data goes back to October 2023.
+
+A map of what is built and what is pending, agent by agent, is in [Agent design: Build status](agent-design.md#build-status-oct-26-2026).
 
 | Module | Status |
 | --- | --- |

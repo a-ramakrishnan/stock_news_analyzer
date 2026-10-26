@@ -193,7 +193,7 @@ The scheduler explains the last two weeks' unusual days at 07:45, before the 08:
 
 ## Earnings calls (Phase 2, LLM)
 
-For each stock you own, Claude Sonnet reads the earnings call transcript the company files with the exchanges:
+For every watchlist stock, owned or not, Claude Sonnet reads the earnings call transcript the company files with the exchanges:
 
 - **The call:** a summary, management's tone, and 3-5 points to watch.
 - **What management said:** 6-15 key points (guidance, demand, margins, capex, order book, risks, new initiatives), each with the speaker's own words.
@@ -215,7 +215,7 @@ uv run sna concalls promises --open
 | --- | --- |
 | `uv run sna concalls run` | Read transcripts of the last 400 days not read yet. It prints how many calls and a rough cost first, and asks before spending more than $2 |
 | `uv run sna concalls run --since 2023-10-01` | Go further back (about $0.10 a call) |
-| `uv run sna concalls run --symbol BECTORFOOD` | One stock; this also works for a stock you only watch |
+| `uv run sna concalls run --symbol BECTORFOOD` | One stock only |
 | `uv run sna concalls list LT --all` | Calls read, newest first; `--all` also shows transcripts not read and why (copies, scanned PDFs, AGMs) |
 | `uv run sna concalls show LT --quarter "Q2 FY27"` | One call in full (default: the latest) |
 | `uv run sna concalls promises LT` | The promise ledger, soonest due first, with each promise's target and how management put the deadline; open promises past their date are marked OVERDUE. Deadlines like "within 12 months" or "next 3 years" are counted from the call date |
@@ -253,6 +253,8 @@ For order-driven companies (EPC, capital goods, defence, marine, power T&D):
 - **Orders:** Claude Haiku reads each order-win filing and records the client, client type (government, PSU, private, export), value in Rs crore, segment, domestic or export, and execution period. When only a range is given (L&T's "large": Rs 2,500-5,000 crore), the midpoint is used. When a filing only says "large", the range comes from the company's own filings that define it. An announcement filed on both BSE and NSE is stored once, and filings that aren't order wins are dropped.
 - **Order book:** once a company has 2 or more orders, Claude Sonnet reads its order book, the quarter's order inflow and revenue, one document per quarter. It tries the investor presentation first, then the call transcript, then results.
 
+Banks, consumer and off-the-shelf manufacturing companies have no order book, so they don't appear here. `sna orders coverage` shows, for every watchlist stock, what was found.
+
 From those, in code:
 
 | Measure | What it is |
@@ -278,6 +280,7 @@ uv run sna orders peers
 | `uv run sna orders list KMEW` | A company's orders, newest first, with value, client and what they are for |
 | `uv run sna orders book LT` | Quarter by quarter: orders announced, inflow, revenue, order book, book-to-bill, unexplained change; then the four-quarter summary |
 | `uv run sna orders peers` | Order-driven stocks side by side, ranked on book-to-bill, years of revenue and order growth |
+| `uv run sna orders coverage` | Every watchlist stock: order-win filings found, read, copies, not order wins, waiting for a PDF; orders; order books; whether its order book is tracked |
 | `uv run sna orders reset --symbol LT` | Forget orders and order books so they are read again (`--orders-only` or `--books-only` for one of them) |
 
 The scheduler reads new orders and order books at 07:50. New orders appear in the digest, and the Stock page has an **Order book** tab: the measures, a chart of announced vs reported inflow, the quarterly table, the orders, and the peers.

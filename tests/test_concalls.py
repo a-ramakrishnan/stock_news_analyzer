@@ -285,11 +285,11 @@ def test_transcripts_that_cannot_be_read(loaded, tmp_path):  # noqa: F811
 
 
 @pytest.mark.db
-def test_only_owned_stocks_unless_named(loaded, tmp_path):  # noqa: F811
+def test_every_watchlist_stock_owned_or_not(loaded, tmp_path):  # noqa: F811
     loaded.query(WatchlistItem).filter_by(isin=KVB).one().owned = False
     loaded.commit()
     transcript(loaded, KVB, OCT)
-    assert all(c.isin != KVB for _, c in cc.pending(loaded))
+    assert KVB in {c.isin for _, c in cc.pending(loaded)}  # watched, not owned: still read
     assert [c.isin for _, c in cc.pending(loaded, symbol="KARURVYSYA")] == [KVB]
     assert cc.pending(loaded, since=date(2026, 10, 25)) == []
 

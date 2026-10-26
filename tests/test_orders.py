@@ -403,6 +403,11 @@ def test_orders_reach_digest_dashboard_cli_and_scheduler(
     assert "not found as written" not in line  # valued from its size class, not a number
     out = runner.invoke(app, ["orders", "book", "LT"])
     assert out.exit_code == 0 and "650,000" in out.stdout and "Q2 FY27" in out.stdout
+    out = runner.invoke(app, ["orders", "coverage"])
+    assert out.exit_code == 0
+    lt = next(line for line in out.stdout.splitlines() if line.startswith("LT "))
+    # 3 order-win filings: 1 read, 1 copy, the helper's unread; 2 orders; 1 order book
+    assert lt.split()[1:9] == ["3", "1", "1", "0", "0", "1", "2", "1"] and lt.endswith("yes")
     out = runner.invoke(app, ["orders", "peers"])
     assert out.exit_code == 0 and "LT" in out.stdout
     assert run_job("orders").summary.startswith("skipped")

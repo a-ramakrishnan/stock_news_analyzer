@@ -1,6 +1,6 @@
 """Concall Analyst (agent 11).
 
-Reads the earnings call transcripts that stocks you own file with the exchanges, and pulls out
+Reads the earnings call transcripts that watchlist companies file with the exchanges, and pulls out
 what matters: guidance, demand by segment, margins, capex, order book, risks, new initiatives,
 what analysts pressed on and whether management answered, and 3-5 points for you to watch. It
 compares each call with the company's previous one, records every forward-looking promise with
@@ -283,18 +283,17 @@ def quarter_before(day: date) -> str:
 # --- finding transcripts -------------------------------------------------------
 
 
-def _owned_isins(session: Session, symbol: str | None):
+def _watchlist_isins(session: Session, symbol: str | None):
     query = select(WatchlistItem.isin).join(Company, Company.isin == WatchlistItem.isin)
     if symbol:
-        # A stock named explicitly is read even if you only watch it.
         return query.where((Company.nse_symbol == symbol.upper()) | (Company.isin == symbol))
-    return query.where(WatchlistItem.owned)
+    return query.where(WatchlistItem.isin.is_not(None))
 
 
 def pending(
     session: Session, since: date | None = None, symbol: str | None = None
 ) -> list[tuple[Document, Company]]:
-    """Transcript filings of stocks you own not looked at yet, oldest first."""
+    """Transcript filings of watchlist stocks not looked at yet, oldest first."""
     seen = select(Concall.document_id)
     query = (
         select(Document, Company)
@@ -302,7 +301,7 @@ def pending(
         .join(Company, Company.isin == DocumentCompany.isin)
         .where(
             Document.doc_type == "concall_transcript",
-            DocumentCompany.isin.in_(_owned_isins(session, symbol)),
+            DocumentCompany.isin.in_(_watchlist_isins(session, symbol)),
             Document.id.not_in(seen),
         )
         .order_by(Document.published_at)

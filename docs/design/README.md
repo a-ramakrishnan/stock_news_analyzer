@@ -11,6 +11,16 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.8 · Oct 26, 2026
+
+- The Results Reader after its first real runs:
+  - figures kept only if the exact number is in the filing, and checked against each other; a decimal point lost in the PDF text is restored
+  - a results press release's key-figures table used when a filing has no statement
+  - Sonnet 5.5 as a second try for answers Haiku cuts off
+- NSE SME companies' filings fetched from NSE's SME section (SSEGL had none)
+- Order measures use the latest order book the results cover
+- Block diagram: SME filings shown under sources
+
 ### 1.7 · Oct 26, 2026
 
 - Step 16, the Results Reader:

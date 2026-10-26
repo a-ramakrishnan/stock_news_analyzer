@@ -500,6 +500,9 @@ class Order(Base):
     value_high_cr: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     value_as_written: Mapped[str | None] = mapped_column(Text)
     value_found: Mapped[bool] = mapped_column(Boolean, default=False)  # as written, in the text
+    # The size label the company used instead of a value, e.g. L&T's 'large'. Its range is
+    # learned from the company's filings that state it (agents/orders.apply_scales).
+    size_class: Mapped[str | None] = mapped_column(String(32))
     execution_months: Mapped[int | None] = mapped_column()
     description: Mapped[str] = mapped_column(Text)
     model: Mapped[str] = mapped_column(String(64))

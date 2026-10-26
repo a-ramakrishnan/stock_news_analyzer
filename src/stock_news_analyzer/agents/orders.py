@@ -77,6 +77,12 @@ For each filing (id given) answer:
     give value_low_cr and value_high_cr and leave value_cr null.
   - value_as_written: the value exactly as the filing writes it, e.g. "Rs 456.7 crore" or
     "INR 1,200 million", so it can be checked; null if none.
+  - size_class: if the company labels the order with a size category instead of, or as well
+    as, a value (e.g. L&T's "significant", "large", "major", "mega", "ultra-mega"), that label
+    in lower case; null otherwise. If the filing also defines the category's range (often in a
+    footnote: "large: Rs 2,500 crore to Rs 5,000 crore"), give it as value_low_cr and
+    value_high_cr; for an open-ended top category ("above Rs 15,000 crore") give only
+    value_low_cr.
   - execution_months: the execution period in months, if stated.
   - description: one sentence on what the order is for.
 
@@ -110,6 +116,7 @@ class OrderItem(BaseModel):
     value_low_cr: float | None
     value_high_cr: float | None
     value_as_written: str | None
+    size_class: str | None
     execution_months: int | None
     description: str
 
@@ -268,9 +275,9 @@ def _store_orders(session: Session, doc: Document, company: Company, item: Filin
     stored = copies = 0
     for o in item.orders:
         low, high = o.value_low_cr, o.value_high_cr
-        value = (
-            o.value_cr if o.value_cr is not None else ((low + high) / 2 if low and high else None)
-        )
+        value = o.value_cr
+        if value is None and low:
+            value = (low + high) / 2 if high else low  # an open-ended range counts at its floor
         if _same_order(session, company.isin, doc.published_at, value, low, high, o.client):
             copies += 1
             continue
@@ -288,6 +295,7 @@ def _store_orders(session: Session, doc: Document, company: Company, item: Filin
                 value_low_cr=_dec(low),
                 value_high_cr=_dec(high),
                 value_as_written=o.value_as_written,
+                size_class=(o.size_class or "").strip().lower() or None,
                 value_found=_found(o.value_as_written, text_norm),
                 execution_months=o.execution_months,
                 description=o.description.strip(),
@@ -550,6 +558,36 @@ def _store_snapshot(session, company, quarter, doc, text, answer: SnapshotAnswer
     return row
 
 
+def apply_scales(session: Session, isin: str | None = None) -> int:
+    """Give orders labelled only with a size class (e.g. L&T's 'large') the range that the
+    company's own filings state for that class elsewhere: the most common (low, high) seen
+    with it. Returns how many orders got a value."""
+    query = select(Order).where(Order.size_class.is_not(None))
+    if isin:
+        query = query.where(Order.isin == isin)
+    rows = session.scalars(query).all()
+    seen: dict[tuple[str, str], dict[tuple, int]] = {}
+    for o in rows:
+        learned = o.value_as_written and "scale from" in o.value_as_written
+        if o.value_low_cr is not None and not learned:
+            counts = seen.setdefault((o.isin, o.size_class), {})
+            rng = (o.value_low_cr, o.value_high_cr)
+            counts[rng] = counts.get(rng, 0) + 1
+    filled = 0
+    for o in rows:
+        ranges = seen.get((o.isin, o.size_class))
+        if o.value_cr is not None or not ranges:
+            continue
+        low, high = max(ranges, key=ranges.get)
+        o.value_low_cr, o.value_high_cr = low, high
+        o.value_cr = (low + high) / 2 if high is not None else low
+        o.value_as_written = f"{o.size_class} (scale from the company's other filings)"
+        o.value_found = False
+        filled += 1
+    session.commit()
+    return filled
+
+
 def run(
     session: Session,
     llm: LLM,
@@ -563,6 +601,7 @@ def run(
     result = extract_orders(
         session, llm, since=since, symbol=symbol, limit=limit, progress=progress
     )
+    apply_scales(session)
     if not any("budget" in e for e in result.errors):
         update_snapshots(
             session, llm, since=since, symbol=symbol, limit=limit, progress=progress, result=result
@@ -614,11 +653,16 @@ def quarterly(session: Session, isin: str) -> list[dict]:
         r["inflow_cr"], r["order_book_cr"] = _f(s.inflow_cr), _f(s.order_book_cr)
         r["revenue_cr"] = _f(s.revenue_cr)
     rows = sorted(by_q.values(), key=lambda r: r["period_end"])
+    for r in rows:
+        if r["announced"] and r["unvalued"] == r["announced"]:
+            r["announced_cr"] = None  # orders, but none with a value: not zero
     previous = None
     for r in rows:
         inflow = r["inflow_cr"] if r["inflow_cr"] is not None else r["announced_cr"] or None
         r["book_to_bill"] = inflow / r["revenue_cr"] if inflow and r["revenue_cr"] else None
-        r["announced_share"] = r["announced_cr"] / r["inflow_cr"] if r["inflow_cr"] else None
+        r["announced_share"] = (
+            r["announced_cr"] / r["inflow_cr"] if r["inflow_cr"] and r["announced_cr"] else None
+        )
         r["unexplained_cr"] = None
         if (
             previous
@@ -633,23 +677,25 @@ def quarterly(session: Session, isin: str) -> list[dict]:
 
 
 def summary(session: Session, isin: str, today: date | None = None) -> dict:
-    """The last four quarters: inflow, revenue, book-to-bill, years of revenue in the latest
-    order book, execution (revenue / the order book a year earlier), inflow growth on the four
-    quarters before, and client concentration of the orders announced."""
+    """The last four reported quarters (those with an order book and revenue): inflow, revenue,
+    book-to-bill, years of revenue in the latest order book, execution (revenue / the order
+    book a year earlier). Growth of orders announced in the last four calendar quarters on the
+    four before, and client concentration of the last year's orders."""
     today = today or datetime.now(IST).date()
     q = [r for r in quarterly(session, isin) if r["period_end"] <= today]
-    last4, prior4 = q[-4:], q[-8:-4]
 
     def total(rows, key):
         values = [r[key] for r in rows if r[key] is not None]
         return sum(values) if values else None
 
-    inflow = total(last4, "inflow_cr")
-    if inflow is None:
-        inflow = total(last4, "announced_cr")
-    # Revenue-based measures need all four quarters' revenue.
-    full_year = len(last4) == 4 and all(r["revenue_cr"] for r in last4)
+    reported = [r for r in q if r["order_book_cr"] is not None and r["revenue_cr"] is not None]
+    last4 = reported[-4:]
+    # Four consecutive quarters (within a year), or the revenue-based measures are off.
+    full_year = len(last4) == 4 and (
+        last4[-1]["period_end"] - last4[0]["period_end"] <= timedelta(days=300)
+    )
     revenue = total(last4, "revenue_cr") if full_year else None
+    inflow = total(last4, "inflow_cr") if full_year else None
     books = [r for r in q if r["order_book_cr"] is not None]
     latest = books[-1] if books else None
     year_ago = next(
@@ -660,7 +706,8 @@ def summary(session: Session, isin: str, today: date | None = None) -> dict:
         ),
         None,
     )
-    announced, prior = total(last4, "announced_cr"), total(prior4, "announced_cr")
+    calendar4, prior4 = q[-4:], q[-8:-4]
+    announced, prior = total(calendar4, "announced_cr"), total(prior4, "announced_cr")
     since = today - timedelta(days=365)
     orders = session.scalars(
         select(Order).where(
@@ -711,15 +758,22 @@ def peers(session: Session, today: date | None = None) -> list[dict]:
     return rows
 
 
-def reset(session: Session, symbol: str | None = None, snapshots_only: bool = False) -> int:
+def reset(
+    session: Session,
+    symbol: str | None = None,
+    snapshots_only: bool = False,
+    orders_only: bool = False,
+) -> int:
     """Forget extracted orders (and their filings) and order-book snapshots, so they are
-    read again. Returns rows removed."""
+    read again; or only one of the two. Returns rows removed."""
     isins = select(Company.isin)
     if symbol:
         isins = isins.where((Company.nse_symbol == symbol.upper()) | (Company.isin == symbol))
-    count = session.execute(
-        delete(OrderBookSnapshot).where(OrderBookSnapshot.isin.in_(isins))
-    ).rowcount
+    count = 0
+    if not orders_only:
+        count += session.execute(
+            delete(OrderBookSnapshot).where(OrderBookSnapshot.isin.in_(isins))
+        ).rowcount
     if not snapshots_only:
         count += session.execute(delete(Order).where(Order.isin.in_(isins))).rowcount
         count += session.execute(delete(OrderFiling).where(OrderFiling.isin.in_(isins))).rowcount

@@ -1681,6 +1681,9 @@ def orders_peers() -> None:
 def orders_reset(
     symbol: str = typer.Option(None, help="Only this NSE symbol (default: every stock)."),
     books_only: bool = typer.Option(False, "--books-only", help="Only the order-book figures."),
+    orders_only: bool = typer.Option(
+        False, "--orders-only", help="Only the orders (keep the order books)."
+    ),
     yes: bool = typer.Option(False, "--yes", help="Don't ask for confirmation."),
 ) -> None:
     """Forget extracted orders and order books so `sna orders run` reads them again."""
@@ -1690,7 +1693,7 @@ def orders_reset(
     if not yes and not typer.confirm(f"Forget {what} order data?"):
         raise typer.Exit(1)
     with get_session() as session:
-        count = reset(session, symbol, snapshots_only=books_only)
+        count = reset(session, symbol, snapshots_only=books_only, orders_only=orders_only)
     typer.echo(f"{count} rows removed; run `sna orders run` to read them again")
 
 

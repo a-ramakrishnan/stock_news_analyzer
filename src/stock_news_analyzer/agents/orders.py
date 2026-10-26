@@ -54,6 +54,10 @@ MIN_ORDERS = 2
 SNAPSHOT_SOURCES = {"investor_presentation": 0, "concall_transcript": 1, "results": 2}
 SNAPSHOT_CHARS = {"investor_presentation": 40_000, "concall_transcript": 40_000, "results": 20_000}
 MAX_TRIES = 3  # documents read per quarter per run
+# Order books are read from documents this recent: two years, so execution (revenue over the
+# order book a year earlier) has its earlier book. Each document is read once, so older
+# quarters cost only on the first run.
+SNAPSHOT_DAYS = 800
 INFLOW_KINDS = ("order", "loi", "extension")  # an L1 (lowest bidder) is not won yet
 
 EXTRACT_SYSTEM = """You read order-win announcements that Indian listed companies file with
@@ -454,7 +458,7 @@ def update_snapshots(
     model = model or get_settings().llm_model_analysis
     say = progress or (lambda _line: None)
     result = result or OrdersResult()
-    since = since or datetime.now(IST).date() - timedelta(days=400)
+    since = since or datetime.now(IST).date() - timedelta(days=SNAPSHOT_DAYS)
     for company in order_driven(session, symbol):
         label = company.nse_symbol or company.name
         for quarter, docs in sorted(snapshot_candidates(session, company, since).items()):
@@ -720,7 +724,8 @@ def summary(session: Session, isin: str, today: date | None = None) -> dict:
     valued = sum(float(o.value_cr) for o in orders)
     clients: dict[str, float] = {}
     for o in orders:
-        clients[o.client or "unnamed"] = clients.get(o.client or "unnamed", 0) + float(o.value_cr)
+        if o.client:  # unnamed clients are not one client
+            clients[o.client] = clients.get(o.client, 0) + float(o.value_cr)
     return {
         "isin": isin,
         "quarters": [r["quarter"] for r in last4],
@@ -739,7 +744,7 @@ def summary(session: Session, isin: str, today: date | None = None) -> dict:
             else None
         ),
         "top_client": max(clients, key=clients.get) if clients else None,
-        "top_client_share": max(clients.values()) / valued if valued else None,
+        "top_client_share": max(clients.values()) / valued if clients and valued else None,
         "orders_last_year": len(orders),
     }
 

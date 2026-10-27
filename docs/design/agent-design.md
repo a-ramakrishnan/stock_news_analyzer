@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.11 · Oct 27, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.12 · Oct 27, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -57,14 +57,14 @@ flowchart LR
         A10["10 · Order Book Tracker"]:::built
         A11["11 · Concall Analyst"]:::built
         A12["12 · Promise Ledger"]:::built
-        A13["13 · Bullion Analyst"]:::pending
+        A13["13 · Bullion Analyst"]:::pendingNext
         A14["14 · Theme & Peer Analyst"]:::pending
         A15["15 · Red-flag Monitor<br/>rules over events,<br/>late results"]:::built
     end
 
     subgraph DEL["Deliver"]
         direction TB
-        A16["16 · Reporter<br/>digest + dashboard;<br/>Telegram to do"]:::partlyNext
+        A16["16 · Reporter<br/>digest + dashboard;<br/>email later"]:::partly
         A17["17 · Analyst Q&A"]:::pending
     end
 
@@ -91,7 +91,7 @@ flowchart LR
 | Built | 0 Orchestrator, 1, 2, 3, 5 (stocks), 6, 7, 8, 9, 10, 11, 12, 15 |
 | Partly built | 4 Market Signals, 16 Reporter |
 | Not started | 13, 14, 17 |
-| Recommended next | Telegram delivery (16) for the digest and high-severity flags; then the Bullion Analyst (13) |
+| Recommended next | The Bullion Analyst (13), with bullion prices in Price & Label (5). Email delivery of the digest and high-severity flags (16) comes later; Telegram is set aside for now |
 
 | # | Agent | Status | Build step |
 | --- | --- | --- | --- |
@@ -111,7 +111,7 @@ flowchart LR
 | 13 | Bullion Analyst | Not started | — |
 | 14 | Theme & Peer Analyst | Not started (peers exist for the Move Explainer) | — |
 | 15 | Red-flag Monitor | Built: rules over the checked events (auditor, CEO/MD/CFO and independent director exits, downgrades, pledges, holders selling, penalties, disruptions) and overdue results; no LLM | 18 |
-| 16 | Reporter | Partly: Markdown digest and Streamlit dashboard; no Telegram, email or weekly report; no LLM | 6, 7 |
+| 16 | Reporter | Partly: Markdown digest and Streamlit dashboard; no email or weekly report yet (email later; Telegram set aside for now); no LLM | 6, 7 |
 | 17 | Analyst Q&A | Not started | — |
 
 The build order changed in one place: the Move Explainer came before the Event Extractor and QA Checker, reading filings and triaged news directly. Its explanations were useful without typed events.
@@ -570,7 +570,7 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
   
   The Streamlit dashboard (`make ui`) has seven pages: Today, Stock, Filings, News, What moves the stock, Manage stocks, System. System shows AI usage.
   
-  Telegram, email and the weekly report are not built yet.
+  Email and the weekly report are not built yet: email delivery is planned for later, and Telegram is set aside for now (Oct 27, 2026).
 - **Reads / writes:** all output tables → Telegram, email, dashboard.
 
 1. Daily: overnight filings, explained moves, new orders, red flags, bullion note.

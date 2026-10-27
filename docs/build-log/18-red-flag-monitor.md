@@ -51,7 +51,7 @@ The re-graded run then showed KMEW's MD selling 1,800 shares as a medium flag: t
 
 ## Not yet
 
-- Rising promoter pledges from the quarterly shareholding pattern (only pledges announced in filings are seen), large related-party transactions, and alerts sent the same hour (they wait for the Telegram step).
+- Rising promoter pledges from the quarterly shareholding pattern (only pledges announced in filings are seen), large related-party transactions, and alerts sent the same hour (they wait for email delivery, planned for later; Telegram is set aside for now).
 
 ## On the Mac
 
@@ -64,6 +64,10 @@ uv run sna flags list
 make scheduler
 ```
 
+## After re-reading KMEW
+
+With the share counts, KMEW's MD selling 1,800 shares no longer raises a flag, and the promoters' sale of 5,12,820 shares (2.10% of the company) is the one medium flag. The open list settled at 6 high and 5 medium flags, each worth knowing about.
+
 ## Next
 
-Telegram delivery for the digest and high-severity flags, or the Bullion Analyst.
+The Bullion Analyst (agent 13), with bullion prices in Price & Label. Email delivery of the digest and high-severity flags comes later; Telegram is set aside for now.

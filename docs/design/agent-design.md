@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.13 · Oct 27, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.14 · Oct 27, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -296,6 +296,7 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **LLM:** none.
 - **Reads / writes:** `documents`.
 - **As built (steps 4, 8):** RSS feeds listed in a config file plus a Google News search per company. History since Oct 2023 comes from Google News searches one month at a time.
+- **Oct 27, 2026:** Google News began refusing the browser-imitating client (HTTP 503 on every search) while a plain client got through. A refused feed is now tried once more with a plain client; the company searches brought 160 new articles on the first run after the fix. Bullion news (step 19) is collected the same way, as its own document type.
 
 1. Read RSS feeds (ET Markets, Moneycontrol, Business Standard, Mint, BusinessLine, Financial Express, CNBC-TV18, NDTV Profit).
 2. Run a Google News RSS query per company name and alias.
@@ -523,6 +524,7 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **As built (step 19).** `agents/bullion.py` writes `bullion_moves` (the plan's `bullion_notes`) and `market_series`.
   - **Prices:** the Indian price is the close of an NSE ETF holding the metal (GOLDBEES, SILVERBEES), already in the bhavcopy, rather than IBJA or MCX, which have no free download. Global gold and silver (US$/oz) and USD/INR come from Yahoo Finance (stooq as a fallback), taken at 15:30 IST from Yahoo's hourly prices for the last two years so they line up with the Indian close.
   - **Split:** log returns, so rupee move = global + USD/INR + other (duty and the ETF's premium; for days older than two years, also the gap between the Indian and New York closes). A driver in code: the part with 60% of the move and its sign.
+  - **First notes (Oct 27, 2026):** 20 Aug, 31 Aug and 28 Sep, each traced to the global price and the reason behind it (US yields and the dollar after the FOMC minutes, Fed hike bets after Jackson Hole, the US-Iran impasse lifting oil and yields), $0.035 for four.
   - **Notes:** only when that day's news could be fetched (a Google News 503 is retried once, then the note waits), and only on unusual days (2σ of the previous 60 days, as for stocks), in the last 90 days, at most 10 a run. Sonnet 5.5 gets the split, the previous days and Google News on bullion around the day (searched for that window), and returns the driver, a short note and the articles used. About $0.01 a note.
   - **Where it shows:** a "Bullion" section in the digest, the Today page, `sna bullion probe/run/list/explain`, the 07:35 `bullion` job.
 

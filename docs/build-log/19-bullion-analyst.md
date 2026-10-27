@@ -68,6 +68,20 @@ Some days stay far apart even so: January 2026 swung between +7% and −10% with
 
 With prices at the Indian close, "other" fell to mostly under ±0.3%; days like 28 Sep and 31 Aug now read as global-price days. The notes were still waiting: Google News answered every search with HTTP 503, company searches included, while a plain `curl` of the same search got 200. Google News had started refusing the news client's Chrome imitation (which NSE's bot protection needs). A feed that refuses it is now tried once more with a plain client, which also brings back the Google News searches for company news.
 
+## After the third run
+
+Google News answered again: the 15 company searches brought in 160 new articles (82 for IDFC First Bank, 24 for L&T), and the bullion searches 265. The company searches had likely been failing for some time unnoticed; `sna news backfill --since` can fill the gap.
+
+The four waiting notes were written for $0.035 in all, each now with a reason from that day's news:
+
+| Day | Move in rupees | Note |
+| --- | --- | --- |
+| 20 Aug | gold +2.5% | Nearly all from the global price: a softer dollar and lower US yields after the FOMC minutes took gold back above $4,500. (Before prices were taken at the Indian close, this day read as "local".) |
+| 31 Aug | gold −2.7% | The global price: rising Fed rate-hike bets after Jackson Hole, higher US yields, a stronger dollar |
+| 28 Sep | gold −2.6%, silver −3.7% | The global price: the US-Iran impasse pushed oil and US yields up |
+
+From here the 07:35 job writes a note only for new unusual days, about two to four a month for both metals, at about a cent each.
+
 ## Next
 
 Email delivery of the digest comes later. Of the agents, the Theme & Peer Analyst (14) and Analyst Q&A (17) are left.

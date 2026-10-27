@@ -199,6 +199,25 @@ def job_results(session: Session) -> str:
     return summary
 
 
+def job_events(session: Session) -> str:
+    from stock_news_analyzer.agents import events
+    from stock_news_analyzer.agents.filings import FilingsCollector
+    from stock_news_analyzer.llm import LLM
+    from stock_news_analyzer.sources.exchange_http import ExchangeClient
+
+    if not get_settings().anthropic_api_key:
+        return "skipped: ANTHROPIC_API_KEY is not set in .env"
+    collector = FilingsCollector(session, ExchangeClient(), get_settings().data_dir)
+    result = events.run(session, LLM(session), fetch=collector.fetch_attachment)
+    summary = (
+        f"{result.events} events from {result.filings} filings; QA {result.passed} passed, "
+        f"{result.flagged} flagged, {result.rejected} failed; ${result.cost_usd:.4f}"
+    )
+    if result.errors:
+        raise JobError(summary, result.errors)
+    return summary
+
+
 def job_prices(session: Session) -> str:
     from stock_news_analyzer.agents.prices import (
         PriceCollector,
@@ -264,6 +283,7 @@ JOBS: dict[str, Callable[[Session], str]] = {
     "prices": job_prices,
     "xbrl": job_xbrl,
     "results": job_results,
+    "events": job_events,
     "explain": job_explain,
     "concalls": job_concalls,
     "promises": job_promises,
@@ -280,6 +300,7 @@ RUN_ALL = (
     "prices",
     "xbrl",
     "results",
+    "events",
     "explain",
     "concalls",
     "promises",

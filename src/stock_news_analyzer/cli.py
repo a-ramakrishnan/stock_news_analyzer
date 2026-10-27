@@ -67,6 +67,12 @@ results_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(results_app, name="results")
+events_app = typer.Typer(
+    help="Event Extractor and QA Checker (LLM): capex, ratings, management changes, "
+    "fundraises... from filings, each checked.",
+    no_args_is_help=True,
+)
+app.add_typer(events_app, name="events")
 deals_app = typer.Typer(help="NSE bulk and block deals.", no_args_is_help=True)
 app.add_typer(deals_app, name="deals")
 app.add_typer(triage_app, name="triage")
@@ -2028,6 +2034,267 @@ def results_reset(
     with get_session() as session:
         count = reset(session, symbol)
     typer.echo(f"{count} rows removed; run `sna results run` to read them again")
+
+
+# --- events ----------------------------------------------------------------------
+
+
+@events_app.command("run")
+def events_run(
+    symbol: str = typer.Option(None, help="Only this NSE symbol."),
+    since: str = typer.Option(None, help="Filings from YYYY-MM-DD (default: the last 400 days)."),
+    limit: int = typer.Option(None, help="At most this many extraction calls."),
+    fetch: bool = typer.Option(True, help="Download PDFs not downloaded yet (up to 300 a run)."),
+    yes: bool = typer.Option(False, "--yes", help="Don't ask before spending more than $1."),
+) -> None:
+    """Read filings not read yet for events (Haiku), then check the new events (QA Checker:
+    code checks, and Sonnet for flagged or important ones)."""
+    from datetime import timedelta
+
+    from stock_news_analyzer.agents import events as ev
+    from stock_news_analyzer.llm import LLM, LLMNotConfigured, month_spend
+
+    start = (
+        datetime.strptime(since, "%Y-%m-%d").date()
+        if since
+        else datetime.now(fl.IST).date() - timedelta(days=ev.EVENT_DAYS)
+    )
+    model = get_settings().llm_model_triage
+    with get_session() as session:
+        waiting = ev.pending(session, start, symbol)
+        calls, estimate = ev.estimate(waiting, model)
+        typer.echo(
+            f"{len(waiting)} filings to look at since {start:%d %b %Y}: about {calls} calls; "
+            f"roughly ${estimate:.2f} with {model}, plus the second pass on some events"
+        )
+        if estimate > 1 and not yes and not typer.confirm("Go ahead?"):
+            raise typer.Exit(1)
+        collector = _collector(session, "important") if fetch else None
+        try:
+            result = ev.run(
+                session,
+                LLM(session),
+                since=start,
+                symbol=symbol,
+                limit=limit,
+                fetch=collector.fetch_attachment if collector else None,
+                progress=typer.echo,
+            )
+        except LLMNotConfigured as exc:
+            typer.echo(f"{exc}: add ANTHROPIC_API_KEY=... to .env (see .env.example)")
+            raise typer.Exit(1) from exc
+        spent = month_spend(session)
+    typer.echo(
+        f"{result.events} events from {result.filings} filings ({result.no_event} with no event, "
+        f"{result.duplicates} copies from the other exchange, {result.failed} unusable answers; "
+        f"{result.fetched} PDFs downloaded)"
+    )
+    typer.echo(
+        f"QA: {result.passed} passed, {result.flagged} flagged, {result.rejected} failed, "
+        f"{result.same_event} already recorded; {result.second_pass} second passes"
+    )
+    typer.echo(
+        f"{result.calls} extraction calls, ${result.cost_usd:.4f} "
+        f"(this month ${spent:.2f} of ${get_settings().llm_monthly_budget_usd:.2f})"
+    )
+    if result.waiting:
+        typer.echo(f"{result.waiting} filings have no PDF yet: run this again")
+    if result.flagged or result.rejected:
+        typer.echo("see them with: sna events review")
+    for err in result.errors:
+        typer.echo(f"error: {err}")
+    if result.errors:
+        raise typer.Exit(1)
+
+
+def _event_line(e, symbol: str | None = None) -> str:
+    value = ""
+    if e.value_cr is not None:
+        value = f"  Rs {e.value_cr:,.0f} cr"
+        if e.materiality is not None:
+            value += f" ({e.materiality:.0%} of revenue)"
+    who = f"{symbol:<11} " if symbol else ""
+    return (
+        f"#{e.id:<5} {who}{e.published_at.astimezone(fl.IST):%d %b %Y}  "
+        f"{e.event_type:<17} {e.importance} {e.sentiment:<8} {e.headline}{value}"
+    )
+
+
+@events_app.command("list")
+def events_list(
+    symbol: str = typer.Argument(None, help="NSE symbol (default: every stock)."),
+    days: int = typer.Option(90, help="How many days back."),
+    event_type: str = typer.Option(None, "--type", help="Only this type, e.g. credit_rating."),
+    importance: int = typer.Option(1, help="Only events at least this important (1-5)."),
+    hidden: bool = typer.Option(False, "--all", help="Also failed, rejected and repeated ones."),
+) -> None:
+    """Events, newest first: type, importance (1-5), sentiment, headline, amount."""
+    from datetime import timedelta
+
+    from sqlalchemy import select
+
+    from stock_news_analyzer.agents import qa
+    from stock_news_analyzer.models import Company, Event
+
+    since = datetime.now(fl.IST) - timedelta(days=days)
+    with get_session() as session:
+        query = (
+            select(Event, Company.nse_symbol)
+            .join(Company, Company.isin == Event.isin)
+            .where(Event.published_at >= since, Event.importance >= importance)
+            .order_by(Event.published_at.desc(), Event.id)
+        )
+        if symbol:
+            query = query.where(Company.nse_symbol == symbol.upper())
+        if event_type:
+            query = query.where(Event.event_type == event_type)
+        if not hidden:
+            query = query.where(qa.shown())
+        rows = session.execute(query).all()
+        if not rows:
+            typer.echo("no events in that window; run: sna events run")
+            return
+        for e, sym in rows:
+            typer.echo(_event_line(e, None if symbol else sym))
+            mark = {"flagged": "unchecked: ", "failed": "failed QA: ", "duplicate": ""}
+            if e.qa_status in mark and e.review is None:
+                typer.echo(f"{'':<7}{mark[e.qa_status]}{'; '.join(e.qa_notes)}")
+            elif e.review:
+                typer.echo(
+                    f"{'':<7}you {e.review} it{': ' + e.review_note if e.review_note else ''}"
+                )
+
+
+@events_app.command("show")
+def events_show(
+    event_id: int = typer.Argument(..., help="Event number, from `sna events list`."),
+) -> None:
+    """One event in full: every field, its quote, the QA notes and the filing."""
+    from stock_news_analyzer.models import Company, Document, Event
+
+    with get_session() as session:
+        e = session.get(Event, event_id)
+        if e is None:
+            typer.echo(f"no event #{event_id}")
+            raise typer.Exit(1)
+        company = session.get(Company, e.isin)
+        doc = session.get(Document, e.document_id)
+        typer.echo(_event_line(e, company.nse_symbol or company.isin))
+        for name in (
+            "event_date",
+            "value_as_written",
+            "value_kind",
+            "counterparty",
+            "person",
+            "role",
+            "action",
+            "rating_from",
+            "rating_to",
+            "stake_pct",
+        ):
+            if getattr(e, name) is not None:
+                typer.echo(f"  {name}: {getattr(e, name)}")
+        typer.echo(f"  quote{'' if e.quote_found else ' (not found in the filing)'}: {e.quote}")
+        typer.echo(f"  QA: {e.qa_status}{' (' + e.qa_model + ')' if e.qa_model else ''}")
+        for note in e.qa_notes:
+            typer.echo(f"    - {note}")
+        if e.review:
+            typer.echo(f"  you {e.review} it {e.reviewed_at:%d %b %Y}: {e.review_note or ''}")
+        typer.echo(f"  filing #{doc.id} ({doc.source}): {doc.title}")
+        if doc.attachment_url:
+            typer.echo(f"  {doc.attachment_url}")
+
+
+@events_app.command("review")
+def events_review() -> None:
+    """The review queue: events the QA Checker flagged or failed, waiting for your decision."""
+    from stock_news_analyzer.agents import qa
+
+    with get_session() as session:
+        rows = qa.review_queue(session)
+        if not rows:
+            typer.echo("nothing to review")
+            return
+        for e, company in rows:
+            typer.echo(_event_line(e, company.nse_symbol or company.isin))
+            typer.echo(f"{'':<7}{e.qa_status}: {'; '.join(e.qa_notes)}")
+    typer.echo(
+        f"{len(rows)} to review. `sna events show ID` for the details, then "
+        "`sna events accept ID` or `sna events reject ID` (add --note to say why)"
+    )
+
+
+def _decide(event_id: int, accept: bool, note: str | None) -> None:
+    from stock_news_analyzer.agents import qa
+
+    with get_session() as session:
+        try:
+            e = qa.decide(session, event_id, accept, note)
+        except LookupError as exc:
+            typer.echo(str(exc))
+            raise typer.Exit(1) from exc
+        typer.echo(f"#{e.id} {e.review}: {e.headline}")
+
+
+@events_app.command("accept")
+def events_accept(
+    event_id: int = typer.Argument(..., help="Event number."),
+    note: str = typer.Option(None, help="Why, for the record."),
+) -> None:
+    """Accept an event: it is shown although the QA Checker doubted it."""
+    _decide(event_id, True, note)
+
+
+@events_app.command("reject")
+def events_reject(
+    event_id: int = typer.Argument(..., help="Event number."),
+    note: str = typer.Option(None, help="What was wrong, for the record."),
+) -> None:
+    """Reject an event: it is hidden, and kept as an example of a wrong extraction."""
+    _decide(event_id, False, note)
+
+
+@events_app.command("coverage")
+def events_coverage() -> None:
+    """For every watchlist stock: filings that may announce events, how each was handled, QA."""
+    from stock_news_analyzer.agents import events as ev
+
+    with get_session() as session:
+        rows = ev.coverage(session)
+    typer.echo(
+        f"{'':<11} {'filings':>7} {'events':>6} {'none':>5} {'copies':>6} {'failed':>6} "
+        f"{'no PDF':>6} {'unread':>6} | {'events':>6} {'passed':>6} {'flagged':>7} "
+        f"{'QA fail':>7} {'repeat':>6}"
+    )
+    for r in rows:
+        typer.echo(
+            f"{r['symbol']:<11} {r['filings']:>7} {r['extracted']:>6} {r['no_event']:>5} "
+            f"{r['copies']:>6} {r['failed']:>6} {r['no_pdf']:>6} {r['unread']:>6} | "
+            f"{r['events']:>6} {r['passed']:>6} {r['flagged']:>7} {r['qa_failed']:>7} "
+            f"{r['same_event']:>6}"
+        )
+    typer.echo(
+        "Left: filings whose title names an event; with events, none (routine), copies (the "
+        "other exchange's), failed (unusable answer), no PDF and unread (run `sna events run`). "
+        "Right: events; passed, flagged (in `sna events review`), failed QA, and repeats of an "
+        "event from an earlier filing."
+    )
+
+
+@events_app.command("reset")
+def events_reset(
+    symbol: str = typer.Option(None, help="Only this NSE symbol (default: every stock)."),
+    yes: bool = typer.Option(False, "--yes", help="Don't ask for confirmation."),
+) -> None:
+    """Forget events (and your reviews of them) so `sna events run` reads the filings again."""
+    from stock_news_analyzer.agents.events import reset
+
+    what = f"{symbol}'s" if symbol else "all"
+    if not yes and not typer.confirm(f"Forget {what} events, including your reviews?"):
+        raise typer.Exit(1)
+    with get_session() as session:
+        count = reset(session, symbol)
+    typer.echo(f"{count} rows removed; run `sna events run` to read them again")
 
 
 # --- bulk and block deals ------------------------------------------------------

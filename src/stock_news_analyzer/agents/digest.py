@@ -21,6 +21,7 @@ from stock_news_analyzer.models import (
     Concall,
     Document,
     DocumentCompany,
+    Event,
     EventLabel,
     IndexDaily,
     MoveExplanation,
@@ -36,6 +37,7 @@ from stock_news_analyzer.models import (
 from stock_news_analyzer.sources.announcements import IST
 
 MAX_FILINGS = 12
+DIGEST_IMPORTANCE = 3  # events at least this important are listed
 MAX_NEWS = 8
 LABEL_TYPES = (
     "order_win",
@@ -308,6 +310,38 @@ def _results(session: Session, since: datetime, until: datetime) -> list[str]:
     return lines
 
 
+def _events(session: Session, since: datetime, until: datetime) -> list[str]:
+    """Events from filings read since the previous digest, most important first."""
+    from stock_news_analyzer.agents.qa import shown
+
+    rows = session.execute(
+        select(Event, Company.nse_symbol)
+        .join(Company, Company.isin == Event.isin)
+        .where(
+            Event.created_at >= since,
+            Event.created_at < until,
+            Event.importance >= DIGEST_IMPORTANCE,
+            shown(),
+        )
+        .order_by(Event.importance.desc(), Company.nse_symbol, Event.published_at)
+    ).all()
+    if not rows:
+        return []
+    lines = ["", "## Events", ""]
+    for e, sym in rows:
+        value = ""
+        if e.value_cr is not None:
+            share = f", {e.materiality:.0%} of a year's revenue" if e.materiality else ""
+            value = f" (Rs {e.value_cr:,.0f} cr{share})"
+        unchecked = " *(unchecked)*" if e.qa_status == "flagged" and e.review is None else ""
+        lines.append(
+            f"- {sym} {e.published_at.astimezone(IST):%d %b}, {e.event_type.replace('_', ' ')}, "
+            f"{e.sentiment}: {e.headline}{value}{unchecked}"
+        )
+    lines.append("\nEvery event: `sna events list`; doubtful ones: `sna events review`")
+    return lines
+
+
 def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
     lines = [
         f"# Daily digest, {until.astimezone(IST):%d %b %Y %H:%M} IST",
@@ -329,6 +363,7 @@ def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
     lines += _earnings_calls(session, since, until)
     lines += _promises(session, since, until)
     lines += _orders(session, since, until)
+    lines += _events(session, since, until)
 
     owned = dict(session.execute(select(WatchlistItem.isin, WatchlistItem.owned)).all())
     total_filings = total_news = total_unusual = 0
@@ -470,6 +505,9 @@ def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
         "triage",
         "deals",
         "prices",
+        "xbrl",
+        "results",
+        "events",
         "explain",
         "concalls",
         "promises",

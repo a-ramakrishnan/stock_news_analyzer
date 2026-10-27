@@ -16,6 +16,8 @@ jobs:
     cron: "15 7 * * *"
   results:       # LLM (Haiku): revenue and profit from results filings, before the order books
     cron: "20 7 * * *"
+  events:        # LLM: events from other filings (Haiku), checked by the QA Checker (Sonnet)
+    cron: "25 7 * * *"
   explain:       # LLM (Sonnet): likely cause of each unusual day, before the morning digest
     cron: "45 7 * * *"
   concalls:      # LLM (Sonnet): earnings call transcripts of watchlist stocks, before the digest

@@ -1,6 +1,6 @@
 # Indian Market News Intelligence System — Design
 
-Version 1.9 · Oct 26, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
+Version 1.10 · Oct 27, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
 
 ## Goal and principles
 
@@ -8,11 +8,11 @@ Build a personal system that tracks news and filings for a watchlist of Indian s
 
 The system is built as independent agents under an orchestrator; models, tools, data, hosting and a step-by-step guide per agent are in [Agent design](agent-design.md).
 
-## Status (Oct 26, 2026)
+## Status (Oct 27, 2026)
 
 Phase 1 is done and Phase 2 is under way. Sixteen build steps have shipped, each logged in [`docs/build-log/`](../build-log/). The system runs on a Mac in Docker, and its data goes back to October 2023.
 
-A map of what is built and what is pending, agent by agent, is in [Agent design: Build status](agent-design.md#build-status-oct-26-2026).
+A map of what is built and what is pending, agent by agent, is in [Agent design: Build status](agent-design.md#build-status-oct-27-2026).
 
 | Module | Status |
 | --- | --- |
@@ -20,12 +20,12 @@ A map of what is built and what is pending, agent by agent, is in [Agent design:
 | Watchlist, including NSE SME stocks; peers by industry | Built; managed from the dashboard |
 | News triage (relevance, topic, sentiment, importance, same-story links) | Built (Claude Haiku 5.5) |
 | Move explainer | Built (Claude Sonnet 5.5) |
-| Event-to-return labels (1, 5, 20 days) | Built, per filing; per typed event once event extraction exists |
+| Event-to-return labels (1, 5, 20 days) | Built, per filing (so for each typed event's filing too) |
 | Daily digest and dashboard | Built: Markdown digest saved locally, Streamlit dashboard with 7 pages |
-| Event extraction and QA check | Partly, step 16: results figures for every stock, from the exchange's XBRL files where filed, else read from the PDF (Claude Haiku 5.5), each checked. Other event types and the QA check not started |
+| Event extraction and QA check | Built: results figures for every stock, from the exchange's XBRL files where filed, else read from the PDF (Claude Haiku 5.5), in step 16; typed events from the other filings (Haiku 5.5), each checked in code and, when flagged or important, by Sonnet 5.5, with a review queue, in step 17 |
 | Earnings call analysis and promise ledger | Built (Claude Sonnet 5.5): calls in step 12; promises checked against later results, and a credibility score per company, in step 13; every watchlist stock, owned or not, from step 15 |
 | Order and execution tracker | Built, steps 14–16: orders from filings (Claude Haiku 5.5), quarterly order books (Sonnet 5.5), metrics and peer ranks in code; coverage per stock; revenue gaps filled from results |
-| Bullion, ratings, SAST, pledges, tenders, MF holdings, macro | Not started |
+| Bullion, tenders, MF holdings, macro; SAST and pledge data beyond the filings | Not started (rating, SAST and pledge filings are read as events) |
 | Telegram or email delivery, Q&A, red flags, themes | Not started |
 
 - **Filings first, news second.** Under SEBI LODR Regulation 30, listed companies must report material events (order wins, capacity additions, fundraises, rating changes, management exits) to NSE/BSE, generally within 24 hours. These filings are the factual record. News adds context, sentiment and rumour.
@@ -271,9 +271,10 @@ The database is managed by Alembic migrations (0001–0016). Built tables and ho
 | `promise_checks` | — | Every check of a promise against later documents: verdict, finding, the documents it rested on, and the status before it |
 | `orders`, `order_filings` | `orders` | Each order announced (client, client type, value or range in Rs crore, segment, geography, execution months), and each order-win filing read with its outcome |
 | `order_book_snapshots` | `order_book_snapshots` | Per company and quarter: order book, inflow and revenue as reported, as written and whether found, the documents tried |
-| `results`, `result_filings` | `events` (results only) | Per company and period (quarter, half year, year): revenue, other income, finance costs, depreciation, profit before and after tax, EPS in Rs crore, the basis, each figure as written and whether found, and whether it came from the period's own filing; `model` is `xbrl` for figures from XBRL (with the PDF value each replaced) or `xbrl-rejected` for a half year put back; and each results filing read with its outcome |
+| `results`, `result_filings` | `events` (results) | Per company and period (quarter, half year, year): revenue, other income, finance costs, depreciation, profit before and after tax, EPS in Rs crore, the basis, each figure as written and whether found, and whether it came from the period's own filing; `model` is `xbrl` for figures from XBRL (with the PDF value each replaced) or `xbrl-rejected` for a half year put back; and each results filing read with its outcome |
+| `events`, `event_filings` | `events`, `review_queue` (in Agent design) | Each typed event (type, headline, date, sentiment, importance, amount in Rs crore and as written, materiality, parties, rating, stake, quote and whether found), its QA status and notes, the second pass's model, your review; each filing read with its outcome |
 
-Not built yet: `sources` (feeds are listed in config files instead), and `events` beyond results. Credibility scores are computed from `promises` when shown, not stored. The `vector` extension is installed but not used yet.
+Not built yet: `sources` (feeds are listed in config files instead). Credibility scores are computed from `promises` when shown, not stored. The `vector` extension is installed but not used yet.
 
 ### Rules that make the data usable for a model later
 

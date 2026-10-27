@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.9 · Oct 26, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.10 · Oct 27, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -17,7 +17,7 @@ Orchestrator (0)
 └─ Deliver:     16 Reporter · 17 Analyst Q&A
 ```
 
-### Build status (Oct 26, 2026)
+### Build status (Oct 27, 2026)
 
 The map below shows what is built and what is pending. Data flows left to right, and every layer reads from and writes to the shared database. Green is built, amber partly built, dashed grey not started; a thick blue border marks the recommended next step.
 
@@ -47,8 +47,8 @@ flowchart LR
     subgraph UND["Understand"]
         direction TB
         A6["6 · Triage & Dedup"]:::built
-        A7["7 · Event Extractor<br/>results built (XBRL + PDF);<br/>next: other events"]:::partlyNext
-        A8["8 · QA Checker"]:::pending
+        A7["7 · Event Extractor<br/>results (XBRL + PDF),<br/>other filing events"]:::built
+        A8["8 · QA Checker<br/>code checks + second pass"]:::built
     end
 
     subgraph ANA["Analyse"]
@@ -59,7 +59,7 @@ flowchart LR
         A12["12 · Promise Ledger"]:::built
         A13["13 · Bullion Analyst"]:::pending
         A14["14 · Theme & Peer Analyst"]:::pending
-        A15["15 · Red-flag Monitor"]:::pending
+        A15["15 · Red-flag Monitor"]:::pendingNext
     end
 
     subgraph DEL["Deliver"]
@@ -68,7 +68,7 @@ flowchart LR
         A17["17 · Analyst Q&A"]:::pending
     end
 
-    DB[("Shared Postgres database, point-in-time<br/>built: filings, news, prices and labels, deals, moves,<br/>concalls, promises, orders and order books, results<br/>to do: other typed events, bullion")]:::db
+    DB[("Shared Postgres database, point-in-time<br/>built: filings, news, prices and labels, deals, moves,<br/>concalls, promises, orders and order books, results,<br/>typed events with QA status<br/>to do: bullion")]:::db
 
     O -. runs every agent .-> A1
     S1 --> A2
@@ -88,10 +88,10 @@ flowchart LR
 
 | Status | Agents |
 | --- | --- |
-| Built | 0 Orchestrator, 1, 2, 3, 5 (stocks), 6, 9, 10, 11, 12 |
-| Partly built | 4 Market Signals, 7 Event Extractor (results only), 16 Reporter |
-| Not started | 8, 13, 14, 15, 17 |
-| Recommended next | The rest of the Event Extractor (7) and the QA Checker (8) |
+| Built | 0 Orchestrator, 1, 2, 3, 5 (stocks), 6, 7, 8, 9, 10, 11, 12 |
+| Partly built | 4 Market Signals, 16 Reporter |
+| Not started | 13, 14, 15, 17 |
+| Recommended next | The Red-flag Monitor (15), built on the events (auditor exits, pledges, penalties, downgrades); events as evidence for the Move Explainer |
 
 | # | Agent | Status | Build step |
 | --- | --- | --- | --- |
@@ -102,8 +102,8 @@ flowchart LR
 | 4 | Market Signals Collector | Partly: NSE bulk and block deals only | 11 |
 | 5 | Price & Label | Built for stocks; bullion part not started | 5 |
 | 6 | Triage & Dedup | Built (Haiku 5.5) | 9 |
-| 7 | Event Extractor | Partly: results figures for every stock, from XBRL where filed, else the PDF (Haiku 5.5); other event types not started | 16 |
-| 8 | QA Checker | Not started | — |
+| 7 | Event Extractor | Built: results figures for every stock, from XBRL where filed, else the PDF (Haiku 5.5); typed events from the other filings (Haiku 5.5) | 16, 17 |
+| 8 | QA Checker | Built: code checks on every event, a second pass (Sonnet 5.5) on flagged and important ones, a review queue | 17 |
 | 9 | Move Explainer | Built (Sonnet 5.5) | 10, 11 |
 | 10 | Order Book Tracker | Built: orders from filings (Haiku 5.5), quarterly order books (Sonnet 5.5), metrics and peer ranks; coverage per stock; revenue gaps filled from results | 14, 15, 16 |
 | 11 | Concall Analyst | Built (Sonnet 5.5): structured reading of each call, comparison with the previous one, promises recorded; every watchlist stock | 12, 15 |
@@ -359,6 +359,12 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **Trigger:** after Triage.
 - **LLM:** Sonnet 5.5 (or Opus 5.5 at low effort) with structured JSON output.
 - **Reads / writes:** material documents → `events`, `orders`.
+- **As built (step 17), the other event types.** `agents/events.py` reads the filings that results, orders and calls don't cover, and writes `events` and `event_filings`.
+  - **Which filings:** `other`, `board_meeting`, `credit_rating` and `insider_trading` filings of watchlist stocks whose title names an event (capacity, appointment, rating, penalty, acquisition, QIP, pledge, fire, agreement, approval...) and isn't routine (trading window, certificates, newspaper copies). Their PDFs, not downloaded before, are fetched first; the BSE and NSE copies are read once.
+  - **Types:** capex, guidance, management change, credit rating, legal or regulatory, acquisition, fundraise, promoter action, disruption, agreement, approval, other.
+  - **Fields:** headline, date, sentiment, importance (1–5), the main amount in Rs crore and as written, the parties (agency, regulator, target, person and role), old and new rating, stake, and the sentence it came from.
+  - **Model:** Haiku 5.5, six filings a call, about $0.0005 a filing. Materiality is the amount ÷ the 12 months' revenue from results, worked out by the QA Checker.
+  - **Where it shows:** `sna events run/list/show/coverage/reset`, the 07:25 `events` job, an "Events" section in the digest and an **Events** tab on the Stock page.
 - **As built (step 16), results only.** Results, the first event type built, go into `results`; the order tracker uses them to fill revenue gaps. Two sources: the exchange's XBRL files (exact, no LLM) first, and the **Results Reader** (`agents/results.py`, Haiku 5.5) reading the PDF where XBRL has nothing.
   - **What it reads:** every results filing of every watchlist stock. It copies the headline figures from the results statement: revenue, other income, finance costs, depreciation, profit before and after tax, and EPS.
   - **Checking:** Haiku copies each figure as written, with the statement's unit (lakh, crore, million). The code converts the figures to Rs crore, so the model does no arithmetic, and checks them in two ways:
@@ -395,6 +401,10 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **Trigger:** after each extraction batch.
 - **LLM:** Sonnet 5.5, plus plain code checks.
 - **Reads / writes:** `events` → `events.qa_status`, `review_queue`.
+- **As built (step 17).** `agents/qa.py` runs after each extraction batch.
+  - **Code checks on every event:** the quote is in the filing; the amount as written is a number in the filing; the code converts it from its unit (crore, lakh, million, billion) and replaces the model's figure when it differs; the amount against the 12 months' revenue (flagged above 1×; ratings excluded, their amount is debt rated); the fields a type needs; the date near the filing's; a stake within 0–100%; the same event from an earlier filing within 30 days marked a repeat.
+  - **Second pass (Sonnet 5.5):** events a check flagged and every event of importance 4–5. It confirms the company, that the event is real, the type and the amount; it may correct the type, and the amount when the right one is written in the filing. About $0.005 an event.
+  - **Statuses:** passed, flagged (no second pass settled it), failed, duplicate. The review queue is the flagged and failed events (`sna events review`); `sna events accept/reject` stores your decision and note on the event, kept as training data. No separate `review_queue` table.
 
 1. Check each number appears in its quoted source text.
 2. Check units (crore vs lakh vs million) and that values are plausible against company revenue.

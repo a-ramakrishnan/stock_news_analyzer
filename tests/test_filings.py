@@ -149,8 +149,9 @@ def test_collect_is_idempotent_and_resumes_from_latest(watchlist, tmp_path):
 
 def test_important_policy_skips_routine_attachments(watchlist, tmp_path):
     client = FakeClient()
-    client.bse["Table"][0]["NEWSSUB"] = "Change in Directors"
-    client.bse["Table"][0]["HEADLINE"] = "Appointment of director"
+    # (A director's appointment would now be fetched: the Event Extractor reads it.)
+    client.bse["Table"][0]["NEWSSUB"] = "Closure of Trading Window"
+    client.bse["Table"][0]["HEADLINE"] = "Trading window closure"
     collector = fl.FilingsCollector(watchlist, client, tmp_path, pdf_policy="important")
     collector.collect(fl.watchlist_companies(watchlist, "LT"), start=date(2026, 10, 1))
     routine = watchlist.query(Document).filter_by(doc_type="other").one()

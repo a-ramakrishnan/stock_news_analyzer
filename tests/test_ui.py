@@ -121,6 +121,7 @@ def test_charts_build(loaded):  # noqa: F811
         "stock_page_body",
         "filings_page",
         "news_page",
+        "themes_page",
         "moves_page",
         "manage_page",
         "system_page",
@@ -145,6 +146,7 @@ def test_every_page_renders(loaded, test_database_url, monkeypatch, tmp_path, pa
         "Larsen & Toubro Limited",
         "Filings",
         "News",
+        "Themes",
         "What moves the stock",
         "Manage stocks",
         "System",
@@ -163,4 +165,4 @@ def test_main_registers_every_page():
         "st.markdown(str(len(nav.call_args.args[0])))\n"
     )
     at.run()
-    assert not at.exception and at.markdown[-1].value == "7"
+    assert not at.exception and at.markdown[-1].value == "8"

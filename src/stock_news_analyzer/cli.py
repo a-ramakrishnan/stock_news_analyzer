@@ -84,6 +84,12 @@ bullion_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(bullion_app, name="bullion")
+themes_app = typer.Typer(
+    help="Theme & Peer Analyst: themes across companies (data centres, defence, credit...) "
+    "and read-across between watchlist companies.",
+    no_args_is_help=True,
+)
+app.add_typer(themes_app, name="themes")
 deals_app = typer.Typer(help="NSE bulk and block deals.", no_args_is_help=True)
 app.add_typer(deals_app, name="deals")
 app.add_typer(triage_app, name="triage")
@@ -2496,6 +2502,137 @@ def bullion_reset(yes: bool = typer.Option(False, "--yes", help="Don't ask.")) -
     with get_session() as session:
         count = bu.reset(session)
     typer.echo(f"{count} rows removed; run `sna bullion run` to fetch them again")
+
+
+# --- themes ----------------------------------------------------------------------
+
+
+@themes_app.command("run")
+def themes_run(
+    since: str = typer.Option(None, help="Items from YYYY-MM-DD (default: the last 400 days)."),
+    limit: int = typer.Option(None, help="At most this many LLM calls."),
+    yes: bool = typer.Option(False, "--yes", help="Don't ask before spending more than $1."),
+) -> None:
+    """Tag new events, orders and call points with themes (Haiku), then write read-across."""
+    from datetime import timedelta
+
+    from stock_news_analyzer.agents import themes as th
+    from stock_news_analyzer.llm import LLM, LLMNotConfigured, month_spend
+
+    start = (
+        datetime.strptime(since, "%Y-%m-%d").date()
+        if since
+        else datetime.now(fl.IST).date() - timedelta(days=th.THEME_DAYS)
+    )
+    model = get_settings().llm_model_triage
+    with get_session() as session:
+        items = th.pending(session, start)
+        calls, estimate = th.estimate(items, model)
+        typer.echo(
+            f"{len(items)} items to tag since {start:%d %b %Y}: about {calls} calls, "
+            f"roughly ${estimate:.2f} with {model}"
+        )
+        if estimate > 1 and not yes and not typer.confirm("Go ahead?"):
+            raise typer.Exit(1)
+        try:
+            result = th.run(session, LLM(session), since=start, limit=limit, progress=typer.echo)
+        except LLMNotConfigured as exc:
+            typer.echo(f"{exc}: add ANTHROPIC_API_KEY=... to .env (see .env.example)")
+            raise typer.Exit(1) from exc
+        spent = month_spend(session)
+    typer.echo(
+        f"{result.items} items tagged ({result.tags} tags, {result.untagged} with no theme); "
+        f"{result.signals} new read-across signals; {result.calls} LLM calls, "
+        f"${result.cost_usd:.4f} (this month ${spent:.2f})"
+    )
+    for err in result.errors:
+        typer.echo(f"error: {err}")
+    if result.errors:
+        raise typer.Exit(1)
+
+
+@themes_app.command("list")
+def themes_list() -> None:
+    """Every theme: items and companies in the last 90 days, against the 90 before."""
+    from stock_news_analyzer.agents import themes as th
+
+    with get_session() as session:
+        rows = th.summary(session)
+    typer.echo(
+        f"{'theme':<36} {'90d':>4} {'prev':>5} {'trend':>6} {'+':>3} {'-':>3} "
+        f"{'orders Rs cr':>12}  companies"
+    )
+    for r in rows:
+        if not r["items"] and not r["before"]:
+            continue
+        trend = "new" if not r["before"] else f"{r['items'] / r['before'] - 1:+.0%}"
+        typer.echo(
+            f"{r['name']:<36} {r['items']:>4} {r['before']:>5} {trend:>6} {r['positive']:>3} "
+            f"{r['negative']:>3} {r['order_value_cr']:>12,.0f}  {', '.join(r['companies'])}"
+        )
+    typer.echo(
+        "90d: events, orders and call points tagged with the theme in the last 90 days; prev: "
+        "the 90 before. +/-: positive and negative items. `sna themes show KEY` for one theme."
+    )
+
+
+@themes_app.command("show")
+def themes_show(
+    theme: str = typer.Argument(..., help="Theme key, e.g. data_centres (see config/themes.yaml)."),
+    days: int = typer.Option(90, help="Items from this many days back."),
+) -> None:
+    """One theme: month by month, then its recent items."""
+    from stock_news_analyzer.agents import themes as th
+
+    known = th.load_themes()
+    if theme not in known:
+        typer.echo(f"unknown theme {theme}; known: {', '.join(known)}")
+        raise typer.Exit(1)
+    with get_session() as session:
+        months = th.monthly(session, theme)
+        items = th.recent_items(session, theme, days)
+    typer.echo(f"{known[theme]['name']}")
+    typer.echo(f"{'month':<9} {'items':>5} {'cos':>4} {'+':>3} {'-':>3} {'orders Rs cr':>12}")
+    for m in months:
+        typer.echo(
+            f"{m['month']:%b %Y} {m['items']:>6} {m['companies']:>4} {m['positive']:>3} "
+            f"{m['negative']:>3} {m['order_value_cr']:>12,.0f}"
+        )
+    typer.echo("")
+    for t, symbol in items:
+        value = f"  Rs {t.value_cr:,.0f} cr" if t.value_cr and t.value_cr >= 1 else ""
+        typer.echo(f"{t.on_date:%d %b %Y}  {symbol:<11} {t.title[:110]}{value}")
+
+
+@themes_app.command("signals")
+def themes_signals(
+    symbol: str = typer.Argument(None, help="Only read-across for this NSE symbol."),
+    days: int = typer.Option(90, help="How many days back."),
+) -> None:
+    """Read-across: important orders and events at one company worth a look for another."""
+    from stock_news_analyzer.agents import themes as th
+
+    with get_session() as session:
+        isin = _companies_or_exit(session, symbol)[0].isin if symbol else None
+        rows = th.signals(session, isin, days)
+        if not rows:
+            typer.echo("no read-across in that window")
+            return
+        for s, target in rows:
+            why = "peer" if s.relation == "peer" else s.relation.split(":", 1)[1].replace("_", " ")
+            typer.echo(f"{s.on_date:%d %b %Y}  for {target:<11} ({why})  {s.title[:110]}")
+
+
+@themes_app.command("reset")
+def themes_reset(yes: bool = typer.Option(False, "--yes", help="Don't ask.")) -> None:
+    """Forget theme tags and read-across, so `sna themes run` tags everything again."""
+    from stock_news_analyzer.agents import themes as th
+
+    if not yes and not typer.confirm("Forget all theme tags and read-across?"):
+        raise typer.Exit(1)
+    with get_session() as session:
+        count = th.reset(session)
+    typer.echo(f"{count} rows removed; run `sna themes run` to tag again")
 
 
 # --- bulk and block deals ------------------------------------------------------

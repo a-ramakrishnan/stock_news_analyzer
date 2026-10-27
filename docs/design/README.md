@@ -11,6 +11,14 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.15 · Oct 27, 2026
+
+- Step 20, the Theme & Peer Analyst:
+  - agent 14 marked built, with "As built" notes: themes by Haiku 5.5 rather than Sonnet (classification, 40 items a call); strength and read-across in code; read-across without a direction
+  - the `theme_tags` and `peer_signals` tables mapped to the plan's `themes` and `peer_signals`
+  - the dashboard has a Themes page (eight pages)
+- Status tables and the block diagram updated; the last agent left is Analyst Q&A
+
 ### 1.14 · Oct 27, 2026
 
 - The Bullion Analyst's first notes recorded in its "As built" notes: four unusual days explained from their news for $0.035

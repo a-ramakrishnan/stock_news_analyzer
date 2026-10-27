@@ -30,6 +30,7 @@ Every command block below can be pasted into Terminal as is; explanations are in
 | 17 | Event Extractor (Claude Haiku) and QA Checker (code checks + Claude Sonnet): capex, ratings, management changes, legal matters, deals, fundraises, promoter actions, disruptions | done |
 | 18 | Red-flag Monitor: auditor and CFO exits, downgrades, pledges, penalties, late results; in the digest and dashboard | done |
 | 19 | Bullion Analyst: Indian gold and silver moves split into global price, rupee and the rest; notes on unusual days (Claude Sonnet) | done |
+| 20 | Theme & Peer Analyst: events, orders and call points tagged with themes (Claude Haiku); theme strength over time; read-across between watchlist stocks | this PR |
 
 ## Run it on a Mac
 
@@ -413,6 +414,31 @@ A note is written only when that day's news can be fetched. If Google News refus
 
 The scheduler runs it at 07:35, after the New York close, before the 08:00 digest. The digest gets a "Bullion" section (the latest day's split, and any new note), and the Today page shows the last 30 days per metal.
 
+## Themes and read-across (Phase 2, LLM)
+
+The Theme & Peer Analyst connects what happens across your companies.
+
+- **Themes:** Claude Haiku tags each checked event, order and forward-looking earnings-call point (guidance, demand, capex, order book, initiatives) with up to three themes from [`config/themes.yaml`](config/themes.yaml). Examples are data centres, defence, railways and metro, power T&D, ports and marine, credit and deposits, consumer demand and recycling. Edit that file to add or rename themes. Each item is read once.
+- **Strength, in code:** per theme, the items and companies in the last 90 days against the 90 before, the positive and negative items, and the value of orders. Per month too.
+- **Read-across, in code:** an important order or event (importance 4–5, or an order of 1% or more of the company's yearly revenue) is listed for the other watchlist stocks that are its approved peers (`sna watchlist peers`) or that had an item in the same theme in the last 180 days.
+
+```bash
+uv run sna themes run
+uv run sna themes list
+uv run sna themes show data_centres
+uv run sna themes signals
+```
+
+| Command | What it does |
+| --- | --- |
+| `uv run sna themes run` | Tag events, orders and call points of the last 400 days not tagged yet (Haiku, 40 a call), then write read-across; shows the cost first |
+| `uv run sna themes list` | Every theme: items in the last 90 days and the 90 before, the trend, positive and negative items, order value, companies |
+| `uv run sna themes show data_centres` | One theme month by month, and its recent items |
+| `uv run sna themes signals LT` | Read-across for a stock (or all): the order or event elsewhere, and why it is relevant (peer or theme) |
+| `uv run sna themes reset --yes` | Forget tags and read-across, e.g. after changing the themes |
+
+The scheduler tags new items at 07:52. New read-across appears in a "Read-across" section of the digest, and the dashboard has a **Themes** page: the theme table, a theme's months and items, and the read-across.
+
 ## Prices, moves and labels
 
 ```bash
@@ -464,7 +490,7 @@ make scheduler
 | --- | --- |
 | `uv run sna orchestrator show` | The schedule and when each job runs next |
 | `make run-all` | Run every job once, now, in order: collect, triage, measure, explain, read calls, digest |
-| `uv run sna run news` | Run one job now: `filings`, `news`, `triage`, `deals`, `prices`, `xbrl`, `results`, `events`, `explain`, `concalls`, `promises`, `orders`, `flags`, `bullion`, `securities` or `digest` |
+| `uv run sna run news` | Run one job now: `filings`, `news`, `triage`, `deals`, `prices`, `xbrl`, `results`, `events`, `explain`, `concalls`, `promises`, `orders`, `themes`, `flags`, `bullion`, `securities` or `digest` |
 | `uv run sna runs` | Recent runs: when, how long, result, errors |
 | `make digest` | Print the digest covering everything since the last scheduled digest (`--hours 24` for a fixed window) |
 | `make scheduler` | Start the orchestrator in Docker; it keeps running while Docker Desktop is open |

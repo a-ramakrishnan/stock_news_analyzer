@@ -830,6 +830,70 @@ def bullion_metals(session: Session) -> list[str]:
     return watched_metals(session)
 
 
+def themes(session: Session) -> pd.DataFrame:
+    """Theme strength: items in the last 90 days and the 90 before (agents/themes.summary)."""
+    from stock_news_analyzer.agents.themes import summary
+
+    rows = [
+        {
+            "key": r["theme"],
+            "theme": r["name"],
+            "items": r["items"],
+            "before": r["before"],
+            "positive": r["positive"],
+            "negative": r["negative"],
+            "orders_cr": r["order_value_cr"],
+            "companies": ", ".join(r["companies"]),
+        }
+        for r in summary(session)
+        if r["items"] or r["before"]
+    ]
+    columns = ["key", "theme", "items", "before", "positive", "negative", "orders_cr", "companies"]
+    return pd.DataFrame(rows, columns=columns)
+
+
+def theme_detail(session: Session, theme: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """(month by month, the last 90 days' items) for one theme."""
+    from stock_news_analyzer.agents.themes import monthly, recent_items
+
+    months = pd.DataFrame(
+        monthly(session, theme),
+        columns=["month", "items", "companies", "order_value_cr", "positive", "negative"],
+    )
+    items = pd.DataFrame(
+        [
+            {
+                "date": t.on_date,
+                "stock": symbol,
+                "kind": t.item_type,
+                "item": t.title,
+                "value_cr": float(t.value_cr) if t.value_cr else None,
+                "sentiment": t.sentiment,
+            }
+            for t, symbol in recent_items(session, theme)
+        ],
+        columns=["date", "stock", "kind", "item", "value_cr", "sentiment"],
+    )
+    return months, items
+
+
+def read_across(session: Session, isin: str | None = None, days: int = 90) -> pd.DataFrame:
+    from stock_news_analyzer.agents.themes import signals
+
+    return pd.DataFrame(
+        [
+            {
+                "date": s.on_date,
+                "for": target,
+                "why": "peer" if s.relation == "peer" else s.relation.split(":", 1)[1],
+                "item": s.title,
+            }
+            for s, target in signals(session, isin, days)
+        ],
+        columns=["date", "for", "why", "item"],
+    )
+
+
 def order_peers(session: Session) -> pd.DataFrame:
     """Order-driven watchlist companies side by side (see agents/orders.peers)."""
     from stock_news_analyzer.agents.orders import peers
@@ -902,6 +966,7 @@ def last_runs(session: Session) -> dict[str, dict]:
         "events",
         "flags",
         "bullion",
+        "themes",
         "explain",
         "securities",
         "digest",

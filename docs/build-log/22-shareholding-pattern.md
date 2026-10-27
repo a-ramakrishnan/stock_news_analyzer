@@ -37,6 +37,8 @@ After that, 168 quarters remained and three flags were raised:
 
 To avoid the repeat, a quarter's fall in promoter shares that sales already flagged from filings account for (80% or more) raises nothing more, and such a flag already raised is removed. KMEW's goes; Shaily's and BlackBuck's stay.
 
+After the fix, `sna flags run` removed KMEW's repeat flag. Two flags from the shareholding pattern remain, each telling something the filings did not: Shaily's promoter sale of 2.3% and BlackBuck's 16 lakh shares beyond the founder's disclosed sale. Thirteen flags are open in all: six high, seven medium.
+
 ## Red flags
 
 - **Promoters selling:** only when the promoters hold fewer shares than the quarter before. A stake that falls because new shares were issued, such as a QIP or a merger, is dilution and raises nothing.
@@ -69,3 +71,7 @@ uv run sna holdings moves
 uv run sna holdings show SSEGL
 uv run sna flags run
 ```
+
+## Next
+
+Email delivery of the digest and high-severity red flags is the one large piece left. It waits while other work comes first. Smaller Market Signals pieces remain: NSE's structured SAST data, monthly mutual fund portfolios and tenders.

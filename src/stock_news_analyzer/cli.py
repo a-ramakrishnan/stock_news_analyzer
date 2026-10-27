@@ -73,6 +73,11 @@ events_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(events_app, name="events")
+flags_app = typer.Typer(
+    help="Red-flag Monitor: auditor and CFO exits, downgrades, pledges, penalties, late results.",
+    no_args_is_help=True,
+)
+app.add_typer(flags_app, name="flags")
 deals_app = typer.Typer(help="NSE bulk and block deals.", no_args_is_help=True)
 app.add_typer(deals_app, name="deals")
 app.add_typer(triage_app, name="triage")
@@ -2293,6 +2298,64 @@ def events_reset(
     with get_session() as session:
         count = reset(session, symbol)
     typer.echo(f"{count} rows removed; run `sna events run` to read them again")
+
+
+# --- red flags -------------------------------------------------------------------
+
+
+@flags_app.command("run")
+def flags_run() -> None:
+    """Raise red flags from the checked events and from overdue results (no LLM)."""
+    from stock_news_analyzer.agents import redflags
+
+    with get_session() as session:
+        result = redflags.scan(session)
+    counts = ", ".join(f"{n} {s}" for s, n in sorted(result.by_severity.items())) or "none new"
+    typer.echo(f"{result.raised} red flags raised ({counts}); see them with: sna flags list")
+
+
+@flags_app.command("list")
+def flags_list(
+    symbol: str = typer.Argument(None, help="NSE symbol (default: every stock)."),
+    days: int = typer.Option(365, help="How many days back."),
+    low: bool = typer.Option(False, "--low", help="Also low-severity flags."),
+    dismissed: bool = typer.Option(False, "--dismissed", help="Also those you dismissed."),
+) -> None:
+    """Red flags, most serious first."""
+    from stock_news_analyzer.agents import redflags
+
+    severities = redflags.SEVERITIES if low else ("high", "medium")
+    with get_session() as session:
+        isin = _companies_or_exit(session, symbol)[0].isin if symbol else None
+        rows = redflags.open_flags(session, days, severities, isin, dismissed)
+        if not rows:
+            typer.echo("no red flags in that window")
+            return
+        for f, _company in rows:
+            detail = f" ({f.detail})" if f.detail else ""
+            gone = f"  [dismissed: {f.note or ''}]" if f.dismissed_at else ""
+            typer.echo(
+                f"#{f.id:<5} {f.severity.upper():<6} {f.flagged_on:%d %b %Y}  "
+                f"{f.kind:<25} {f.title}{detail}{gone}"
+            )
+    typer.echo("`sna events show` with the event behind a flag; `sna flags dismiss ID --note ...`")
+
+
+@flags_app.command("dismiss")
+def flags_dismiss(
+    flag_id: int = typer.Argument(..., help="Flag number, from `sna flags list`."),
+    note: str = typer.Option(None, help="Why, for the record."),
+) -> None:
+    """Dismiss a red flag once dealt with; it stays on record with your note."""
+    from stock_news_analyzer.agents import redflags
+
+    with get_session() as session:
+        try:
+            f = redflags.dismiss(session, flag_id, note)
+        except LookupError as exc:
+            typer.echo(str(exc))
+            raise typer.Exit(1) from exc
+        typer.echo(f"#{f.id} dismissed: {f.title}")
 
 
 # --- bulk and block deals ------------------------------------------------------

@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.10 · Oct 27, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.11 · Oct 27, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -59,16 +59,16 @@ flowchart LR
         A12["12 · Promise Ledger"]:::built
         A13["13 · Bullion Analyst"]:::pending
         A14["14 · Theme & Peer Analyst"]:::pending
-        A15["15 · Red-flag Monitor"]:::pendingNext
+        A15["15 · Red-flag Monitor<br/>rules over events,<br/>late results"]:::built
     end
 
     subgraph DEL["Deliver"]
         direction TB
-        A16["16 · Reporter<br/>digest + dashboard;<br/>Telegram to do"]:::partly
+        A16["16 · Reporter<br/>digest + dashboard;<br/>Telegram to do"]:::partlyNext
         A17["17 · Analyst Q&A"]:::pending
     end
 
-    DB[("Shared Postgres database, point-in-time<br/>built: filings, news, prices and labels, deals, moves,<br/>concalls, promises, orders and order books, results,<br/>typed events with QA status<br/>to do: bullion")]:::db
+    DB[("Shared Postgres database, point-in-time<br/>built: filings, news, prices and labels, deals, moves,<br/>concalls, promises, orders and order books, results,<br/>typed events with QA status, red flags<br/>to do: bullion")]:::db
 
     O -. runs every agent .-> A1
     S1 --> A2
@@ -88,10 +88,10 @@ flowchart LR
 
 | Status | Agents |
 | --- | --- |
-| Built | 0 Orchestrator, 1, 2, 3, 5 (stocks), 6, 7, 8, 9, 10, 11, 12 |
+| Built | 0 Orchestrator, 1, 2, 3, 5 (stocks), 6, 7, 8, 9, 10, 11, 12, 15 |
 | Partly built | 4 Market Signals, 16 Reporter |
-| Not started | 13, 14, 15, 17 |
-| Recommended next | The Red-flag Monitor (15), built on the events (auditor exits, pledges, penalties, downgrades); events as evidence for the Move Explainer |
+| Not started | 13, 14, 17 |
+| Recommended next | Telegram delivery (16) for the digest and high-severity flags; then the Bullion Analyst (13) |
 
 | # | Agent | Status | Build step |
 | --- | --- | --- | --- |
@@ -110,7 +110,7 @@ flowchart LR
 | 12 | Promise Ledger | Built (Sonnet 5.5): promises past their date checked against later results and filings; credibility score per company | 12, 13 |
 | 13 | Bullion Analyst | Not started | — |
 | 14 | Theme & Peer Analyst | Not started (peers exist for the Move Explainer) | — |
-| 15 | Red-flag Monitor | Not started | — |
+| 15 | Red-flag Monitor | Built: rules over the checked events (auditor, CEO/MD/CFO and independent director exits, downgrades, pledges, holders selling, penalties, disruptions) and overdue results; no LLM | 18 |
 | 16 | Reporter | Partly: Markdown digest and Streamlit dashboard; no Telegram, email or weekly report; no LLM | 6, 7 |
 | 17 | Analyst Q&A | Not started | — |
 
@@ -547,6 +547,12 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **Trigger:** on each relevant filing or signal.
 - **LLM:** Sonnet 5.5.
 - **Reads / writes:** `events`, `signals` → `alerts`.
+
+- **As built (step 18).** `agents/redflags.py` writes `red_flags` (the plan's `alerts`), with no LLM: the events are already typed and checked, so severity follows from rules.
+  - **From events:** a statutory auditor leaving (high; internal or secretarial: medium); the CEO, MD or CFO resigning or retiring early (high) or ceasing otherwise (medium); an independent director resigning mid-term (medium); a downgrade (high) or negative outlook (medium); a pledge invoked (high) or created (medium); a holder selling 1% or more (medium); penalties, demands and orders graded by amount against revenue (1% high, 0.1% medium), any SEBI order at least medium; disruptions (high at importance 4-5).
+  - **From filings:** results not filed by the LODR deadline (45 days, 60 for the year): medium, high at 30 days late.
+  - **Where it shows:** a "Red flags" section first in the digest (filings of the last 14 days), the Today page and the Stock page's Events tab, `sna flags run/list/dismiss`, the 07:55 `flags` job. Same-hour alerts wait for Telegram.
+  - **Not yet:** pledges from the shareholding pattern, related-party transactions.
 
 1. Watch for auditor or CFO resignation, rising promoter pledges, rating downgrades, delayed results, large related-party deals, SEBI orders.
 2. Score severity and send high-severity alerts immediately.

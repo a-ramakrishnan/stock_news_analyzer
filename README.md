@@ -27,7 +27,8 @@ Every command block below can be pasted into Terminal as is; explanations are in
 | 14 | Order Book Tracker: orders from filings (Claude Haiku), quarterly order books (Claude Sonnet), book-to-bill and peers | done |
 | 15 | Wider coverage: earnings calls for every watchlist stock, single-order filings, `sna orders coverage` | done |
 | 16 | Results Reader (Claude Haiku): revenue, profit and margins from quarterly and half-yearly results; fills order-book revenue gaps; XBRL first | done |
-| 17 | Event Extractor (Claude Haiku) and QA Checker (code checks + Claude Sonnet): capex, ratings, management changes, legal matters, deals, fundraises, promoter actions, disruptions | this PR |
+| 17 | Event Extractor (Claude Haiku) and QA Checker (code checks + Claude Sonnet): capex, ratings, management changes, legal matters, deals, fundraises, promoter actions, disruptions | done |
+| 18 | Red-flag Monitor: auditor and CFO exits, downgrades, pledges, penalties, late results; in the digest and dashboard | this PR |
 
 ## Run it on a Mac
 
@@ -351,6 +352,35 @@ uv run sna events review
 
 The scheduler reads new filings at 07:25. Events of importance 3 or more appear in an "Events" section of the digest, flagged ones marked *unchecked*, and the Stock page has an **Events** tab.
 
+## Red flags
+
+The Red-flag Monitor reads the checked events and raises warnings about governance and balance-sheet risk. It is plain code, with no LLM: the events are already typed and checked, so it only picks out the ones that warn of trouble and grades them.
+
+| Flag | Severity |
+| --- | --- |
+| Statutory auditor resigns or is removed | high (internal or secretarial auditor: medium) |
+| CEO, MD or CFO resigns or retires early | high; leaves any other way: medium |
+| Independent director resigns mid-term | medium |
+| Rating downgrade | high; negative outlook or watch: medium |
+| Promoter pledge invoked | high; pledge created: medium |
+| Promoter or large holder sells 1% or more | medium |
+| Penalty, tax demand, court or regulator's order | by size against a year's revenue: 1%+ high, 0.1%+ medium, smaller low; any SEBI order at least medium |
+| Fire, strike, shutdown or other disruption | high when important (4-5), else medium |
+| Results not filed by the deadline (45 days; 60 for the year) | medium; 30 days late: high |
+
+```bash
+uv run sna flags run
+uv run sna flags list
+```
+
+| Command | What it does |
+| --- | --- |
+| `uv run sna flags run` | Raise the flags not raised yet; each is raised once |
+| `uv run sna flags list LT` | Flags of the last year, most serious first; `--low` for low ones, `--dismissed` for those you dismissed |
+| `uv run sna flags dismiss 7 --note "..."` | Dismiss a flag once dealt with; it stays on record with your note |
+
+The scheduler raises new flags at 07:55. High and medium flags about recent filings open the digest. The Today page lists those from the last 30 days, and the Stock page's **Events** tab shows the stock's flags from the last year.
+
 ## Prices, moves and labels
 
 ```bash
@@ -402,7 +432,7 @@ make scheduler
 | --- | --- |
 | `uv run sna orchestrator show` | The schedule and when each job runs next |
 | `make run-all` | Run every job once, now, in order: collect, triage, measure, explain, read calls, digest |
-| `uv run sna run news` | Run one job now: `filings`, `news`, `triage`, `deals`, `prices`, `xbrl`, `results`, `events`, `explain`, `concalls`, `promises`, `orders`, `securities` or `digest` |
+| `uv run sna run news` | Run one job now: `filings`, `news`, `triage`, `deals`, `prices`, `xbrl`, `results`, `events`, `explain`, `concalls`, `promises`, `orders`, `flags`, `securities` or `digest` |
 | `uv run sna runs` | Recent runs: when, how long, result, errors |
 | `make digest` | Print the digest covering everything since the last scheduled digest (`--hours 24` for a fixed window) |
 | `make scheduler` | Start the orchestrator in Docker; it keeps running while Docker Desktop is open |

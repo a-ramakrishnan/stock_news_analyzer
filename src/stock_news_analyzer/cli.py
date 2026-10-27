@@ -95,6 +95,11 @@ questions_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(questions_app, name="questions")
+holdings_app = typer.Typer(
+    help="Shareholding pattern: promoters, institutions, mutual funds and pledges each quarter.",
+    no_args_is_help=True,
+)
+app.add_typer(holdings_app, name="holdings")
 deals_app = typer.Typer(help="NSE bulk and block deals.", no_args_is_help=True)
 app.add_typer(deals_app, name="deals")
 app.add_typer(triage_app, name="triage")
@@ -2889,3 +2894,103 @@ def questions_rerun(
         typer.echo(f"no saved report '{name}'")
         raise typer.Exit(1)
     _ask(question, model, name)
+
+
+# Where NSE may list a company's quarterly shareholding patterns. Tried by `sna holdings
+# probe` until one answers.
+HOLDINGS_CANDIDATES = (
+    ("https://www.nseindia.com/api/corporate-share-holdings-master", {}),
+    ("https://www.nseindia.com/api/corporate-share-holdings-master", {"type": "SHP"}),
+    ("https://www.nseindia.com/api/corporates-shareholding-pattern", {}),
+)
+
+
+@holdings_app.command("probe")
+def holdings_probe(symbol: str = typer.Argument(..., help="NSE symbol.")) -> None:
+    """Show NSE's shareholding-pattern listing and latest XBRL file, to check the format."""
+    import json
+    from collections import Counter
+
+    from sqlalchemy import select
+
+    from stock_news_analyzer.models import Document, DocumentCompany
+    from stock_news_analyzer.sources import xbrl
+    from stock_news_analyzer.sources.exchange_http import NSE_ARCHIVES, SME_SERIES, ExchangeClient
+
+    with get_session() as session:
+        company = _companies_or_exit(session, symbol)[0]
+        stored = session.execute(
+            select(Document.source, Document.published_at, Document.title, Document.raw)
+            .join(DocumentCompany, DocumentCompany.document_id == Document.id)
+            .where(DocumentCompany.isin == company.isin, Document.title.ilike("%sharehold%"))
+            .order_by(Document.published_at.desc())
+            .limit(3)
+        ).all()
+    typer.echo(f"stored filings with 'sharehold' in the title: {len(stored)} shown")
+    for src, at, title, raw in stored:
+        typer.echo(f"  {src} {at:%d %b %Y}: {title[:80]} | {str(raw)[:300]}")
+    index = "sme" if company.nse_series in SME_SERIES else "equities"
+    out_dir = get_settings().data_dir / "probe"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    client = ExchangeClient()
+    link = None
+    for url, extra in HOLDINGS_CANDIDATES:
+        params = {"index": index, "symbol": company.nse_symbol, **extra}
+        try:
+            data = client.nse_json(url, params)
+        except Exception as exc:  # a probe reports any failure and carries on
+            typer.echo(f"{url} {extra}: FAILED {type(exc).__name__}: {exc}")
+            continue
+        rows = data if isinstance(data, list) else data.get("data", data)
+        name = url.rsplit("/", 1)[-1] + "".join(f"-{v}" for v in extra.values())
+        (out_dir / f"{company.nse_symbol}-{name}.json").write_text(json.dumps(data, indent=1))
+        typer.echo(f"{url} {extra}: {len(rows) if isinstance(rows, list) else '?'} rows")
+        if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+            typer.echo(f"  fields: {', '.join(rows[0])}")
+            for row in rows[:3]:
+                typer.echo("  " + "; ".join(f"{k}={str(v)[:70]}" for k, v in row.items() if v))
+            for row in rows:
+                xml = next(
+                    (v for v in row.values() if isinstance(v, str) and v.endswith(".xml")), None
+                )
+                if xml and not link:
+                    link = xml
+        else:
+            typer.echo(f"  answer: {str(data)[:600]}")
+        if link:
+            break
+    if not link:
+        typer.echo("no XBRL link found in the listings above")
+        return
+    if link.startswith("/"):
+        link = NSE_ARCHIVES + link
+    try:
+        _, content, _ = client.download("nse", [link])
+        path = out_dir / f"{company.nse_symbol}-shp.xml"
+        path.write_bytes(content)
+        found, contexts = xbrl.facts(content), xbrl.contexts(content)
+    except Exception as exc:
+        typer.echo(f"XBRL {link}: FAILED {type(exc).__name__}: {exc}")
+        return
+    typer.echo(f"XBRL {link}: {len(content):,} bytes, {len(found)} facts, saved to {path}")
+    tags = Counter(tag for tag, _, _ in found)
+    typer.echo(f"{len(tags)} tags: " + ", ".join(f"{t}({n})" for t, n in tags.most_common(80)))
+    members = Counter(
+        m.strip(" '")
+        for v in contexts.values()
+        if "[" in v
+        for m in v.split("[", 1)[1].rstrip("]").split(",")
+    )
+    typer.echo(
+        f"{len(members)} members: " + ", ".join(f"{m}({n})" for m, n in members.most_common(80))
+    )
+    typer.echo("facts (tag, context, value):")
+    plain = [f for f in found if "[" not in contexts.get(f[1], "")]
+    for tag, context, value in plain[:40]:
+        typer.echo(f"  {tag:<60} {contexts.get(context, context)[:30]:<30} {value[:40]}")
+    wanted = ("percentage", "pledge", "encumber", "numberofshares")
+    shown = [
+        f for f in found if "[" in contexts.get(f[1], "") and any(w in f[0].lower() for w in wanted)
+    ]
+    for tag, context, value in shown[:80]:
+        typer.echo(f"  {tag:<50} {contexts.get(context, context)[-70:]:<70} {value[:20]}")

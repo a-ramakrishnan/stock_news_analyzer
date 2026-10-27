@@ -1,6 +1,6 @@
 # Indian Market News Intelligence System — Design
 
-Version 1.11 · Oct 27, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
+Version 1.12 · Oct 27, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
 
 ## Goal and principles
 
@@ -27,7 +27,7 @@ A map of what is built and what is pending, agent by agent, is in [Agent design:
 | Order and execution tracker | Built, steps 14–16: orders from filings (Claude Haiku 5.5), quarterly order books (Sonnet 5.5), metrics and peer ranks in code; coverage per stock; revenue gaps filled from results |
 | Bullion, tenders, MF holdings, macro; SAST and pledge data beyond the filings | Not started (rating, SAST and pledge filings are read as events) |
 | Red flags | Built, step 18: rules over the checked events and results deadlines, no LLM; in the digest and dashboard |
-| Telegram or email delivery, Q&A, themes | Not started |
+| Email delivery (later; Telegram set aside for now), Q&A, themes | Not started |
 
 - **Filings first, news second.** Under SEBI LODR Regulation 30, listed companies must report material events (order wins, capacity additions, fundraises, rating changes, management exits) to NSE/BSE, generally within 24 hours. These filings are the factual record. News adds context, sentiment and rumour.
 - **Concalls are mandatory disclosures.** Companies must upload earnings call audio within about 24 hours and the transcript within about 5 working days. So the concall archive can be built from exchange filings.
@@ -301,7 +301,7 @@ A single Python codebase, one PostgreSQL database and a scheduler are enough; ev
 | Database | PostgreSQL + pgvector | Structured tables and semantic search in one place |
 | LLM | Claude API with structured outputs: Haiku 5.5 for triage, Sonnet 5.5 for analysis; every call logged with its cost; monthly budget cap ($20) | Reliable extraction into fixed schemas |
 | Scheduling | APScheduler, cron times in `config/schedule.yaml`: filings every 30 minutes 07:00–23:30, news and triage hourly, prices and deals in the evening, explanations 07:45, digest 08:00 | Simple and dependable |
-| Interface | Markdown digest saved under `data/digests/` and a Streamlit dashboard (Plotly charts); email or Telegram later | Checking the data in a browser was more useful early than expected |
+| Interface | Markdown digest saved under `data/digests/` and a Streamlit dashboard (Plotly charts); email later (Telegram set aside for now) | Checking the data in a browser was more useful early than expected |
 
 | Phase | Builds | Gate before the next phase |
 | --- | --- | --- |
@@ -352,7 +352,7 @@ The product descriptions above come from search results; the source pages could 
 - [x] Run on a laptop, or on a small cloud server so it works when the laptop is off? **A Mac for now**, Docker Compose; a server later.
 - [x] Monthly LLM budget? **$20**, enforced in code (`LLM_MONTHLY_BUDGET_USD`).
 - [x] Watchlist size, and how many of those stocks you own? **About 15 stocks, most of them owned**; added and edited from the dashboard.
-- [x] Dashboard, or a daily email/Telegram digest first? **Both**: a Markdown digest and the dashboard; Telegram later.
+- [x] Dashboard, or a daily email/Telegram digest first? **Both**: a Markdown digest and the dashboard; email later. Telegram was set aside on Oct 27, 2026.
 - [x] Pay for a data vendor or consensus estimates now, or stay free until Phase 4? **Stay free.**
 - [x] Which agent next: Earnings Call Analyst or Order Book Tracker? **Earnings Call Analyst** (step 12).
 - [x] Unusual-day threshold: keep 2.0σ, or raise it to 2.5σ? **Keep 2.0σ.**

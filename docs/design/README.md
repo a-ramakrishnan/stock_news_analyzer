@@ -11,6 +11,12 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.12 · Oct 27, 2026
+
+- Delivery: Telegram is set aside for now; email delivery of the digest and high-severity red flags is planned for later. Status tables, the Reporter notes and the decisions list updated.
+- The Red-flag Monitor after its first runs: a promoter selling is graded by the share of the company sold (worked out from the number of shares where the filing gives no percentage), funds trimming stakes are low, and mixed court outcomes a step lower
+- The recommended next step is now the Bullion Analyst; block diagram updated
+
 ### 1.11 · Oct 27, 2026
 
 - Step 18, the Red-flag Monitor:

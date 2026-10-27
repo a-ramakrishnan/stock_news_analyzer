@@ -73,8 +73,36 @@ def test_falls_back_to_yahoo():
     def broken(url):
         raise NewsError("HTTP 403")
 
-    with pytest.raises(markets.MarketError, match="stooq: HTTP 403; yahoo: HTTP 403"):
+    with pytest.raises(markets.MarketError, match="yahoo: HTTP 403; stooq: HTTP 403"):
         markets.daily_closes(broken, "XAUUSD", date(2026, 10, 1), date(2026, 10, 31))
+
+
+def hourly(prices):
+    """A Yahoo hourly chart: {(date, hour UTC): close}."""
+    stamps = [int(datetime(d.year, d.month, d.day, h, tzinfo=UTC).timestamp()) for d, h in prices]
+    return json.dumps(
+        {
+            "chart": {
+                "result": [
+                    {
+                        "meta": {"gmtoffset": -14400},
+                        "timestamp": stamps,
+                        "indicators": {"quote": [{"close": list(prices.values())}]},
+                    }
+                ]
+            }
+        }
+    ).encode()
+
+
+def test_price_at_the_indian_close():
+    d1, d2 = date(2026, 10, 22), date(2026, 10, 23)
+    chart = hourly({(d1, 8): 2400.0, (d1, 9): 2410.0, (d1, 10): 2500.0, (d2, 9): 2420.0})
+    # The 09:00-10:00 UTC bar ends at 15:30 IST; the 10:00 bar ends after the Indian close.
+    assert markets.parse_yahoo_at(chart) == [(d1, 2410.0), (d2, 2420.0)]
+    rows = markets.at_indian_close(lambda url: chart, "XAUUSD", d1, d2)
+    assert rows == [(d1, 2410.0), (d2, 2420.0)]
+    assert "interval=60m" in markets.yahoo_url("XAUUSD", d1, d2, interval="60m")
 
 
 def test_driver_from_split():
@@ -199,3 +227,40 @@ def test_a_note_for_an_unusual_day(gold):
 def test_nothing_to_do_without_bullion_on_the_watchlist(loaded):  # noqa: F811
     result = bu.run(loaded, None, fake_fetch)
     assert (result.days, result.points, result.errors) == (0, 0, [])
+
+
+@pytest.mark.db
+def test_hourly_prices_replace_the_daily_close(gold):
+    hourly_gold = hourly({(d, 9): 2000.0 + i for i, d in enumerate(DAYS)})
+
+    def fetch(url):
+        if "interval=60m" in url and "GC%3DF" in url:
+            return hourly_gold
+        return fake_fetch(url)
+
+    result = bu.fetch_series(gold, fetch, ["GOLD"], today=DAYS[-1])
+    assert result.series["XAUUSD"] == "stooq + hourly from Yahoo"
+    assert result.series["USDINR"] == "stooq"  # no hourly prices for it here
+    row = gold.get(MarketSeries, ("XAUUSD", DAYS[3]))
+    assert (float(row.close), row.source) == (2003.0, "yahoo-1h")
+
+
+@pytest.mark.db
+def test_a_note_waits_when_the_news_is_unreachable(gold, monkeypatch):
+    monkeypatch.setattr(bu, "RETRY_WAIT", 0)
+    bu.run(gold, None, fake_fetch, today=DAYS[-1], notes=False)
+    calls = []
+
+    def throttled(url):
+        if "news.google.com" in url:
+            calls.append(url)
+            raise NewsError("HTTP 503")
+        return fake_fetch(url)
+
+    llm, client = _llm(gold, lambda kwargs: None)
+    result = bu.run(gold, llm, throttled, today=DAYS[-1])
+    assert result.notes == 0 and result.waiting == 1 and client.requests == []
+    # Each search was tried twice (a 503 is retried once), for the week and for the day.
+    assert len(calls) == 2 * 2 * len(bu.METALS["GOLD"]["queries"])
+    assert gold.get(BullionMove, ("GOLD", DAYS[-1])).note is None
+    assert bu.reset(gold) > 0 and gold.query(BullionMove).count() == 0

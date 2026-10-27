@@ -20,7 +20,7 @@ Indian gold and silver prices are mostly the global price × USD/INR, plus impor
 > rupee move = global price move + USD/INR move + other
 
 - **The Indian price** is the close of an NSE ETF holding the metal: GOLDBEES for gold, SILVERBEES for silver. The Price & Label agent already stores the whole NSE bhavcopy, ETFs included, so there is history from October 2023 and no new source to keep alive. Its `prev_close` is used for the return, so any split in the ETF's units is handled.
-- **The global price** (US$ per troy ounce) and **USD/INR** come from stooq's daily CSV, or Yahoo's chart API (COMEX futures for the metals) if stooq refuses. `sna bullion probe` shows which one answers.
+- **The global price** (US$ per troy ounce) and **USD/INR** come from Yahoo's chart API (COMEX futures for the metals), or stooq's daily CSV if Yahoo refuses. They are taken at 15:30 IST from the hourly prices where Yahoo has them. `sna bullion probe` shows which sources answer.
 - **Other** is the rest: a duty change, the local premium or discount, and timing. The Indian close is at 15:30 IST, the global close in New York hours later, so a move late in the Indian evening shows up in "other" one day and back the next.
 - **The driver, in code:** the part with at least 60% of the move and the same sign: global price, rupee or local. Otherwise mixed.
 
@@ -53,6 +53,16 @@ uv run sna bullion run
 uv run sna bullion list gold --days 60
 uv run sna bullion list gold --days 800 --unusual
 ```
+
+## After the first run
+
+Yahoo answered for gold, silver and USD/INR. stooq returned a web page instead of its CSV, so Yahoo is now tried first. 753 days were split per metal. Three things needed fixing:
+
+- **"Other" was too large.** It was often a percentage point or more, and it reversed the next day: 28 Aug showed global −2.88% and other +3.59%. A daily close from Yahoo is New York's, about 11 hours after the ETF's 15:30 IST close, so roughly half of each global move landed on the wrong Indian day. Yahoo keeps hourly prices for the last two years. The global price and USD/INR are now taken at 15:30 IST from those (`yahoo-1h` in `market_series`), so "other" is closer to the ETF's own premium and duty. Days older than two years keep the New York close.
+- **Notes without news.** Every Google News search returned HTTP 503, and Sonnet's four notes said "no news was provided". A 503 or 429 is now retried once after a pause. If that day's news still can't be fetched, its note waits for the next run instead of being written blind.
+- **Starting over.** `sna bullion reset` forgets the prices, splits and notes, so a run fetches them again at the Indian close.
+
+Some days stay far apart even so: January 2026 swung between +7% and −10% with little global move. That is the ETFs' own premium to the metal moving while Indian ETF demand ran hot, and it is what "local" stands for.
 
 ## Next
 

@@ -2384,8 +2384,13 @@ def bullion_probe() -> None:
     start = end - timedelta(days=14)
     for series in markets.SERIES:
         for source, url, parse in (
-            ("stooq", markets.stooq_url(series, start, end), markets.parse_stooq),
             ("yahoo", markets.yahoo_url(series, start, end), markets.parse_yahoo),
+            (
+                "hourly",
+                markets.yahoo_url(series, start, end, interval="60m"),
+                markets.parse_yahoo_at,
+            ),
+            ("stooq", markets.stooq_url(series, start, end), markets.parse_stooq),
         ):
             try:
                 rows = parse(client.fetch(url))
@@ -2417,6 +2422,8 @@ def bullion_run(
         f"{result.unusual} unusual; {result.articles} new articles; {result.notes} notes, "
         f"${result.cost_usd:.4f} (this month ${spent:.2f})"
     )
+    if result.waiting:
+        typer.echo(f"{result.waiting} notes wait for their news; the next run tries again")
     for err in result.errors:
         typer.echo(f"error: {err}")
     if result.errors:
@@ -2472,11 +2479,23 @@ def bullion_explain(
     with get_session() as session:
         try:
             m = bu.explain(session, LLM(session), metal.upper(), when, NewsClient().fetch)
-        except LookupError as exc:
+        except (LookupError, bu.NoNews) as exc:
             typer.echo(str(exc))
             raise typer.Exit(1) from exc
         typer.echo(f"{m.metal.title()} {m.trade_date:%d %b %Y}: {bu.summary(m)}")
         typer.echo(f"{m.driver}: {m.note}")
+
+
+@bullion_app.command("reset")
+def bullion_reset(yes: bool = typer.Option(False, "--yes", help="Don't ask.")) -> None:
+    """Forget global prices, splits and notes, so `sna bullion run` fetches them again."""
+    from stock_news_analyzer.agents import bullion as bu
+
+    if not yes and not typer.confirm("Forget bullion prices, splits and notes?"):
+        raise typer.Exit(1)
+    with get_session() as session:
+        count = bu.reset(session)
+    typer.echo(f"{count} rows removed; run `sna bullion run` to fetch them again")
 
 
 # --- bulk and block deals ------------------------------------------------------

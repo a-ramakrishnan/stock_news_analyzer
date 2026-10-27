@@ -1,6 +1,6 @@
 # Indian Market News Intelligence System — Design
 
-Version 1.17 · Oct 27, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
+Version 1.18 · Oct 27, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
 
 ## Goal and principles
 
@@ -10,7 +10,7 @@ The system is built as independent agents under an orchestrator; models, tools, 
 
 ## Status (Oct 27, 2026)
 
-Phase 1 is done and Phase 2 is under way. Twenty-one build steps have shipped, and all 17 agents are built (the Reporter without email yet), each logged in [`docs/build-log/`](../build-log/). The system runs on a Mac in Docker, and its data goes back to October 2023.
+Phase 1 is done and Phase 2 is under way. Twenty-two build steps have shipped, and all 17 agents are built (the Reporter without email yet), each logged in [`docs/build-log/`](../build-log/). The system runs on a Mac in Docker, and its data goes back to October 2023.
 
 A map of what is built and what is pending, agent by agent, is in [Agent design: Build status](agent-design.md#build-status-oct-27-2026).
 
@@ -26,7 +26,8 @@ A map of what is built and what is pending, agent by agent, is in [Agent design:
 | Earnings call analysis and promise ledger | Built (Claude Sonnet 5.5): calls in step 12; promises checked against later results, and a credibility score per company, in step 13; every watchlist stock, owned or not, from step 15 |
 | Order and execution tracker | Built, steps 14–16: orders from filings (Claude Haiku 5.5), quarterly order books (Sonnet 5.5), metrics and peer ranks in code; coverage per stock; revenue gaps filled from results |
 | Bullion | Built, step 19: each day's move in rupees (NSE gold and silver ETFs) split into global price, USD/INR and the rest; Sonnet 5.5 notes on unusual days |
-| Tenders, MF holdings, macro; SAST and pledge data beyond the filings | Not started (rating, SAST and pledge filings are read as events) |
+| Shareholding pattern | Built, step 22: stakes by holder type and promoter pledges each quarter, from NSE's XBRL files (no LLM); red flags for promoters selling and pledges rising |
+| Tenders, monthly MF holdings, macro; structured SAST data | Not started (rating, SAST and pledge filings are read as events) |
 | Red flags | Built, step 18: rules over the checked events and results deadlines, no LLM; in the digest and dashboard |
 | Themes and read-across | Built, step 20: events, orders and call points tagged with themes (Claude Haiku 5.5); theme strength and read-across between watchlist companies in code |
 | Analyst Q&A | Built, step 21: plain-English questions answered by Claude Sonnet 5.5 with read-only SQL and full-text search, citing sources; saved reports |
@@ -48,7 +49,7 @@ Start with BSE announcements, RSS news feeds and NSE bhavcopy prices: all are fr
 | Concall aggregators | [Screener.in](https://www.screener.in), [Trendlyne](https://trendlyne.com), [Tijori Finance](https://www.tijorifinance.com) | Transcript, presentation and annual report links per company, going back several years | Web pages; check terms before scraping | Phase 3 |
 | News (RSS) | Economic Times Markets, Moneycontrol, Business Standard, Mint, Hindu BusinessLine, Financial Express, CNBC-TV18, NDTV Profit; Google News RSS per stock name | Explanations, rumours, sector stories, management interviews | RSS feeds, free | Phase 1 · built (Google News searches back to Oct 2023) |
 | Early order signals | [CPPP eProcurement](https://eprocure.gov.in), [GeM](https://gem.gov.in), [IREPS](https://www.ireps.gov.in) (railways), NHAI, defence ministry, [PIB](https://pib.gov.in) releases | Tender awards, sometimes before the company announces them | Public portals; often messy HTML or PDF | Phase 4 |
-| Market structure | NSE bulk and block deals, SAST insider-trading disclosures, promoter pledges, quarterly shareholding patterns, mutual fund monthly portfolios (AMFI and AMC sites) | Who is buying or selling: promoters, institutions, funds | Exchange downloads, monthly AMC files | Phase 4 · NSE bulk and block deals built early (needed for move explanations); the rest not started |
+| Market structure | NSE bulk and block deals, SAST insider-trading disclosures, promoter pledges, quarterly shareholding patterns, mutual fund monthly portfolios (AMFI and AMC sites) | Who is buying or selling: promoters, institutions, funds | Exchange downloads, monthly AMC files | Phase 4 · NSE bulk and block deals built early (needed for move explanations); quarterly shareholding patterns in step 22; SAST data and monthly MF portfolios not started |
 | Credit ratings | CRISIL, ICRA, CARE, India Ratings press releases | Upgrades and downgrades; early warning of stress | Public press releases | Phase 4 |
 | Bullion | [IBJA](https://ibjarates.com) daily rates, MCX, RBI USD/INR reference rate, [World Gold Council](https://www.gold.org) (ETF flows, central bank buying), US Fed and yield news, Indian import duty changes | Indian gold and silver prices are mostly the global price × USD/INR, plus duty and seasonal demand | Free sites and RSS | Built (step 19): NSE gold and silver ETFs for the Indian price, Yahoo (hourly, at the Indian close) or stooq for global prices and USD/INR, Google News; IBJA, MCX and WGC not used |
 | Prices (labels only) | [NSE daily bhavcopy](https://www.nseindia.com/all-reports), BSE bhavcopy; yfinance (`.NS` tickers) as a fallback | Daily closing prices, used only to measure each event's effect | Free daily files | Phase 1 · built (NSE bhavcopy incl. SME series, index closes, corporate actions; no yfinance needed) |

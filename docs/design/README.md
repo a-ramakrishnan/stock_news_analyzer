@@ -11,6 +11,12 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.18 · Oct 28, 2026
+
+- Step 22, the quarterly shareholding pattern (part of agent 4, Market Signals): stakes by holder type and promoter pledges from NSE's XBRL files, in code; red flags for promoters selling and pledges rising, without repeating sales already flagged from their filings
+- Older filings write percent, newer ones fractions; event-date patterns are left out
+- Status tables and the block diagram updated
+
 ### 1.17 · Oct 27, 2026
 
 - Step 21, the Analyst Q&A:

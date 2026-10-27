@@ -30,6 +30,13 @@ The first run on the Mac stopped at a 2023 filing with a promoter stake of 5,117
 
 The second run read 189 quarters for the 15 stocks. Sathlokhar's promoters went 62.71% → 58.27% (Nov 2025) → 62.71% (Dec 2025) → 58.27% (Mar 2026) while holding the same 15.1 million shares. The November pattern was filed for a share issue and already counted the new shares; the December quarterly one did not yet. Patterns filed for an event on a date other than a quarter end are now left out, and any already stored are removed with their flags.
 
+After that, 168 quarters remained and three flags were raised:
+- **Shaily:** promoters went from 19.94 million to 18.90 million shares in the June quarter, 2.3% of the company. No filing had flagged it, so it is new.
+- **BlackBuck:** promoters went from 49.1 million to 45.5 million shares in the December quarter. The founder's sale of 20 lakh shares had been flagged from its filing; the other 16 lakh had not.
+- **KMEW:** a 2.07-point fall. This was the 19 June open-market sale of 5.1 lakh shares, already flagged from its filing.
+
+To avoid the repeat, a quarter's fall in promoter shares that sales already flagged from filings account for (80% or more) raises nothing more, and such a flag already raised is removed. KMEW's goes; Shaily's and BlackBuck's stay.
+
 ## Red flags
 
 - **Promoters selling:** only when the promoters hold fewer shares than the quarter before. A stake that falls because new shares were issued, such as a QIP or a merger, is dilution and raises nothing.

@@ -76,6 +76,7 @@ YEAR_END_LAG = 60  # the March quarter or half year comes with the annual result
 class FlagsResult:
     raised: int = 0
     regraded: int = 0
+    removed: int = 0
     by_severity: dict[str, int] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
 
@@ -280,30 +281,46 @@ def overdue_results(session: Session, today: date) -> list[RedFlag]:
     return out
 
 
+def _raise(flag: RedFlag, existing: dict, result: FlagsResult, session: Session) -> None:
+    """Add a flag not raised yet, or re-grade an open one whose rule has changed."""
+    old = existing.get((flag.isin, flag.ref))
+    if old is None:
+        session.add(flag)
+        existing[(flag.isin, flag.ref)] = flag
+        result.raised += 1
+        result.by_severity[flag.severity] = result.by_severity.get(flag.severity, 0) + 1
+    elif old.dismissed_at is None and (old.kind, old.severity) != (flag.kind, flag.severity):
+        old.kind, old.severity, old.title, old.detail = (
+            flag.kind,
+            flag.severity,
+            flag.title,
+            flag.detail,
+        )
+        result.regraded += 1
+
+
 def scan(session: Session, since: date | None = None, today: date | None = None) -> FlagsResult:
     """Raise the flags not raised yet, and re-grade the open ones whose rule has changed."""
-    today = today or datetime.now(IST).date()
-    result = FlagsResult()
     from stock_news_analyzer.agents import holdings
 
+    today = today or datetime.now(IST).date()
+    result = FlagsResult()
     # Keyed by company too: a ref like 'results:Q2 FY27' is shared by companies.
     existing = {(f.isin, f.ref): f for f in session.scalars(select(RedFlag))}
     found = _event_flags(session, since) + overdue_results(session, today)
-    for flag in found + holdings.flags(session, today):
-        old = existing.get((flag.isin, flag.ref))
-        if old is None:
-            session.add(flag)
-            existing[(flag.isin, flag.ref)] = flag
-            result.raised += 1
-            result.by_severity[flag.severity] = result.by_severity.get(flag.severity, 0) + 1
-        elif old.dismissed_at is None and (old.kind, old.severity) != (flag.kind, flag.severity):
-            old.kind, old.severity, old.title, old.detail = (
-                flag.kind,
-                flag.severity,
-                flag.title,
-                flag.detail,
-            )
-            result.regraded += 1
+    for flag in found:
+        _raise(flag, existing, result, session)
+    session.flush()  # the shareholding rules look for the sales flagged from filings
+    held = holdings.flags(session, today)
+    for flag in held:
+        _raise(flag, existing, result, session)
+    # Open shareholding flags the rules no longer raise (a sale since flagged from its own
+    # filing, say) are removed; dismissed ones are kept.
+    current = {(f.isin, f.ref) for f in held}
+    for key, old in existing.items():
+        if key[1].startswith("holdings:") and key not in current and old.dismissed_at is None:
+            session.delete(old)
+            result.removed += 1
     session.commit()
     return result
 

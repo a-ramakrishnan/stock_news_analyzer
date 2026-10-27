@@ -67,7 +67,8 @@ company's stock-exchange filing. Compare it with the filing and answer:
 - event_type_correct, and correct_event_type (the right one, or the same if correct). Types:
   capex, guidance, management_change, credit_rating, legal_regulatory, acquisition, fundraise,
   promoter_action, disruption, agreement, approval, other. An agreement to issue shares or
-  raise money is a fundraise, not an agreement.
+  raise money is a fundraise, not an agreement. Deposits a bank takes from customers are its
+  business, not a fundraise: guidance, with no amount.
 - value_correct: is the amount right (or rightly null)? If not, give the right amount exactly
   as the filing writes it in correct_value_as_written, and in Indian rupees crore in
   correct_value_cr (1 crore = 10 million = 100 lakh); null if the event has no amount.
@@ -167,12 +168,12 @@ def code_checks(session: Session, event: Event, text: str) -> list[str]:
             notes.append(f"amount '{event.value_as_written}' not found in the filing")
         converted = to_crore(event.value_as_written)
         if converted is not None:
-            converted = converted.quantize(Decimal("0.01"))
+            converted = converted.quantize(Decimal("0.0001"))  # to the rupee for lakh amounts
             if event.value_cr is not None and abs(converted - event.value_cr) > max(
-                Decimal("0.01") * converted, Decimal("0.01")
+                Decimal("0.01") * converted, Decimal("0.0001")
             ):
                 notes.append(
-                    f"unit: '{event.value_as_written}' is Rs {converted:,} crore, "
+                    f"unit: '{event.value_as_written}' is Rs {converted.normalize():,f} crore, "
                     f"not {event.value_cr:,}; corrected"
                 )
             event.value_cr = converted

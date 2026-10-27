@@ -638,8 +638,9 @@ class Event(Base):
     event_date: Mapped[date | None] = mapped_column(Date)  # when it happens or takes effect
     sentiment: Mapped[str] = mapped_column(String(16))  # positive/negative/neutral/mixed
     importance: Mapped[int] = mapped_column()  # 1 (routine) .. 5 (could move the stock)
-    # The main amount, in Rs crore (capex, issue size, consideration, penalty...).
-    value_cr: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    # The main amount, in Rs crore (capex, issue size, consideration, penalty...); four
+    # decimals, so a penalty of Rs 4,55,000 is 0.0455, not 0.05.
+    value_cr: Mapped[Decimal | None] = mapped_column(Numeric(16, 4))
     value_as_written: Mapped[str | None] = mapped_column(Text)
     value_kind: Mapped[str | None] = mapped_column(Text)
     # value_cr divided by the company's revenue for the 12 months before the filing.

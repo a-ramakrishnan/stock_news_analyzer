@@ -196,6 +196,7 @@ def test_amounts_as_written_in_crore():
     assert qa.to_crore("Rs 1.5 lakh crore") == 150_000
     assert qa.to_crore("Rs. 5,00,00,000") == 5
     assert qa.to_crore("Rs. 450 crore (approx.)") == 450
+    assert qa.to_crore("Rs. 4,55,000") == Decimal("0.0455")
     assert qa.to_crore("USD 20 million") is None  # foreign currency: not converted
     assert qa.to_crore("450") is None  # no unit
 
@@ -206,6 +207,12 @@ def test_amounts_shown_with_their_meaning():
     e = Event(event_type="credit_rating", value_cr=Decimal(12000), materiality=None)
     assert ev.amount(e) == "Rs 12,000 cr rated"
     assert ev.amount(Event(event_type="capex", value_cr=None)) == ""
+    # Small amounts in lakh; small shares of revenue to a tenth of a percent.
+    fine = Event(event_type="legal_regulatory", value_cr=Decimal("0.0455"), materiality=0.00001)
+    assert ev.amount(fine) == "Rs 4.6 lakh (under 0.1% of revenue)"
+    ncd = Event(event_type="fundraise", value_cr=Decimal(500), materiality=0.0019)
+    assert ev.amount(ncd) == "Rs 500 cr (0.2% of revenue)"
+    assert ev.amount(Event(event_type="capex", value_cr=Decimal("0.5"))) == "Rs 50 lakh"
 
 
 # --- extraction and QA ----------------------------------------------------------------
@@ -274,7 +281,7 @@ def test_unit_mistake_is_corrected_and_confirmed(loaded):  # noqa: F811
     result = ev.run(loaded, llm)
     e = loaded.query(Event).one()
     assert e.value_cr == 450 and e.materiality == pytest.approx(0.1125)
-    assert any(n.startswith("unit: 'Rs. 450 crore' is Rs 450.00 crore") for n in e.qa_notes)
+    assert any(n.startswith("unit: 'Rs. 450 crore' is Rs 450 crore") for n in e.qa_notes)
     assert e.qa_status == "passed" and e.qa_model == "claude-sonnet-5-5"
     assert "confirmed by the second pass" in e.qa_notes
     assert client.requests[1]["model"] == "claude-sonnet-5-5"

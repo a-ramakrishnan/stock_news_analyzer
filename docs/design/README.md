@@ -11,6 +11,12 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.14 · Oct 27, 2026
+
+- The Bullion Analyst's first notes recorded in its "As built" notes: four unusual days explained from their news for $0.035
+- News Collector: Google News refused the browser-imitating client (HTTP 503); a refused feed is now retried with a plain client, which restored company searches (160 new articles on the first run)
+- README: step 19 marked done
+
 ### 1.13 · Oct 27, 2026
 
 - Step 19, the Bullion Analyst:

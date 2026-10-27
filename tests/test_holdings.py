@@ -16,9 +16,10 @@ from stock_news_analyzer.ui import queries
 TOTAL = 1_000_000
 
 
-def xbrl(end: date, cats: dict[str, int], pledged: float | None = None) -> bytes:
+def xbrl(end: date, cats: dict[str, int], pledged: float | None = None, scale: float = 1) -> bytes:
     """A shareholding-pattern file like NSE's: one context per category member, plus a
-    shareholder's context (a typed member) that must be left out."""
+    shareholder's context (a typed member) that must be left out. Percentages as fractions,
+    or as percent with scale=100 (files before 2025)."""
     contexts, facts = [], []
     for i, (member, shares) in enumerate({**cats, "ShareholdingPattern": TOTAL}.items()):
         contexts.append(
@@ -31,7 +32,7 @@ def xbrl(end: date, cats: dict[str, int], pledged: float | None = None) -> bytes
             f'<in-bse-shp:NumberOfShares contextRef="c{i}" decimals="0">{shares}'
             "</in-bse-shp:NumberOfShares>",
             f'<in-bse-shp:ShareholdingAsAPercentageOfTotalNumberOfShares contextRef="c{i}" '
-            f'decimals="4">{shares / TOTAL:.4f}'
+            f'decimals="4">{shares / TOTAL * scale:.4f}'
             "</in-bse-shp:ShareholdingAsAPercentageOfTotalNumberOfShares>",
             f'<in-bse-shp:NumberOfShareholders contextRef="c{i}" decimals="0">{shares // 100}'
             "</in-bse-shp:NumberOfShareholders>",
@@ -39,7 +40,7 @@ def xbrl(end: date, cats: dict[str, int], pledged: float | None = None) -> bytes
         if member == shp.PROMOTER and pledged is not None:
             facts.append(
                 f'<in-bse-shp:EncumberedSharesAsAPercentageOfTotalSharesHeld contextRef="c{i}">'
-                f"{pledged:.4f}</in-bse-shp:EncumberedSharesAsAPercentageOfTotalSharesHeld>"
+                f"{pledged * scale:.4f}</in-bse-shp:EncumberedSharesAsAPercentageOfTotalSharesHeld>"
             )
     contexts.append(
         '<xbrli:context id="named"><xbrli:entity><xbrli:segment>'
@@ -106,6 +107,15 @@ def test_parse_reads_categories_and_leaves_out_named_holders():
     assert p.categories[shp.TOTAL]["holders"] == TOTAL // 100
 
 
+def test_older_files_write_percent_not_fractions():
+    c = cats(600_000, 100_000, 150_000, 120_000)
+    new = shp.parse(xbrl(date(2026, 9, 30), c, 0.25))
+    old = shp.parse(xbrl(date(2023, 9, 30), c, 0.25, scale=100))
+    assert old.categories == new.categories and old.pledged_pct == Decimal("25.0000")
+    with pytest.raises(ValueError):
+        shp.parse(xbrl(date(2023, 9, 30), c, 0.25, scale=10_000))  # misread: refused
+
+
 def test_listing_keeps_the_latest_filing_per_quarter():
     q3, q2 = date(2026, 9, 30), date(2026, 6, 30)
     rows = [
@@ -160,7 +170,16 @@ def test_import_stores_quarters_once(stored):
     assert latest.insurance_pct == Decimal("5.0000") and latest.shareholders == TOTAL // 100
     again = holdings.import_holdings(session, client, since=date(2025, 1, 1))
     assert (again.filings, again.skipped) == (0, 5)
-    assert session.query(Shareholding).count() == 5
+    # A file that can't be read is reported; the other companies' filings still come in.
+    end = date(2020, 3, 31)
+    bad, good = row(end, 900, end), row(end, 901, end)
+    client.listings["LT"].append(bad)
+    client.listings["KARURVYSYA"].append(good)
+    client.files[bad["xbrl"]] = xbrl(end, cats(1, 1, 1, 1), scale=10_000)
+    client.files[good["xbrl"]] = xbrl(end, cats(500_000, 50_000, 10_000, 300_000))
+    third = holdings.import_holdings(session, client, since=date(2020, 1, 1))
+    assert third.filings == 1 and len(third.errors) == 1 and "LT 2020-03-31" in third.errors[0]
+    assert session.query(Shareholding).count() == 6
 
 
 @pytest.mark.db

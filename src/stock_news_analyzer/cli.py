@@ -2311,7 +2311,10 @@ def flags_run() -> None:
     with get_session() as session:
         result = redflags.scan(session)
     counts = ", ".join(f"{n} {s}" for s, n in sorted(result.by_severity.items())) or "none new"
-    typer.echo(f"{result.raised} red flags raised ({counts}); see them with: sna flags list")
+    regraded = f"; {result.regraded} re-graded" if result.regraded else ""
+    typer.echo(
+        f"{result.raised} red flags raised ({counts}){regraded}; see them with: sna flags list"
+    )
 
 
 @flags_app.command("list")

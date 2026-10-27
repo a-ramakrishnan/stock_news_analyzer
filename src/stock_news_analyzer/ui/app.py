@@ -176,6 +176,8 @@ def today_page() -> None:
             with cols[i % 3]:
                 stock_card(s)
 
+    bullion_section()
+
     left, right = st.columns([2, 1])
     with left:
         st.subheader("Latest digest")
@@ -555,6 +557,42 @@ def results(s: dict) -> None:
     st.caption(
         "Rs crore, from the results filed with the exchanges (consolidated where given). y/y: "
         "on the same period a year earlier."
+    )
+
+
+def bullion_section() -> None:
+    """Each watched metal's last 30 days: the rupee move split into global price, rupee and
+    the rest, with notes on unusual days."""
+    metals = load("bullion_metals")
+    if not metals:
+        return
+    st.subheader("Bullion")
+    for metal, tab in zip(metals, st.tabs([m.title() for m in metals]), strict=True):
+        with tab:
+            rows = load("bullion", metal=metal, days=30)
+            if rows.empty:
+                no_data("No moves yet: run `sna bullion run`.")
+                continue
+            st.dataframe(
+                rows,
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    "date": st.column_config.DateColumn("Day", format="DD MMM YYYY"),
+                    "close": st.column_config.NumberColumn("ETF close", format="₹%.2f"),
+                    "rupees": st.column_config.NumberColumn("In rupees", format="percent"),
+                    "global": st.column_config.NumberColumn("Global price", format="percent"),
+                    "rupee": st.column_config.NumberColumn("USD/INR", format="percent"),
+                    "other": st.column_config.NumberColumn("Other", format="percent"),
+                    "z": st.column_config.NumberColumn("z", format="%+.1f"),
+                    "driver": st.column_config.TextColumn("Driver"),
+                    "note": st.column_config.TextColumn("Note", width="large"),
+                },
+            )
+    st.caption(
+        "The Indian price is the close of an NSE ETF holding the metal (GOLDBEES, SILVERBEES). "
+        "Other: duty, the local premium, and the gap between the Indian and New York closes. "
+        "Notes are written for unusual days (2σ)."
     )
 
 

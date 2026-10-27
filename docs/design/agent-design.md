@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.12 · Oct 27, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.13 · Oct 27, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -31,7 +31,7 @@ flowchart LR
         S2["News: RSS + Google News"]:::built
         S3["NSE prices, indices,<br/>corporate actions"]:::built
         S4["NSE bulk and block deals"]:::built
-        S5["Bullion prices, macro"]:::pending
+        S5["Bullion: global prices, USD/INR,<br/>NSE gold/silver ETFs; macro to do"]:::partly
         S6["SAST, pledges, ratings,<br/>tenders, MF holdings"]:::pending
     end
 
@@ -41,7 +41,7 @@ flowchart LR
         A2["2 · Filings Collector"]:::built
         A3["3 · News Collector"]:::built
         A4["4 · Market Signals<br/>deals only"]:::partly
-        A5["5 · Price & Label<br/>stocks; bullion to do"]:::built
+        A5["5 · Price & Label<br/>stocks and bullion ETFs"]:::built
     end
 
     subgraph UND["Understand"]
@@ -57,8 +57,8 @@ flowchart LR
         A10["10 · Order Book Tracker"]:::built
         A11["11 · Concall Analyst"]:::built
         A12["12 · Promise Ledger"]:::built
-        A13["13 · Bullion Analyst"]:::pendingNext
-        A14["14 · Theme & Peer Analyst"]:::pending
+        A13["13 · Bullion Analyst<br/>split + notes on unusual days"]:::built
+        A14["14 · Theme & Peer Analyst"]:::pendingNext
         A15["15 · Red-flag Monitor<br/>rules over events,<br/>late results"]:::built
     end
 
@@ -68,7 +68,7 @@ flowchart LR
         A17["17 · Analyst Q&A"]:::pending
     end
 
-    DB[("Shared Postgres database, point-in-time<br/>built: filings, news, prices and labels, deals, moves,<br/>concalls, promises, orders and order books, results,<br/>typed events with QA status, red flags<br/>to do: bullion")]:::db
+    DB[("Shared Postgres database, point-in-time<br/>built: filings, news, prices and labels, deals, moves,<br/>concalls, promises, orders and order books, results,<br/>typed events with QA status, red flags, bullion moves<br/>to do: themes")]:::db
 
     O -. runs every agent .-> A1
     S1 --> A2
@@ -88,10 +88,10 @@ flowchart LR
 
 | Status | Agents |
 | --- | --- |
-| Built | 0 Orchestrator, 1, 2, 3, 5 (stocks), 6, 7, 8, 9, 10, 11, 12, 15 |
+| Built | 0 Orchestrator, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15 |
 | Partly built | 4 Market Signals, 16 Reporter |
-| Not started | 13, 14, 17 |
-| Recommended next | The Bullion Analyst (13), with bullion prices in Price & Label (5). Email delivery of the digest and high-severity flags (16) comes later; Telegram is set aside for now |
+| Not started | 14, 17 |
+| Recommended next | The Theme & Peer Analyst (14), then Analyst Q&A (17). Email delivery of the digest and high-severity flags (16) comes later; Telegram is set aside for now |
 
 | # | Agent | Status | Build step |
 | --- | --- | --- | --- |
@@ -100,7 +100,7 @@ flowchart LR
 | 2 | Filings Collector | Built: BSE + NSE | 3 |
 | 3 | News Collector | Built: RSS + Google News, history since Oct 2023 | 4, 8 |
 | 4 | Market Signals Collector | Partly: NSE bulk and block deals only | 11 |
-| 5 | Price & Label | Built for stocks; bullion part not started | 5 |
+| 5 | Price & Label | Built: stocks, and bullion through the NSE gold and silver ETFs in the same bhavcopy | 5, 19 |
 | 6 | Triage & Dedup | Built (Haiku 5.5) | 9 |
 | 7 | Event Extractor | Built: results figures for every stock, from XBRL where filed, else the PDF (Haiku 5.5); typed events from the other filings (Haiku 5.5) | 16, 17 |
 | 8 | QA Checker | Built: code checks on every event, a second pass (Sonnet 5.5) on flagged and important ones, a review queue | 17 |
@@ -108,7 +108,7 @@ flowchart LR
 | 10 | Order Book Tracker | Built: orders from filings (Haiku 5.5), quarterly order books (Sonnet 5.5), metrics and peer ranks; coverage per stock; revenue gaps filled from results | 14, 15, 16 |
 | 11 | Concall Analyst | Built (Sonnet 5.5): structured reading of each call, comparison with the previous one, promises recorded; every watchlist stock | 12, 15 |
 | 12 | Promise Ledger | Built (Sonnet 5.5): promises past their date checked against later results and filings; credibility score per company | 12, 13 |
-| 13 | Bullion Analyst | Not started | — |
+| 13 | Bullion Analyst | Built: each day's rupee move split into global price, USD/INR and the rest; notes by Sonnet 5.5 on unusual days, from bullion news | 19 |
 | 14 | Theme & Peer Analyst | Not started (peers exist for the Move Explainer) | — |
 | 15 | Red-flag Monitor | Built: rules over the checked events (auditor, CEO/MD/CFO and independent director exits, downgrades, pledges, holders selling, penalties, disruptions) and overdue results; no LLM | 18 |
 | 16 | Reporter | Partly: Markdown digest and Streamlit dashboard; no email or weekly report yet (email later; Telegram set aside for now); no LLM | 6, 7 |
@@ -324,7 +324,7 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 
 - **Job:** store daily prices and measure what each event did to the stock.
 - **Trigger:** 18:30 IST daily.
-- **As built (step 5):** NSE bhavcopy for every stock (main board and SME), Nifty and sector index closes, and corporate actions for adjustment. Unusual means more than 2σ of the last 60 days (`UNUSUAL_THRESHOLD`). Labels are 0/1/5/20-day excess returns after each filing, in `event_labels`. Bullion is not started.
+- **As built (step 5):** NSE bhavcopy for every stock (main board and SME), Nifty and sector index closes, and corporate actions for adjustment. Unusual means more than 2σ of the last 60 days (`UNUSUAL_THRESHOLD`). Labels are 0/1/5/20-day excess returns after each filing, in `event_labels`. Bullion (step 19) uses the NSE gold and silver ETFs from the same bhavcopy; the split into global price and USD/INR is the Bullion Analyst's.
 - **LLM:** none.
 - **Reads / writes:** `prices_daily`, `event_returns`, `moves` (flags only).
 
@@ -520,6 +520,11 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **Trigger:** daily after IBJA and MCX close.
 - **LLM:** Sonnet 5.5.
 - **Reads / writes:** bullion prices, USD/INR, news → `bullion_notes`.
+- **As built (step 19).** `agents/bullion.py` writes `bullion_moves` (the plan's `bullion_notes`) and `market_series`.
+  - **Prices:** the Indian price is the close of an NSE ETF holding the metal (GOLDBEES, SILVERBEES), already in the bhavcopy, rather than IBJA or MCX, which have no free download. Global gold and silver (US$/oz) and USD/INR come from stooq, or Yahoo Finance as a fallback.
+  - **Split:** log returns, so rupee move = global + USD/INR + other (duty, local premium, and the gap between the Indian and New York closes). A driver in code: the part with 60% of the move and its sign.
+  - **Notes:** only on unusual days (2σ of the previous 60 days, as for stocks), in the last 90 days, at most 10 a run. Sonnet 5.5 gets the split, the previous days and Google News on bullion around the day (searched for that window), and returns the driver, a short note and the articles used. About $0.01 a note.
+  - **Where it shows:** a "Bullion" section in the digest, the Today page, `sna bullion probe/run/list/explain`, the 07:35 `bullion` job.
 
 1. Split the Rs price move into global price and USD/INR parts.
 2. Collect drivers: Fed and US yield news, central bank buying, ETF flows, import duty, festival demand.

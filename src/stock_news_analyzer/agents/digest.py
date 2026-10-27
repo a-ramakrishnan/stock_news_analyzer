@@ -368,6 +368,41 @@ def _red_flags(session: Session, since: datetime, until: datetime) -> list[str]:
     return lines
 
 
+def _bullion(session: Session, since: datetime, until: datetime) -> list[str]:
+    """The latest day of each watched metal, with its split, and any note since the last
+    digest."""
+    from stock_news_analyzer.agents import bullion as bu
+    from stock_news_analyzer.models import BullionMove
+
+    lines = []
+    for metal in bu.watched_metals(session):
+        latest = session.scalars(
+            select(BullionMove)
+            .where(BullionMove.metal == metal)
+            .order_by(BullionMove.trade_date.desc())
+            .limit(1)
+        ).first()
+        if latest is None:
+            continue
+        mark = " **(unusual)**" if latest.unusual else ""
+        lines.append(f"- {metal.title()} {latest.trade_date:%d %b}: {bu.summary(latest)}{mark}")
+        noted = session.scalars(
+            select(BullionMove)
+            .where(
+                BullionMove.metal == metal,
+                BullionMove.note.is_not(None),
+                BullionMove.updated_at >= since,
+                BullionMove.updated_at < until,
+            )
+            .order_by(BullionMove.trade_date.desc())
+        ).all()
+        for m in noted:
+            lines.append(f"  - {m.trade_date:%d %b}: {m.note}")
+    if not lines:
+        return []
+    return ["", "## Bullion", "", *lines, "", "Day by day: `sna bullion list gold`"]
+
+
 def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
     lines = [
         f"# Daily digest, {until.astimezone(IST):%d %b %Y %H:%M} IST",
@@ -386,6 +421,7 @@ def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
         lines.append(f"| {name} | {day} | {close_s} | {pct(change)} |")
 
     lines += _red_flags(session, since, until)
+    lines += _bullion(session, since, until)
     lines += _results(session, since, until)
     lines += _earnings_calls(session, since, until)
     lines += _promises(session, since, until)
@@ -536,6 +572,7 @@ def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
         "results",
         "events",
         "flags",
+        "bullion",
         "explain",
         "concalls",
         "promises",

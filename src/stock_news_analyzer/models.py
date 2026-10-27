@@ -695,3 +695,47 @@ class RedFlag(Base):
     dismissed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     note: Mapped[str | None] = mapped_column(Text)  # why you dismissed it
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class MarketSeries(Base):
+    """Daily closes of a global series: gold and silver in US$ per troy ounce (XAUUSD, XAGUSD)
+    and rupees per US$ (USDINR), from stooq or Yahoo Finance."""
+
+    __tablename__ = "market_series"
+
+    series: Mapped[str] = mapped_column(String(16), primary_key=True)
+    trade_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    close: Mapped[Decimal] = mapped_column(Numeric(16, 4))
+    source: Mapped[str] = mapped_column(String(16))
+
+
+class BullionMove(Base):
+    """Bullion Analyst (agent 13): one day's move in Indian gold or silver, split into the
+    global price, the rupee and the rest (duty, local premium, timing), with a note on unusual
+    days.
+
+    The Indian price is the close of an NSE gold or silver ETF (GOLDBEES, SILVERBEES). Returns
+    are log returns, so the parts add up: inr = global + fx + other.
+    """
+
+    __tablename__ = "bullion_moves"
+
+    metal: Mapped[str] = mapped_column(String(8), primary_key=True)  # GOLD / SILVER
+    trade_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(32))  # the ETF
+    close: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    inr_return: Mapped[float] = mapped_column()
+    global_return: Mapped[float | None] = mapped_column()
+    fx_return: Mapped[float | None] = mapped_column()
+    other_return: Mapped[float | None] = mapped_column()
+    # The rupee return divided by the standard deviation of the previous 60 days'.
+    zscore: Mapped[float | None] = mapped_column()
+    unusual: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    # global_price, rupee, local (duty, premium), mixed, unclear: from the split, or the note.
+    driver: Mapped[str | None] = mapped_column(String(16))
+    note: Mapped[str | None] = mapped_column(Text)
+    evidence: Mapped[list[int]] = mapped_column(ARRAY(BigInteger), default=list)  # document ids
+    model: Mapped[str | None] = mapped_column(String(64))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

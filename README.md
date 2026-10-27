@@ -29,6 +29,7 @@ Every command block below can be pasted into Terminal as is; explanations are in
 | 16 | Results Reader (Claude Haiku): revenue, profit and margins from quarterly and half-yearly results; fills order-book revenue gaps; XBRL first | done |
 | 17 | Event Extractor (Claude Haiku) and QA Checker (code checks + Claude Sonnet): capex, ratings, management changes, legal matters, deals, fundraises, promoter actions, disruptions | done |
 | 18 | Red-flag Monitor: auditor and CFO exits, downgrades, pledges, penalties, late results; in the digest and dashboard | done |
+| 19 | Bullion Analyst: Indian gold and silver moves split into global price, rupee and the rest; notes on unusual days (Claude Sonnet) | this PR |
 
 ## Run it on a Mac
 
@@ -381,6 +382,34 @@ uv run sna flags list
 
 The scheduler raises new flags at 07:55. High and medium flags about recent filings open the digest. The Today page lists those from the last 30 days, and the Stock page's **Events** tab shows the stock's flags from the last year.
 
+## Bullion (Phase 2, LLM on unusual days)
+
+The Bullion Analyst explains each day's move in Indian gold and silver. Indian prices are mostly the global price times USD/INR, plus import duty and a local premium, so each day's move in rupees is split into those parts:
+
+- **In rupees:** the close of an NSE ETF that holds the metal (GOLDBEES, SILVERBEES), from the bhavcopy already stored by `sna prices`
+- **Global price:** gold or silver in US$ per ounce, from stooq (Yahoo Finance if stooq fails)
+- **Rupee:** USD/INR from the same source
+- **Other:** the rest. That's duty changes, the local premium or discount, and the gap between the Indian close (15:30 IST) and the New York close.
+
+A day beyond 2σ of the previous 60 days is unusual. For those, Claude Sonnet writes a two- or three-sentence note on the main driver, using Google News on bullion around that day (the Fed, the dollar, central-bank buying, ETF flows, duty, festival demand). Other days get the split alone.
+
+It runs for the metals on your watchlist. Add one with `uv run sna watchlist add gold` (or `silver`).
+
+```bash
+uv run sna bullion probe
+uv run sna bullion run
+uv run sna bullion list gold
+```
+
+| Command | What it does |
+| --- | --- |
+| `uv run sna bullion probe` | Check which sources answer for global gold, silver and USD/INR |
+| `uv run sna bullion run` | Fetch global prices (800 days the first time), split each day's move, collect the week's bullion news, write notes for unusual days in the last 90 days (at most 10 per run); `--no-notes` skips the LLM |
+| `uv run sna bullion list gold` | Day by day: ETF close, the move in rupees, its split, the z-score, the driver and the note; `--days 90`, `--unusual` |
+| `uv run sna bullion explain 2026-10-23 --metal gold` | Write or rewrite the note for one day, after searching that day's news |
+
+The scheduler runs it at 07:35, after the New York close, before the 08:00 digest. The digest gets a "Bullion" section (the latest day's split, and any new note), and the Today page shows the last 30 days per metal.
+
 ## Prices, moves and labels
 
 ```bash
@@ -432,7 +461,7 @@ make scheduler
 | --- | --- |
 | `uv run sna orchestrator show` | The schedule and when each job runs next |
 | `make run-all` | Run every job once, now, in order: collect, triage, measure, explain, read calls, digest |
-| `uv run sna run news` | Run one job now: `filings`, `news`, `triage`, `deals`, `prices`, `xbrl`, `results`, `events`, `explain`, `concalls`, `promises`, `orders`, `flags`, `securities` or `digest` |
+| `uv run sna run news` | Run one job now: `filings`, `news`, `triage`, `deals`, `prices`, `xbrl`, `results`, `events`, `explain`, `concalls`, `promises`, `orders`, `flags`, `bullion`, `securities` or `digest` |
 | `uv run sna runs` | Recent runs: when, how long, result, errors |
 | `make digest` | Print the digest covering everything since the last scheduled digest (`--hours 24` for a fixed window) |
 | `make scheduler` | Start the orchestrator in Docker; it keeps running while Docker Desktop is open |

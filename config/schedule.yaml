@@ -28,6 +28,8 @@ jobs:
     cron: "50 7 * * *"
   flags:         # red flags from the events and overdue results (no LLM), before the digest
     cron: "55 7 * * *"
+  bullion:       # gold and silver: global prices, the day's split, news; notes on unusual days
+    cron: "35 7 * * *"
   securities:    # NSE/BSE company lists (new listings, symbol changes, market caps)
     cron: "0 9 * * 0"
   digest:        # daily report covering everything since the previous digest

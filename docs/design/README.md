@@ -11,6 +11,14 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.13 · Oct 27, 2026
+
+- Step 19, the Bullion Analyst:
+  - agent 13 marked built, and agent 5's bullion part: the Indian price is taken from the NSE gold and silver ETFs in the stored bhavcopy, as IBJA and MCX offer no free download
+  - global prices and USD/INR from stooq or Yahoo Finance; each day's move split into global, USD/INR and other; Sonnet 5.5 notes on unusual days only
+  - the `market_series` and `bullion_moves` tables mapped to the plan's `bullion_notes`; the bullion data source row updated
+- Status tables and the block diagram updated; the next agents are the Theme & Peer Analyst, then Analyst Q&A
+
 ### 1.12 · Oct 27, 2026
 
 - Delivery: Telegram is set aside for now; email delivery of the digest and high-severity red flags is planned for later. Status tables, the Reporter notes and the decisions list updated.

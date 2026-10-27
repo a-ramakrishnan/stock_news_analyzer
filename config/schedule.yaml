@@ -14,6 +14,8 @@ jobs:
     cron: "0 19,22 * * 1-5"
   xbrl:          # results from NSE's XBRL files (exact figures, no LLM), before the PDF reader
     cron: "15 7 * * *"
+  holdings:      # shareholding patterns from NSE's XBRL files (no LLM), before the red flags
+    cron: "10 7 * * *"
   results:       # LLM (Haiku): revenue and profit from results filings, before the order books
     cron: "20 7 * * *"
   events:        # LLM: events from other filings (Haiku), checked by the QA Checker (Sonnet)

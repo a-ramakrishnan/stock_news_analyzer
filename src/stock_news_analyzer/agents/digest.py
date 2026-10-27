@@ -311,6 +311,20 @@ def _results(session: Session, since: datetime, until: datetime) -> list[str]:
     return lines
 
 
+def _holdings(session: Session, since: datetime, until: datetime) -> list[str]:
+    """Shareholding patterns filed since the previous digest with a stake moving 1 point or
+    more."""
+    from stock_news_analyzer.agents import holdings
+
+    found = [m for m in holdings.moves(session, filed_since=since) if m["row"].filed_at < until]
+    if not found:
+        return []
+    lines = ["", "## Shareholding", ""]
+    lines += [f"- {holdings.describe(m)}" for m in found]
+    lines.append("\nQuarter by quarter: `sna holdings show <symbol>`")
+    return lines
+
+
 def _events(session: Session, since: datetime, until: datetime) -> list[str]:
     """Events from filings read since the previous digest, most important first."""
     from stock_news_analyzer.agents.events import amount
@@ -450,6 +464,7 @@ def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
     lines += _earnings_calls(session, since, until)
     lines += _promises(session, since, until)
     lines += _orders(session, since, until)
+    lines += _holdings(session, since, until)
     lines += _events(session, since, until)
     lines += _read_across(session, since, until)
 

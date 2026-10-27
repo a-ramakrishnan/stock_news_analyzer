@@ -2994,3 +2994,71 @@ def holdings_probe(symbol: str = typer.Argument(..., help="NSE symbol.")) -> Non
     ]
     for tag, context, value in shown[:80]:
         typer.echo(f"  {tag:<50} {contexts.get(context, context)[-70:]:<70} {value[:20]}")
+
+
+@holdings_app.command("run")
+def holdings_run(
+    symbol: str = typer.Option(None, help="Only this NSE symbol."),
+    since: str = typer.Option(None, help="Quarters ending from YYYY-MM-DD (default: 3 years)."),
+) -> None:
+    """Read new shareholding patterns from NSE's XBRL files (no LLM)."""
+    from stock_news_analyzer.agents import holdings
+    from stock_news_analyzer.sources.exchange_http import ExchangeClient
+
+    start = datetime.strptime(since, "%Y-%m-%d").date() if since else None
+    with get_session() as session:
+        result = holdings.import_holdings(
+            session, ExchangeClient(), symbol=symbol, since=start, progress=typer.echo
+        )
+    typer.echo(f"{result.filings} shareholding patterns stored, {result.skipped} already stored")
+    for err in result.errors:
+        typer.echo(f"error: {err}")
+    if result.errors:
+        raise typer.Exit(1)
+
+
+@holdings_app.command("show")
+def holdings_show(
+    symbol: str = typer.Argument(..., help="NSE symbol."),
+    quarters: int = typer.Option(8, help="How many quarters."),
+) -> None:
+    """A company's shareholding quarter by quarter (percent of all shares)."""
+    from stock_news_analyzer.agents import holdings
+
+    with get_session() as session:
+        company = _companies_or_exit(session, symbol)[0]
+        rows = holdings.history(session, company.isin, quarters)
+    if not rows:
+        typer.echo(f"no shareholding patterns for {symbol}: run `sna holdings run`")
+        raise typer.Exit(1)
+
+    def f(x, width=8):
+        return f"{x:>{width}.2f}" if x is not None else " " * (width - 1) + "-"
+
+    typer.echo(
+        f"{company.nse_symbol}: {company.name}\n"
+        f"{'quarter':<9} {'promoter':>8} {'FII':>8} {'DII':>8} {'MF':>8} {'insur.':>8} "
+        f"{'retail':>8} {'pledged':>8} {'holders':>10}"
+    )
+    for r in rows:
+        holders = f"{r.shareholders:>10,}" if r.shareholders else " " * 9 + "-"
+        typer.echo(
+            f"{r.quarter_end:%b %Y} {f(r.promoter_pct)} {f(r.fii_pct)} {f(r.dii_pct)} "
+            f"{f(r.mf_pct)} {f(r.insurance_pct)} {f(r.retail_pct)} {f(r.pledged_pct)} {holders}"
+        )
+    typer.echo("pledged: percent of the promoters' own shares; DII includes MF and insurers")
+
+
+@holdings_app.command("moves")
+def holdings_moves(
+    points: float = typer.Option(1.0, help="Show changes of at least this many points."),
+) -> None:
+    """Each watchlist company's latest quarter where a stake moved, against the one before."""
+    from stock_news_analyzer.agents import holdings
+
+    with get_session() as session:
+        found = holdings.moves(session, points=Decimal(str(points)))
+    if not found:
+        typer.echo(f"no stake moved {points} points or more in the latest quarters")
+    for m in found:
+        typer.echo(holdings.describe(m))

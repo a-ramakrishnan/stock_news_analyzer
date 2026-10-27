@@ -32,6 +32,7 @@ Every command block below can be pasted into Terminal as is; explanations are in
 | 19 | Bullion Analyst: Indian gold and silver moves split into global price, rupee and the rest; notes on unusual days (Claude Sonnet) | done |
 | 20 | Theme & Peer Analyst: events, orders and call points tagged with themes (Claude Haiku); theme strength over time; read-across between watchlist stocks | done |
 | 21 | Analyst Q&A (Claude Sonnet): plain-English questions answered from the database with sources; saved reports; an Ask page | done |
+| 22 | Shareholding pattern each quarter from NSE's XBRL files (no LLM): promoters, foreign and domestic institutions, mutual funds, retail, pledges; red flags for promoters selling or pledging | testing |
 
 ## Run it on a Mac
 
@@ -370,6 +371,8 @@ The Red-flag Monitor reads the checked events and raises warnings about governan
 | Penalty, tax demand, court or regulator's order | by size against a year's revenue: 1%+ high, 0.1%+ medium, smaller low; any SEBI order at least medium; a mixed outcome (hearing adjourned, stay continuing) one step lower |
 | Fire, strike, shutdown or other disruption | high when important (4-5), else medium |
 | Results not filed by the deadline (45 days; 60 for the year) | medium; 30 days late: high |
+| Promoters selling, from the shareholding pattern (fewer promoter shares than the quarter before) | stake down 5 points or more: high; 2 or more: medium; 1 or more: low. A stake that falls only because new shares were issued raises nothing |
+| More of the promoters' shares pledged or encumbered, from the shareholding pattern (up 2 points or more) | by the level reached: 50% of their shares high, 20% medium, less low |
 
 ```bash
 uv run sna flags run
@@ -383,6 +386,29 @@ uv run sna flags list
 | `uv run sna flags dismiss 7 --note "..."` | Dismiss a flag once dealt with; it stays on record with your note |
 
 The scheduler raises new flags at 07:55. High and medium flags about recent filings open the digest. The Today page lists those from the last 30 days, and the Stock page's **Events** tab shows the stock's flags from the last year.
+
+## Shareholding
+
+Every listed company files its shareholding pattern each quarter, within 21 days. NSE lists the filings with an XBRL file, where every figure is tagged with the holder category, so it is read in code with no LLM.
+
+- **Stored per quarter:** promoters, foreign institutions, domestic institutions (of which mutual funds and insurers), retail (individuals holding up to Rs 2 lakh), the number of shareholders, and the share of the promoters' own holding that is pledged or locked in. Every other category in the file is kept too.
+- **Red flags:** promoters selling (fewer shares than the quarter before) or pledging more of their holding; see the table under Red flags.
+- **Moves:** a stake changing by 1 percentage point or more appears in a "Shareholding" section of the digest when the filing comes in.
+
+```bash
+uv run sna holdings run
+uv run sna holdings show LT
+uv run sna holdings moves
+```
+
+| Command | What it does |
+| --- | --- |
+| `uv run sna holdings run` | Read the shareholding patterns NSE lists for the watchlist, about three years on the first run; then only new filings |
+| `uv run sna holdings show LT` | A stock's stakes quarter by quarter |
+| `uv run sna holdings moves` | Each stock's latest quarter where a stake moved 1 point or more; `--points 0.5` for smaller moves |
+| `uv run sna holdings probe LT` | Show NSE's listing and the latest XBRL file, to check the format |
+
+The scheduler reads new filings at 07:10. The Stock page has a **Shareholding** tab: the latest stakes with their change, a chart and the quarters. Analyst Q&A can answer questions about holdings too ("which of my companies saw mutual funds add stake last quarter?").
 
 ## Bullion (Phase 2, LLM on unusual days)
 
@@ -543,7 +569,7 @@ make ui
 | Page | What it shows |
 | --- | --- |
 | Today | Indices, then **Stocks I own** and **Watchlist** as separate groups of cards (move vs Nifty 50 and sector, unusual badge, 3-month sparkline), the latest digest, job health |
-| Stock | Stock vs sector vs Nifty 50 indexed to 100, key filings and unusual days marked; unusual days with their likely cause, results, earnings calls and the promise ledger, the order book, filings, news, deals, reactions and corporate actions |
+| Stock | Stock vs sector vs Nifty 50 indexed to 100, key filings and unusual days marked; unusual days with their likely cause, results, shareholding, earnings calls and the promise ledger, the order book, filings, news, deals, reactions and corporate actions |
 | Filings | Search by stock, type, words and date; read a filing's extracted text |
 | News | Search headlines; links to the articles |
 | Themes | Theme strength, a theme's months and items, read-across |

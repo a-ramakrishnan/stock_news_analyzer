@@ -17,6 +17,10 @@ so the monitor only has to pick out the ones that warn of trouble and say how se
 - A disruption (fire, strike, shutdown): important ones (4-5) high, others medium.
 - Results not filed by the deadline (45 days after a quarter or half year, 60 after the
   year): medium, high when 30 days late.
+- From the quarterly shareholding pattern (agents/holdings.py): promoters selling, i.e. fewer
+  promoter shares and a stake down 5 points or more (high), 2 or more (medium), 1 or more
+  (low); the pledged or encumbered share of the promoters' holding up 2 points or more, graded
+  by the level reached: 50% (high), 20% (medium), less (low).
 
 Each flag is raised once; a later scan re-grades it if the rules changed. Dismissing one
 (`sna flags dismiss`) keeps it, with your note, and it is left alone.
@@ -280,12 +284,16 @@ def scan(session: Session, since: date | None = None, today: date | None = None)
     """Raise the flags not raised yet, and re-grade the open ones whose rule has changed."""
     today = today or datetime.now(IST).date()
     result = FlagsResult()
-    existing = {f.ref: f for f in session.scalars(select(RedFlag))}
-    for flag in _event_flags(session, since) + overdue_results(session, today):
-        old = existing.get(flag.ref)
+    from stock_news_analyzer.agents import holdings
+
+    # Keyed by company too: a ref like 'results:Q2 FY27' is shared by companies.
+    existing = {(f.isin, f.ref): f for f in session.scalars(select(RedFlag))}
+    found = _event_flags(session, since) + overdue_results(session, today)
+    for flag in found + holdings.flags(session, today):
+        old = existing.get((flag.isin, flag.ref))
         if old is None:
             session.add(flag)
-            existing[flag.ref] = flag
+            existing[(flag.isin, flag.ref)] = flag
             result.raised += 1
             result.by_severity[flag.severity] = result.by_severity.get(flag.severity, 0) + 1
         elif old.dismissed_at is None and (old.kind, old.severity) != (flag.kind, flag.severity):

@@ -799,3 +799,35 @@ class Question(Base):
     steps: Mapped[int] = mapped_column(default=0)  # tool calls made
     model: Mapped[str] = mapped_column(String(64))
     cost_usd: Mapped[Decimal] = mapped_column(Numeric(10, 5), default=0)
+
+
+class Shareholding(Base):
+    """Shareholding pattern (Market Signals, agent 4): who owned a company at a quarter's end,
+    from the XBRL file it files with the exchanges within 21 days.
+
+    Percentages are of all shares (19.39 means 19.39%), except the pledged and locked-in
+    shares, which are a percentage of the promoters' own holding, as the filing gives them.
+    `categories` keeps every category the file has: {name: {"shares", "pct", "holders"}}.
+    """
+
+    __tablename__ = "shareholdings"
+
+    isin: Mapped[str] = mapped_column(ForeignKey("companies.isin"), primary_key=True)
+    quarter_end: Mapped[date] = mapped_column(Date, primary_key=True, index=True)
+    filed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    record_id: Mapped[str] = mapped_column(String(32))  # NSE's id for the filing
+    xbrl_url: Mapped[str] = mapped_column(Text)
+    total_shares: Mapped[int | None] = mapped_column(BigInteger)
+    shareholders: Mapped[int | None] = mapped_column()
+    promoter_pct: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))
+    public_pct: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))
+    fii_pct: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))  # foreign institutions
+    dii_pct: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))  # domestic institutions
+    mf_pct: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))  # mutual funds (part of DII)
+    insurance_pct: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))  # part of DII
+    retail_pct: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))  # individuals to Rs 2 lakh
+    promoter_shares: Mapped[int | None] = mapped_column(BigInteger)
+    pledged_pct: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))  # of the promoters' shares
+    locked_pct: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))  # of the promoters' shares
+    categories: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

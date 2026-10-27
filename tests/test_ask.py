@@ -9,7 +9,14 @@ from test_orders import KVB, doc
 
 from stock_news_analyzer.agents import ask as qa
 from stock_news_analyzer.llm import LLM, BudgetExceeded
-from stock_news_analyzer.models import Event, LlmCall, Question, WatchlistItem
+from stock_news_analyzer.models import (
+    Concall,
+    ConcallPoint,
+    Event,
+    LlmCall,
+    Question,
+    WatchlistItem,
+)
 from stock_news_analyzer.sources.announcements import IST
 
 NOW = datetime.now(IST).replace(microsecond=0)
@@ -146,3 +153,27 @@ def test_step_limit_and_budget(loaded, monkeypatch):  # noqa: F811
     llm, _ = _llm(loaded, [[("text", "x")]], llm_monthly_budget_usd=0.0)
     with pytest.raises(BudgetExceeded):
         qa.ask(loaded, llm, "Too expensive?")
+
+
+@pytest.mark.db
+def test_call_points_name_the_company_and_call(loaded):  # noqa: F811
+    d = doc(loaded, KVB, NOW - timedelta(days=12), "concall_transcript", "Transcript", "Call.")
+    call = Concall(
+        isin=KVB,
+        document_id=d.id,
+        status="done",
+        published_at=d.published_at,
+        quarter="Q2 FY27",
+        call_date=date(2026, 10, 15),
+    )
+    loaded.add(call)
+    loaded.flush()
+    point = ConcallPoint(
+        concall_id=call.id, category="guidance", text="ROA guidance raised.", sentiment="positive"
+    )
+    loaded.add(point)
+    loaded.commit()
+    assert qa.describe_source(loaded, f"point:{point.id}") == (
+        f"[point:{point.id}] KARURVYSYA Q2 FY27 call (15 Oct 2026), guidance: ROA guidance raised."
+    )
+    assert f"point:{point.id}" in qa.search_text(loaded, "ROA guidance", kinds=["point"])

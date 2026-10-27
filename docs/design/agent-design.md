@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.16 · Oct 27, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.17 · Oct 27, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -64,11 +64,11 @@ flowchart LR
 
     subgraph DEL["Deliver"]
         direction TB
-        A16["16 · Reporter<br/>digest + dashboard;<br/>email later"]:::partly
-        A17["17 · Analyst Q&A"]:::pendingNext
+        A16["16 · Reporter<br/>digest + dashboard;<br/>email later"]:::partlyNext
+        A17["17 · Analyst Q&A<br/>Sonnet + read-only SQL,<br/>word search"]:::built
     end
 
-    DB[("Shared Postgres database, point-in-time<br/>built: filings, news, prices and labels, deals, moves,<br/>concalls, promises, orders and order books, results,<br/>typed events with QA status, red flags, bullion moves, themes and read-across")]:::db
+    DB[("Shared Postgres database, point-in-time<br/>built: filings, news, prices and labels, deals, moves,<br/>concalls, promises, orders and order books, results,<br/>typed events with QA status, red flags, bullion moves, themes and read-across, questions")]:::db
 
     O -. runs every agent .-> A1
     S1 --> A2
@@ -88,10 +88,10 @@ flowchart LR
 
 | Status | Agents |
 | --- | --- |
-| Built | 0 Orchestrator, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 |
+| Built | 0 Orchestrator, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17 |
 | Partly built | 4 Market Signals, 16 Reporter |
-| Not started | 17 |
-| Recommended next | Analyst Q&A (17), the last agent. Email delivery of the digest and high-severity flags (16) comes later; Telegram is set aside for now |
+| Not started | none |
+| Recommended next | Email delivery of the digest and high-severity flags (16); Telegram is set aside for now |
 
 | # | Agent | Status | Build step |
 | --- | --- | --- | --- |
@@ -112,7 +112,7 @@ flowchart LR
 | 14 | Theme & Peer Analyst | Built: events, orders and call points tagged with themes (Haiku 5.5); theme strength and read-across in code; no customer and supplier map yet | 20 |
 | 15 | Red-flag Monitor | Built: rules over the checked events (auditor, CEO/MD/CFO and independent director exits, downgrades, pledges, holders selling, penalties, disruptions) and overdue results; no LLM | 18 |
 | 16 | Reporter | Partly: Markdown digest and Streamlit dashboard; no email or weekly report yet (email later; Telegram set aside for now); no LLM | 6, 7 |
-| 17 | Analyst Q&A | Not started | — |
+| 17 | Analyst Q&A | Built (Sonnet 5.5): read-only SQL, full-text search and a document reader as tools; cited answers; saved reports, not yet scheduled | 21 |
 
 The build order changed in one place: the Move Explainer came before the Event Extractor and QA Checker, reading filings and triaged news directly. Its explanations were useful without typed events.
 
@@ -581,7 +581,7 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **LLM:** Opus 5.5 to write; code to format.
 - **As built (steps 6, 7):** the daily digest is put together in code (no LLM yet) and saved as Markdown under `data/digests/`. It has filings, triaged news with stars and topics, unusual moves with their likely cause, and bulk/block deals.
   
-  The Streamlit dashboard (`make ui`) has eight pages: Today, Stock, Filings, News, Themes, What moves the stock, Manage stocks, System. System shows AI usage.
+  The Streamlit dashboard (`make ui`) has nine pages: Today, Stock, Filings, News, Themes, Ask, What moves the stock, Manage stocks, System. System shows AI usage.
   
   Email and the weekly report are not built yet: email delivery is planned for later, and Telegram is set aside for now (Oct 27, 2026).
 - **Reads / writes:** all output tables → Telegram, email, dashboard.
@@ -598,6 +598,12 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **Trigger:** when you ask (Telegram or dashboard).
 - **LLM:** Opus 5.5 with tools: SQL queries and vector search.
 - **Reads / writes:** all tables (read-only).
+- **As built (step 21).** `agents/ask.py`; `sna ask`, `sna questions list/show/rerun` and an Ask page in the dashboard.
+  - **Model:** Sonnet 5.5, not Opus. Most questions are lookups and a short summary; `--model` picks Opus for a hard one. The first real question ("Which of my companies raised guidance this year?") took 4 lookups and $0.07.
+  - **Tools:** `run_sql` (one SELECT in a read-only transaction with a 5-second limit, 100 rows), `search_text` and `read_document`. The table list in the prompt is generated from the models.
+  - **Search:** PostgreSQL full-text search with a GIN index on documents, not vectors: there is no embeddings API on the account, and word search finds filings and call points well enough.
+  - **Citations:** `[doc:ID]`, `[event:ID]`, `[point:ID]`, `[promise:ID]`, checked against stored rows and listed with the company, call or date and link.
+  - **Saved reports:** every question goes in `questions`; a named one is asked again with `sna questions rerun`. Running them on a schedule waits for email delivery.
 
 1. Turn your question into SQL and document searches.
 2. Run them, read the results and answer with citations.

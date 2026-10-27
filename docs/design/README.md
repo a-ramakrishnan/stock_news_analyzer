@@ -11,6 +11,14 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.17 · Oct 27, 2026
+
+- Step 21, the Analyst Q&A:
+  - agent 17 marked built, with "As built" notes: Sonnet 5.5 rather than Opus by default; PostgreSQL full-text search rather than vectors (no embeddings API); saved reports kept but not yet scheduled
+  - the first question answered with 4 lookups for $0.07
+  - the dashboard has an Ask page (nine pages)
+- Status tables and the block diagram updated: all 17 agents are built; email delivery is next
+
 ### 1.16 · Oct 27, 2026
 
 - Theme & Peer Analyst after its first runs: read-across goes only to companies with the theme among their core themes, and "Exports and overseas" links no one; 186 signals became 42 that read as relevant

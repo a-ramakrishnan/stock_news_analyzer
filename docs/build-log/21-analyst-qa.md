@@ -39,6 +39,20 @@ The answer cites `[doc:ID]`, `[event:ID]`, `[point:ID]` or `[promise:ID]` after 
 - a full question with three lookups: tool results sent back with matching ids, unknown citations dropped, the question stored with its cost
 - the step limit and the monthly budget
 
+## After the first question
+
+"Which of my companies raised guidance this year?" took 4 lookups and $0.07. Sonnet checked the events table first, found no guidance events, and turned to the guidance points from the earnings calls. It then looked up the calls' dates.
+
+The answer was a table of eight companies, each line cited to its call point:
+- Karur Vysya, IDFC First and Ujjivan raised their NIM or ROA guidance
+- Dabur raised its FY27 growth range
+- KMEW raised its FY27 growth outlook from 30–40% to over 60%
+- Shaily and Eternal gave softer raises ("should exceed", "higher end of the range"), marked as such
+
+It also listed the companies that went the other way or stood still. Sathlokhar cut its guidance, Bectors reframed its EBITDA target, Gravita held its target and BlackBuck gives no guidance.
+
+One fix followed: sources for call points and promises read "earnings call, guidance: …" without the company. They now name it, with the quarter and the call date, e.g. "KARURVYSYA Q2 FY27 call (15 Oct 2026), guidance: …".
+
 ## On the Mac
 
 ```

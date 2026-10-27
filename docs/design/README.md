@@ -11,6 +11,11 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.16 · Oct 27, 2026
+
+- Theme & Peer Analyst after its first runs: read-across goes only to companies with the theme among their core themes, and "Exports and overseas" links no one; 186 signals became 42 that read as relevant
+- README: step 20 marked done
+
 ### 1.15 · Oct 27, 2026
 
 - Step 20, the Theme & Peer Analyst:

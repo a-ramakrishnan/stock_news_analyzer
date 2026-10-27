@@ -43,6 +43,32 @@ The read-across didn't: 186 signals, mostly noise. L&T's airport order went to D
 - **Once per day.** One source company, target and reason gives one signal a day.
 - **Rebuild without re-tagging.** `sna themes reset --signals-only` forgets the read-across and keeps the tags.
 
+## After the second run
+
+Rebuilding the read-across with core themes (no LLM cost) gave 42 signals instead of 186, 13 of them in the last 90 days.
+
+| Stock | Core themes |
+| --- | --- |
+| BECTORFOOD, DABUR | Consumer demand |
+| BLACKBUCK, ETERNAL | Digital commerce and logistics |
+| DIACABS | Power transmission and distribution |
+| GAUDIUMIVF, SHAILY | Healthcare |
+| GRAVITA | Recycling and metals |
+| IDFCFIRSTB, KARURVYSYA, UJJIVANSFB | Credit and deposits |
+| KMEW | Ports and marine |
+| LT | Buildings and factories, Oil and gas |
+| MSUMI | Autos and EVs |
+| SSEGL | Buildings and factories |
+
+The signals now read as worth a look:
+- L&T's building and airport orders go to SSEGL, and SSEGL's civil orders to L&T
+- L&T's transmission and substation orders go to Diamond Power
+- L&T's ONGC subsea pipelines go to KMEW
+- IDFC First's deposit news goes to the other two banks
+- Dabur's court stay on FSSAI's "100%" order goes to Bectors
+
+One is a stretch (SSEGL building a tractor maker's factory, read across to MSUMI's autos) but harmless. Diamond Power's cable orders no longer reach L&T, since power T&D is under 15% of L&T's items. A cable supplier's order says little about L&T, so that is fine.
+
 ## Not yet
 
 - **Customer and supplier map:** read from annual reports and calls. Peers come from the industry list you approve.

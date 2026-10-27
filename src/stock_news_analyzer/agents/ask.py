@@ -27,6 +27,7 @@ from stock_news_analyzer.llm import LLM, month_spend
 from stock_news_analyzer.models import (
     Base,
     Company,
+    Concall,
     ConcallPoint,
     Document,
     Event,
@@ -302,8 +303,6 @@ def read_document(session: Session, doc_id: int) -> str:
         return f"no document {doc_id}"
     body = doc.text or ""
     if doc.doc_type == "concall_transcript" and len(body) < 500:
-        from stock_news_analyzer.models import Concall
-
         call = session.scalars(select(Concall).where(Concall.document_id == doc.id)).first()
         body = (call.linked_text if call and call.linked_text else body) or ""
     return (
@@ -351,7 +350,8 @@ def sources(session: Session, answer_text: str) -> list[str]:
 
 
 def describe_source(session: Session, ref: str) -> str:
-    """'doc:123' -> '[doc:123] 12 Oct 2026 LT order_win: L&T wins ... <url>'."""
+    """'doc:123' -> '[doc:123] 12 Oct 2026 order_win: L&T wins ... <url>'; call points and
+    promises name the company, quarter and call date."""
     kind, ident = ref.split(":")
     if kind == "doc":
         d = session.get(Document, int(ident))
@@ -366,9 +366,17 @@ def describe_source(session: Session, ref: str) -> str:
         )
     if kind == "point":
         p = session.get(ConcallPoint, int(ident))
-        return f"[{ref}] earnings call, {p.category}: {p.text[:100]}"
+        return f"[{ref}] {_call(session, p.concall_id)}, {p.category}: {p.text[:100]}"
     p = session.get(Promise, int(ident))
-    return f"[{ref}] promise ({p.status}): {p.statement[:100]}"
+    return f"[{ref}] {_call(session, p.concall_id)}, promise ({p.status}): {p.statement[:100]}"
+
+
+def _call(session: Session, concall_id: int) -> str:
+    """'KARURVYSYA Q2 FY27 call (15 Oct 2026)'."""
+    call = session.get(Concall, concall_id)
+    symbol = session.scalar(select(Company.nse_symbol).where(Company.isin == call.isin))
+    day = call.call_date or call.published_at.astimezone(IST).date()
+    return " ".join(x for x in (symbol, call.quarter, f"call ({day:%d %b %Y})") if x)
 
 
 def ask(

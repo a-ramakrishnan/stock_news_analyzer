@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.15 · Oct 27, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.16 · Oct 27, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -543,7 +543,7 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **As built (step 20).** `agents/themes.py` writes `theme_tags` and `peer_signals`.
   - **Tags:** Haiku 5.5, not Sonnet (it is classification, and cheap at 40 items a call). It tags checked events (not management changes, ratings or promoter actions), orders and forward-looking call points with up to three themes from `config/themes.yaml`. Each item is read once; no theme is stored as `none`.
   - **Strength, in code:** per theme, items and companies in the last 90 days against the 90 before, positive and negative items, order value; per month.
-  - **Read-across, in code:** an event of importance 4–5, or an order of 1% or more of yearly revenue, is listed for the watchlist companies that are its approved peers or have its theme among their core themes (top three of the past year, each with two items and 15% of them). Themes marked `read_across: false` (exports and overseas) link no one. After the first run, a looser rule (any item in the theme) linked an airport order to a consumer company and an IVF chain. No direction: the signal says why it may matter, not whether it helps or hurts.
+  - **Read-across, in code:** an event of importance 4–5, or an order of 1% or more of yearly revenue, is listed for the watchlist companies that are its approved peers or have its theme among their core themes (top three of the past year, each with two items and 15% of them). Themes marked `read_across: false` (exports and overseas) link no one. After the first run, a looser rule (any item in the theme) linked an airport order to a consumer company and an IVF chain: 186 signals. With core themes, 42, such as L&T's transmission orders read across to Diamond Power, its building orders to SSEGL, and IDFC First's deposit news to the other banks. `sna themes companies` lists each stock's core themes. No direction: the signal says why it may matter, not whether it helps or hurts.
   - **Where it shows:** `sna themes run/list/show/signals/reset`, the 07:52 `themes` job, a "Read-across" section in the digest, a **Themes** page on the dashboard.
   - **Not yet:** a customer and supplier map from annual reports and calls; a weekly theme summary in the digest.
 

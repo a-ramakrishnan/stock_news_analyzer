@@ -30,7 +30,7 @@ Every command block below can be pasted into Terminal as is; explanations are in
 | 17 | Event Extractor (Claude Haiku) and QA Checker (code checks + Claude Sonnet): capex, ratings, management changes, legal matters, deals, fundraises, promoter actions, disruptions | done |
 | 18 | Red-flag Monitor: auditor and CFO exits, downgrades, pledges, penalties, late results; in the digest and dashboard | done |
 | 19 | Bullion Analyst: Indian gold and silver moves split into global price, rupee and the rest; notes on unusual days (Claude Sonnet) | done |
-| 20 | Theme & Peer Analyst: events, orders and call points tagged with themes (Claude Haiku); theme strength over time; read-across between watchlist stocks | this PR |
+| 20 | Theme & Peer Analyst: events, orders and call points tagged with themes (Claude Haiku); theme strength over time; read-across between watchlist stocks | done |
 
 ## Run it on a Mac
 

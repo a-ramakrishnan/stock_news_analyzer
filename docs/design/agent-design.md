@@ -521,9 +521,9 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **LLM:** Sonnet 5.5.
 - **Reads / writes:** bullion prices, USD/INR, news → `bullion_notes`.
 - **As built (step 19).** `agents/bullion.py` writes `bullion_moves` (the plan's `bullion_notes`) and `market_series`.
-  - **Prices:** the Indian price is the close of an NSE ETF holding the metal (GOLDBEES, SILVERBEES), already in the bhavcopy, rather than IBJA or MCX, which have no free download. Global gold and silver (US$/oz) and USD/INR come from stooq, or Yahoo Finance as a fallback.
-  - **Split:** log returns, so rupee move = global + USD/INR + other (duty, local premium, and the gap between the Indian and New York closes). A driver in code: the part with 60% of the move and its sign.
-  - **Notes:** only on unusual days (2σ of the previous 60 days, as for stocks), in the last 90 days, at most 10 a run. Sonnet 5.5 gets the split, the previous days and Google News on bullion around the day (searched for that window), and returns the driver, a short note and the articles used. About $0.01 a note.
+  - **Prices:** the Indian price is the close of an NSE ETF holding the metal (GOLDBEES, SILVERBEES), already in the bhavcopy, rather than IBJA or MCX, which have no free download. Global gold and silver (US$/oz) and USD/INR come from Yahoo Finance (stooq as a fallback), taken at 15:30 IST from Yahoo's hourly prices for the last two years so they line up with the Indian close.
+  - **Split:** log returns, so rupee move = global + USD/INR + other (duty and the ETF's premium; for days older than two years, also the gap between the Indian and New York closes). A driver in code: the part with 60% of the move and its sign.
+  - **Notes:** only when that day's news could be fetched (a Google News 503 is retried once, then the note waits), and only on unusual days (2σ of the previous 60 days, as for stocks), in the last 90 days, at most 10 a run. Sonnet 5.5 gets the split, the previous days and Google News on bullion around the day (searched for that window), and returns the driver, a short note and the articles used. About $0.01 a note.
   - **Where it shows:** a "Bullion" section in the digest, the Today page, `sna bullion probe/run/list/explain`, the 07:35 `bullion` job.
 
 1. Split the Rs price move into global price and USD/INR parts.

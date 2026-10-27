@@ -18,6 +18,7 @@ flows, import duty, festival demand). Other days get the split alone, in code.
 import logging
 import math
 import statistics
+import time as clock
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
@@ -39,7 +40,7 @@ from stock_news_analyzer.models import (
     WatchlistItem,
 )
 from stock_news_analyzer.sources.announcements import IST
-from stock_news_analyzer.sources.markets import MarketError, daily_closes
+from stock_news_analyzer.sources.markets import MarketError, at_indian_close, daily_closes
 from stock_news_analyzer.sources.news import (
     NewsError,
     google_news_range_url,
@@ -76,6 +77,13 @@ MAX_NOTES = 10  # per run
 NEWS_DAYS = 7
 MAX_ARTICLES = 25  # per note
 SHARE = 0.6  # a part with this share of the move (and its sign) is the driver
+RETRY_WAIT = 10  # seconds before searching Google News again after a 503
+INTRADAY = "yahoo-1h"  # the source of a price taken at the Indian close
+
+
+class NoNews(Exception):
+    """The day's news couldn't be fetched: its note waits for a later run."""
+
 
 NOTE_SYSTEM = """You explain one day's move in the Indian price of gold or silver.
 
@@ -110,6 +118,7 @@ class BullionResult:
     unusual: int = 0
     articles: int = 0
     notes: int = 0
+    waiting: int = 0  # unusual days whose news couldn't be fetched
     cost_usd: Decimal = Decimal(0)
     errors: list[str] = field(default_factory=list)
 
@@ -132,8 +141,9 @@ def fetch_series(
     today: date | None = None,
     result: BullionResult | None = None,
 ) -> BullionResult:
-    """Store the global closes the metals need, from a week before the last one stored (or
-    HISTORY_DAYS back on the first run) to today."""
+    """Store the global prices the metals need, from a week before the last one stored (or
+    HISTORY_DAYS back on the first run) to today: the price at the Indian close where Yahoo
+    has hourly prices (the last two years), else the day's close."""
     today = today or datetime.now(IST).date()
     result = result or BullionResult()
     for series in [METALS[m]["global"] for m in metals] + [FX]:
@@ -149,17 +159,25 @@ def fetch_series(
         except MarketError as exc:
             result.errors.append(str(exc))
             continue
+        try:
+            at_close = dict(at_indian_close(fetch, series, start, today))
+        except MarketError as exc:  # the daily closes still do
+            log.warning("%s at the Indian close: %s", series, exc)
+            at_close = {}
+        rows = [(d, at_close.get(d, c)) for d, c in rows]
+        rows += [(d, c) for d, c in at_close.items() if d not in dict(rows)]
         for d, close in rows:
-            values = {"series": series, "trade_date": d, "close": close, "source": source}
+            source_d = INTRADAY if d in at_close else source
+            values = {"series": series, "trade_date": d, "close": close, "source": source_d}
             session.execute(
                 insert(MarketSeries)
                 .values(**values)
                 .on_conflict_do_update(
                     index_elements=["series", "trade_date"],
-                    set_={"close": close, "source": source},
+                    set_={"close": close, "source": source_d},
                 )
             )
-        result.series[series] = source
+        result.series[series] = f"{source} + hourly from Yahoo" if at_close else source
         result.points += len(rows)
         session.commit()
     return result
@@ -312,10 +330,17 @@ def collect_news(
             if start and end
             else google_news_url(query, NEWS_DAYS)
         )
-        try:
-            result.articles += _store_articles(session, fetch(url), metal, query)
-        except NewsError as exc:
-            result.errors.append(f"bullion news '{query}': {exc}")
+        for attempt in (1, 2):
+            try:
+                result.articles += _store_articles(session, fetch(url), metal, query)
+                break
+            except NewsError as exc:
+                busy = any(code in str(exc) for code in ("429", "503"))
+                if attempt == 1 and busy:  # Google is throttling: wait and try once more
+                    clock.sleep(RETRY_WAIT)
+                    continue
+                result.errors.append(f"bullion news '{query}': {exc}")
+                break
     return result
 
 
@@ -374,15 +399,21 @@ def explain(
     move = session.get(BullionMove, (metal, day))
     if move is None:
         raise LookupError(f"no {metal.lower()} move stored for {day}")
+    news_failed = False
     if fetch:
-        collect_news(session, fetch, metal, day - timedelta(days=2), day + timedelta(days=1))
+        found = collect_news(
+            session, fetch, metal, day - timedelta(days=2), day + timedelta(days=1)
+        )
+        news_failed = bool(found.errors)
+    docs = _articles(session, metal, day)
+    if news_failed and not docs:
+        raise NoNews(f"{metal.title()} {day:%d %b %Y}: news not reachable; try again later")
     recent = session.scalars(
         select(BullionMove)
         .where(BullionMove.metal == metal, BullionMove.trade_date < day)
         .order_by(BullionMove.trade_date.desc())
         .limit(5)
     ).all()
-    docs = _articles(session, metal, day)
     model = model or llm.settings.llm_model_analysis
     answer = llm.structured(
         "bullion", model, NOTE_SYSTEM, _note_prompt(move, list(reversed(recent)), docs), BullionNote
@@ -434,6 +465,10 @@ def run(
         for move in waiting:
             try:
                 explain(session, llm, move.metal, move.trade_date, fetch)
+            except NoNews as exc:  # written on a later run, with its news
+                result.waiting += 1
+                say(f"skipped: {exc}")
+                continue
             except BudgetExceeded as exc:
                 result.errors.append(str(exc))
                 break
@@ -466,3 +501,13 @@ def summary(move: BullionMove) -> str:
             f"other {_pct(move.other_return)}"
         )
     return text
+
+
+def reset(session: Session) -> int:
+    """Forget global prices, splits and notes (bullion news is kept). Returns rows removed."""
+    from sqlalchemy import delete
+
+    count = session.execute(delete(BullionMove)).rowcount
+    count += session.execute(delete(MarketSeries)).rowcount
+    session.commit()
+    return count

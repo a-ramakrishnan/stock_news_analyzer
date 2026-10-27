@@ -22,7 +22,7 @@
 | Independent director resigns mid-term | medium; at the end of a term: none |
 | Rating downgrade | high; negative outlook or watch: medium |
 | Promoter pledge invoked | high; created or increased: medium; released: none |
-| Promoter or large holder sells 1% or more | medium |
+| Promoter sells shares | medium; a fund or other large holder selling 1% or more: low |
 | Penalty, tax demand, court or regulator's order | by its amount against a year's revenue: 1% or more high, 0.1% or more medium, smaller low; without an amount, by importance; any SEBI order at least medium; a mixed outcome at most medium |
 | Disruption | high at importance 4-5, else medium |
 | Results not filed by the deadline | medium; 30 days late: high |
@@ -36,6 +36,16 @@ Results deadlines follow SEBI's LODR Regulation 33: 45 days after a quarter or h
 - **Once per event.** Each flag carries a reference (`event:123`, `results:Q2 FY27`), so the daily scan raises only new ones.
 - **History stays out of the digest.** The first scan raises flags for a year of events; the digest lists only those about filings from the last 14 days. `sna flags list` shows the rest.
 - **Dismiss, don't delete.** A dismissed flag keeps your note, as a record of what was known and decided.
+
+## After the first run
+
+27 flags from a year of events: 7 high, 9 medium, 11 low. The high ones were right: Ujjivan's MD retiring early, Diamond Power's CFO resigning, Deepinder Goyal stepping down as Eternal's CEO, BlackBuck's GST demand upheld (3% of revenue), Gaudium's Rs 29 crore arbitration claim (28%), IDFC First's Chandigarh fraud (1%). Three things were tuned:
+
+- **Funds trimming stakes.** Motilal Oswal's funds selling 3% of Shaily, and Accel selling 1.5% of BlackBuck, came out medium, as loud as a promoter selling. A promoter selling is now `promoter_selling` (medium); anyone else selling 1% or more is `holder_selling` (low).
+- **Court procedure.** A hearing re-listed with a stay continuing (Dabur's FSSAI case) was medium. A mixed outcome now drops one step.
+- **Small amounts lost to rounding.** Events stored before amounts kept four decimals showed "Rs 0 lakh". Amounts under Rs 1 crore now show as the filing writes them ("Rs. 4,55,000").
+
+Open flags graded by an older rule are re-graded on the next scan; dismissed ones are left alone.
 
 ## Not yet
 

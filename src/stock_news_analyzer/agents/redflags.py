@@ -7,15 +7,17 @@ so the monitor only has to pick out the ones that warn of trouble and say how se
 - The CEO, MD or CFO leaving: resigning or retiring early (high), otherwise ceasing (medium);
   an independent director resigning mid-term (medium).
 - A rating downgrade (high); a negative outlook or watch (medium).
-- A promoter's pledge invoked (high) or created (medium); a promoter or large holder selling
-  1% or more of the company (medium).
+- A promoter's pledge invoked (high) or created (medium); a promoter selling (medium); a fund
+  or other large holder selling 1% or more (low).
 - A penalty, tax demand or regulator's order, by its size against revenue: 1% or more (high),
-  0.1% or more (medium), smaller (low); any SEBI order is at least medium.
+  0.1% or more (medium), smaller (low); any SEBI order is at least medium; a mixed outcome
+  (a hearing adjourned, a stay continuing) one step lower.
 - A disruption (fire, strike, shutdown): important ones (4-5) high, others medium.
 - Results not filed by the deadline (45 days after a quarter or half year, 60 after the
   year): medium, high when 30 days late.
 
-Each flag is raised once. Dismissing one (`sna flags dismiss`) keeps it, with your note.
+Each flag is raised once; a later scan re-grades it if the rules changed. Dismissing one
+(`sna flags dismiss`) keeps it, with your note, and it is left alone.
 """
 
 import logging
@@ -24,7 +26,6 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
 from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from stock_news_analyzer.agents.concalls import _month_end
@@ -66,6 +67,7 @@ YEAR_END_LAG = 60  # the March quarter or half year comes with the annual result
 @dataclass
 class FlagsResult:
     raised: int = 0
+    regraded: int = 0
     by_severity: dict[str, int] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
 
@@ -121,8 +123,13 @@ def judge(e: Event, symbol: str) -> Flag | None:
             if CREATED.search(what) and "release" not in what:
                 return Flag("pledge", "medium", f"{symbol}: {e.headline}")
             return None
-        if SELLING.search(what) and (e.stake_pct or 0) >= 1:
-            return Flag("holder_selling", "medium", f"{symbol}: {e.headline}")
+        if SELLING.search(what):
+            # A promoter selling is a signal; a fund or early investor trimming, much less.
+            promoter = "promoter" in _text(e.person, e.counterparty, e.action, e.headline)
+            if promoter and (e.stake_pct is None or e.stake_pct >= 1):
+                return Flag("promoter_selling", "medium", f"{symbol}: {e.headline}")
+            if (e.stake_pct or 0) >= 1:
+                return Flag("holder_selling", "low", f"{symbol}: {e.headline}")
         return None
     if e.event_type == "legal_regulatory" and e.sentiment in ("negative", "mixed"):
         m = e.materiality
@@ -138,8 +145,8 @@ def judge(e: Event, symbol: str) -> Flag | None:
             severity = "low"
         if REGULATOR.search(_text(e.counterparty, e.headline)) and severity == "low":
             severity = "medium"
-        if e.sentiment == "mixed" and severity == "high":
-            severity = "medium"
+        if e.sentiment == "mixed":  # a hearing adjourned, a stay continuing: one step down
+            severity = {"high": "medium", "medium": "low"}.get(severity, severity)
         kind = "regulator" if REGULATOR.search(_text(e.counterparty)) else "legal"
         detail = amount(e) or None
         return Flag(kind, severity, f"{symbol}: {e.headline}", detail)
@@ -239,25 +246,25 @@ def overdue_results(session: Session, today: date) -> list[RedFlag]:
 
 
 def scan(session: Session, since: date | None = None, today: date | None = None) -> FlagsResult:
-    """Raise the flags not raised yet."""
+    """Raise the flags not raised yet, and re-grade the open ones whose rule has changed."""
     today = today or datetime.now(IST).date()
     result = FlagsResult()
-    flags = _event_flags(session, since) + overdue_results(session, today)
-    for flag in flags:
-        values = {
-            c.name: getattr(flag, c.name)
-            for c in RedFlag.__table__.columns
-            if c.name not in ("id", "created_at", "dismissed_at", "note")
-        }
-        inserted = session.execute(
-            insert(RedFlag)
-            .values(**values)
-            .on_conflict_do_nothing(constraint="red_flag_ref")
-            .returning(RedFlag.id)
-        ).scalar()
-        if inserted is not None:
+    existing = {f.ref: f for f in session.scalars(select(RedFlag))}
+    for flag in _event_flags(session, since) + overdue_results(session, today):
+        old = existing.get(flag.ref)
+        if old is None:
+            session.add(flag)
+            existing[flag.ref] = flag
             result.raised += 1
             result.by_severity[flag.severity] = result.by_severity.get(flag.severity, 0) + 1
+        elif old.dismissed_at is None and (old.kind, old.severity) != (flag.kind, flag.severity):
+            old.kind, old.severity, old.title, old.detail = (
+                flag.kind,
+                flag.severity,
+                flag.title,
+                flag.detail,
+            )
+            result.regraded += 1
     session.commit()
     return result
 

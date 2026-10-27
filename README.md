@@ -363,8 +363,8 @@ The Red-flag Monitor reads the checked events and raises warnings about governan
 | Independent director resigns mid-term | medium |
 | Rating downgrade | high; negative outlook or watch: medium |
 | Promoter pledge invoked | high; pledge created: medium |
-| Promoter or large holder sells 1% or more | medium |
-| Penalty, tax demand, court or regulator's order | by size against a year's revenue: 1%+ high, 0.1%+ medium, smaller low; any SEBI order at least medium |
+| Promoter sells shares | medium; a fund or other large holder selling 1% or more: low |
+| Penalty, tax demand, court or regulator's order | by size against a year's revenue: 1%+ high, 0.1%+ medium, smaller low; any SEBI order at least medium; a mixed outcome (hearing adjourned, stay continuing) one step lower |
 | Fire, strike, shutdown or other disruption | high when important (4-5), else medium |
 | Results not filed by the deadline (45 days; 60 for the year) | medium; 30 days late: high |
 
@@ -375,7 +375,7 @@ uv run sna flags list
 
 | Command | What it does |
 | --- | --- |
-| `uv run sna flags run` | Raise the flags not raised yet; each is raised once |
+| `uv run sna flags run` | Raise the flags not raised yet; each is raised once, and open ones are re-graded if the rules change |
 | `uv run sna flags list LT` | Flags of the last year, most serious first; `--low` for low ones, `--dismissed` for those you dismissed |
 | `uv run sna flags dismiss 7 --note "..."` | Dismiss a flag once dealt with; it stays on record with your note |
 

@@ -416,7 +416,9 @@ def amount(e: Event) -> str:
     debt rated, not money spent or raised, so it says so: 'Rs 12,000 cr rated'."""
     if e.value_cr is None:
         return ""
-    if e.value_cr < 1:  # a penalty of Rs 4,55,000: in lakh, not "Rs 0 cr"
+    if e.value_cr < 1 and e.value_as_written:  # a penalty of "Rs. 4,55,000": as the filing has it
+        value = e.value_as_written
+    elif e.value_cr < 1:  # in lakh, not "Rs 0 cr"
         value = f"Rs {e.value_cr * 100:,.1f} lakh".replace(".0 lakh", " lakh")
     else:
         value = f"Rs {e.value_cr:,.0f} cr"

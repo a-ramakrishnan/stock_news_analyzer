@@ -76,11 +76,14 @@ def test_ratings_pledges_and_selling():
     assert flag(event("promoter_action", action="pledge invoked")) == ("pledge", "high")
     assert flag(event("promoter_action", action="pledge created")) == ("pledge", "medium")
     assert flag(event("promoter_action", action="pledge released")) is None
+    # A fund trimming its stake is low; a promoter selling is medium.
     assert flag(event("promoter_action", action="sold shares", stake_pct=1.48)) == (
         "holder_selling",
-        "medium",
+        "low",
     )
     assert flag(event("promoter_action", action="sold shares", stake_pct=0.2)) is None
+    promoter = event("promoter_action", action="sold shares", headline="Promoter sold 20,00,000")
+    assert flag(promoter) == ("promoter_selling", "medium")
     assert flag(event("promoter_action", action="reclassification to public")) is None
 
 
@@ -93,6 +96,7 @@ def test_penalties_by_size_and_disruptions():
     assert flag(sebi) == ("regulator", "medium")
     assert flag(event(legal, sentiment="positive", materiality=0.5)) is None  # a stay won
     assert flag(event(legal, sentiment="mixed", importance=4)) == ("legal", "medium")
+    assert flag(event(legal, sentiment="mixed", importance=3)) == ("legal", "low")  # adjourned
     assert flag(event("disruption", sentiment="negative", importance=4)) == ("disruption", "high")
     assert flag(event("disruption", sentiment="neutral", importance=4)) is None
     assert flag(event("capex", sentiment="negative", importance=5)) is None
@@ -122,6 +126,10 @@ def test_scan_raises_each_flag_once(loaded):  # noqa: F811
     assert f.flagged_on == WHEN.date()
     again = rf.scan(loaded, today=date(2026, 10, 27))
     assert again.raised == 0  # not again
+    f.severity = "low"  # graded by an older rule: the next scan corrects it
+    loaded.commit()
+    assert rf.scan(loaded, today=date(2026, 10, 27)).regraded == 1
+    assert f.severity == "high"
     assert [r["kind"] for r in queries.red_flags(loaded, days=3650)] == ["auditor exit"]
     rf.dismiss(loaded, f.id, "the new auditor is a big-four firm")
     assert queries.red_flags(loaded, days=3650) == []

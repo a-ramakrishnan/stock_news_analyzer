@@ -213,6 +213,11 @@ def test_amounts_shown_with_their_meaning():
     ncd = Event(event_type="fundraise", value_cr=Decimal(500), materiality=0.0019)
     assert ev.amount(ncd) == "Rs 500 cr (0.2% of revenue)"
     assert ev.amount(Event(event_type="capex", value_cr=Decimal("0.5"))) == "Rs 50 lakh"
+    # Under Rs 1 crore with the figure as written: the filing's own words.
+    written = Event(
+        event_type="legal_regulatory", value_cr=Decimal(0), value_as_written="Rs 39,000"
+    )
+    assert ev.amount(written) == "Rs 39,000"
 
 
 # --- extraction and QA ----------------------------------------------------------------

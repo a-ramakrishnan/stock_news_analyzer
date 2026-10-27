@@ -64,6 +64,10 @@ Yahoo answered for gold, silver and USD/INR. stooq returned a web page instead o
 
 Some days stay far apart even so: January 2026 swung between +7% and −10% with little global move. That is the ETFs' own premium to the metal moving while Indian ETF demand ran hot, and it is what "local" stands for.
 
+## After the second run
+
+With prices at the Indian close, "other" fell to mostly under ±0.3%; days like 28 Sep and 31 Aug now read as global-price days. The notes were still waiting: Google News answered every search with HTTP 503, company searches included, while a plain `curl` of the same search got 200. Google News had started refusing the news client's Chrome imitation (which NSE's bot protection needs). A feed that refuses it is now tried once more with a plain client, which also brings back the Google News searches for company news.
+
 ## Next
 
 Email delivery of the digest comes later. Of the agents, the Theme & Peer Analyst (14) and Analyst Q&A (17) are left.

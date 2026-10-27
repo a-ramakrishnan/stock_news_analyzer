@@ -1,5 +1,6 @@
 from datetime import UTC, date, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -330,3 +331,27 @@ def test_backfill_all_companies_and_reruns_store_nothing_new(watchlist):
     assert len(client.queries) == 3  # one month, three companies
     again = collector.backfill(date(2023, 11, 1), date(2023, 11, 30))
     assert again.new == 0 and again.matched == 1
+
+
+def test_a_feed_refusing_the_browser_client_is_tried_with_a_plain_one():
+    from stock_news_analyzer.sources.news import NewsClient, NewsError
+
+    class Session:
+        def __init__(self, status, body=b"<rss/>"):
+            self.status, self.body, self.calls = status, body, 0
+
+        def get(self, url, timeout=None):
+            self.calls += 1
+            return SimpleNamespace(status_code=self.status, content=self.body)
+
+    # Google News answered the Chrome imitation with 503 and a plain client with 200 (Oct 2026).
+    client = NewsClient(delay=0)
+    client._session, client._plain = Session(503), Session(200, b"<rss>ok</rss>")
+    assert client.fetch("https://news.google.com/rss/search?q=x") == b"<rss>ok</rss>"
+    # A feed the browser client reads is not fetched twice.
+    client._session, client._plain = Session(200, b"<rss>1</rss>"), Session(200)
+    assert client.fetch("https://example.com/feed") == b"<rss>1</rss>"
+    assert client._plain.calls == 0
+    client._session, client._plain = Session(503), Session(503)
+    with pytest.raises(NewsError, match="HTTP 503"):
+        client.fetch("https://news.google.com/rss/search?q=x")

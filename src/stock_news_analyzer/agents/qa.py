@@ -66,7 +66,8 @@ company's stock-exchange filing. Compare it with the filing and answer:
   an event the filing does not state.
 - event_type_correct, and correct_event_type (the right one, or the same if correct). Types:
   capex, guidance, management_change, credit_rating, legal_regulatory, acquisition, fundraise,
-  promoter_action, disruption, agreement, approval, other.
+  promoter_action, disruption, agreement, approval, other. An agreement to issue shares or
+  raise money is a fundraise, not an agreement.
 - value_correct: is the amount right (or rightly null)? If not, give the right amount exactly
   as the filing writes it in correct_value_as_written, and in Indian rupees crore in
   correct_value_cr (1 crore = 10 million = 100 lakh); null if the event has no amount.

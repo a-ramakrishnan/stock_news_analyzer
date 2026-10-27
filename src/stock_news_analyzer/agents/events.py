@@ -39,7 +39,7 @@ from stock_news_analyzer.text import clean
 
 log = logging.getLogger(__name__)
 
-PROMPT_VERSION = "events-1"
+PROMPT_VERSION = "events-2"
 EVENT_DAYS = 400  # how far back the first run reads
 BATCH_SIZE = 6  # filings per LLM call
 FILING_CHARS = 5000  # of each filing's text; event letters are short
@@ -91,16 +91,18 @@ director resigning and another appointed). Event types:
 - acquisition: buying or selling a company, business, stake or asset; a merger, demerger,
   joint venture or new subsidiary.
 - fundraise: a QIP, preferential issue, rights issue, warrants, debentures or loans raised, or
-  a buyback.
+  a buyback; also an agreement with an investor to subscribe to shares the company issues.
 - promoter_action: promoters buying or selling shares, or creating, releasing or invoking a
   pledge.
 - disruption: a fire, accident, strike, lockout, shutdown, cyber attack or natural disaster.
-- agreement: an MoU, partnership, licence or technology agreement (not a customer's order).
+- agreement: an MoU, partnership, licence or technology agreement (not a customer's order,
+  and not an agreement to issue shares or raise money: that is a fundraise).
 - approval: a regulatory approval, product approval or launch, or a licence granted.
 - other: another announcement an investor would want to know about.
 
 Give no event for routine compliance filings: trading window closures, certificates,
-newspaper copies, meeting notices that announce nothing, intimations of an analyst meeting.
+newspaper copies, meeting notices that announce nothing, intimations of an analyst meeting,
+ESG scores or ESG ratings.
 Results and customers' orders are recorded by other agents: skip them.
 
 For each event:
@@ -405,6 +407,17 @@ def run(
 
 
 # --- reading back ----------------------------------------------------------------
+
+
+def amount(e: Event) -> str:
+    """The event's amount for display: 'Rs 249 cr (3% of revenue)'. A rating's amount is the
+    debt rated, not money spent or raised, so it says so: 'Rs 12,000 cr rated'."""
+    if e.value_cr is None:
+        return ""
+    if e.event_type == "credit_rating":
+        return f"Rs {e.value_cr:,.0f} cr rated"
+    share = f" ({e.materiality:.0%} of revenue)" if e.materiality is not None else ""
+    return f"Rs {e.value_cr:,.0f} cr{share}"
 
 
 def coverage(session: Session) -> list[dict]:

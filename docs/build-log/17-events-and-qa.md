@@ -72,6 +72,16 @@ uv run sna events review
 make scheduler
 ```
 
+## After the first run
+
+743 filings from the last 400 days: 248 read (58 with no event), 166 copies from the other exchange, 329 waiting for their PDF (300 are downloaded per run). 211 events for $0.27; QA passed 200, marked 11 as repeats, and the second pass confirmed all 33 it checked. Three things to tune:
+
+- **A share issue recorded as an agreement.** Ujjivan's subscription agreement with IFC for a Rs 249 crore preferential issue was typed `agreement`, and the second pass let it stand. Both prompts now say an agreement to issue shares or raise money is a fundraise.
+- **Rating amounts read like deal sizes.** "Rs 1,60,000 crore" next to a rating is the debt rated. Amounts of rating actions are now shown as "Rs 1,60,000 cr rated", in the CLI, the digest and the Stock page.
+- **ESG scores.** ESG ratings from CRISIL, NSE and others came through as `other` events. Filings with "ESG" in the title are now skipped, and the prompt says to give no event for them.
+
+The prompt version is now `events-2`; `sna events reset` and a new run re-read the filings with it.
+
 ## Next
 
 The Red-flag Monitor (agent 15), built on the events: auditor exits, pledges, penalties and downgrades as their own alerts. Events can also become evidence for the Move Explainer.

@@ -579,9 +579,10 @@ def events_tab_body(s: dict) -> None:
             ),
             "sentiment": st.column_config.TextColumn("Sentiment"),
             "headline": st.column_config.TextColumn("Event", width="large"),
-            "value_cr": st.column_config.NumberColumn("Rs crore", format="localized"),
-            "materiality": st.column_config.NumberColumn(
-                "Of revenue", format="percent", help="The amount ÷ the 12 months' revenue."
+            "amount": st.column_config.TextColumn(
+                "Amount",
+                help="Share of revenue: the amount ÷ the 12 months' revenue. A rating's amount "
+                "is the debt rated.",
             ),
             "qa": st.column_config.TextColumn("QA"),
             "qa_notes": st.column_config.TextColumn("QA notes", width="medium"),

@@ -283,6 +283,7 @@ ROUTINE_WORDS = (
     "scrutini",
     "business responsibility",
     "loss of share",
+    "esg",
 )
 
 
@@ -290,12 +291,10 @@ def event_candidate(doc_type: str, title: str | None, subject: str | None) -> bo
     """Whether a filing may announce an event the Event Extractor records."""
     if doc_type not in EVENT_DOC_TYPES:
         return False
-    if doc_type == "credit_rating":
-        return True
     text = f"{title or ''} {subject or ''}".lower()
     if any(w in text for w in ROUTINE_WORDS):
         return False
-    return any(w in text for w in EVENT_WORDS)
+    return doc_type == "credit_rating" or any(w in text for w in EVENT_WORDS)
 
 
 def classify(subject: str, title: str, category: str | None, raw: dict | None = None) -> str:

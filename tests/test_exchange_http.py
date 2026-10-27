@@ -22,6 +22,8 @@ def _client(responses):
 
     def fake_get(session, url, **kwargs):
         calls.append(url)
+        if isinstance(responses[0], Exception):
+            raise responses.pop(0)
         body, status, ctype = responses.pop(0)
         return SimpleNamespace(content=body, status_code=status, headers={"content-type": ctype})
 
@@ -108,3 +110,15 @@ def test_deals_request_refreshes_cookies_once_on_403():
     )
     client._get = lambda s, url, **kw: next(answers)
     assert client.nse_deals("bulk", date(2026, 10, 1), date(2026, 10, 2)) == b"x"
+
+
+def test_download_survives_timeouts():
+    from curl_cffi.requests.exceptions import Timeout
+
+    # A large PDF timed out on a slow line and stopped `sna events run` (27 Oct 2026).
+    client, calls = _client([Timeout("timed out"), (PDF, 200, "application/pdf")])
+    assert client.download("nse", ["https://x/a.pdf"])[1] == PDF
+    client, calls = _client([Timeout("timed out"), Timeout("timed out again")])
+    with pytest.raises(ExchangeError, match="network error"):
+        client.download("nse", ["https://x/a.pdf"])
+    assert len(calls) == 2  # given up after two failures, not three

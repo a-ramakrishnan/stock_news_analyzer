@@ -193,7 +193,8 @@ class ExchangeClient:
     ) -> tuple[str, bytes, bool]:
         """Download the first URL that returns a file. Returns (url, content, complete).
 
-        A file that arrives cut short is retried up to `attempts` times. If two attempts return
+        A file that arrives cut short is retried up to `attempts` times; a timeout or network
+        error once. Raises ExchangeError when no URL gives a file. If two attempts return
         the same incomplete file, the exchange itself holds a broken copy (seen on NSE in Oct
         2026); it is returned with complete=False rather than retried further.
         """
@@ -201,8 +202,21 @@ class ExchangeClient:
         last = "no response"
         for url in urls:
             previous = None
+            failures = 0
             for _ in range(attempts):
-                resp = self._get(session, url, headers=BSE_HEADERS if exchange == "bse" else None)
+                try:
+                    resp = self._get(
+                        session, url, headers=BSE_HEADERS if exchange == "bse" else None
+                    )
+                except creq.exceptions.RequestException as exc:
+                    # A timeout or dropped connection (large PDFs on a slow line): try once
+                    # more, then give up on this URL rather than stop the whole run.
+                    failures += 1
+                    last = f"network error: {str(exc)[:200]}"
+                    log.warning("%s: %s", url, last)
+                    if failures >= 2:
+                        break
+                    continue
                 if resp.status_code != 200 or "html" in resp.headers.get("content-type", ""):
                     last = f"HTTP {resp.status_code}"
                     break  # not here; try the next URL

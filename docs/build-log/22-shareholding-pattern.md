@@ -24,6 +24,10 @@
   - Contexts that also name a single shareholder, for the lists of large holders, are left out.
 - **No promoters:** L&T has none, so its file has no promoter member at all, and the listing says `pr_and_prgrp=0`. That is stored as 0%.
 
+## First run
+
+The first run on the Mac stopped at a 2023 filing with a promoter stake of 5,117%. Files from 2025 on write percentages as fractions (0.5117), but older ones write percent (51.17). The parser now reads the scale from each file's total category, 1 or 100, and refuses any percentage outside 0–100. A file that fails is reported and skipped; until now one bad file stopped the whole run.
+
 ## Red flags
 
 - **Promoters selling:** only when the promoters hold fewer shares than the quarter before. A stake that falls because new shares were issued, such as a QIP or a merger, is dilution and raises nothing.

@@ -6,7 +6,7 @@ the file each figure is tagged with what it is (NumberOfShares,
 ShareholdingAsAPercentageOfTotalNumberOfShares...) and its context names the holder category
 as a dimension member: ShareholdingOfPromoterAndPromoterGroupMember, MutualFundsOrUTIMember,
 InstitutionsForeignMember, ShareholdingPatternMember (the total) and so on. Percentages are
-written as fractions (0.1939 for 19.39%).
+written as fractions (0.1939 for 19.39%) from 2025, as percent (19.39) before.
 """
 
 import re
@@ -61,6 +61,13 @@ def _number(text: str) -> Decimal | None:
         return None
 
 
+def _pct(value: Decimal) -> Decimal:
+    """A percentage, checked: outside 0-100 the file has been misread."""
+    if not 0 <= value <= 100:
+        raise ValueError(f"percentage {value} out of range")
+    return value.quantize(Decimal("0.0001"))
+
+
 def parse(content: bytes) -> Pattern:
     """The categories of a shareholding-pattern file, from the contexts that name exactly one
     category (contexts that also name a shareholder, for the lists of large holders, are
@@ -75,6 +82,8 @@ def parse(content: bytes) -> Pattern:
         if len(explicit) == 1 and not typed:
             category[ctx.get("id")] = _member(explicit[0])
     out = Pattern()
+    raw_pct: dict[str, Decimal] = {}
+    locked: Decimal | None = None
     encumbered: list[Decimal] = []
     encumbered_shares: list[Decimal] = []
     for el in root.iter():
@@ -92,19 +101,28 @@ def parse(content: bytes) -> Pattern:
         if tag == "NumberOfShares":
             cat["shares"] = int(value)
         elif tag == "ShareholdingAsAPercentageOfTotalNumberOfShares":
-            cat["pct"] = str((value * 100).quantize(Decimal("0.0001")))
+            raw_pct[name] = value
         elif tag == "NumberOfShareholders":
             cat["holders"] = int(value)
         elif name == PROMOTER and tag == "LockedInSharesAsAPercentageOfTotalNumberOfShares":
-            out.locked_pct = (value * 100).quantize(Decimal("0.0001"))
+            locked = value
         elif name == PROMOTER and ENCUMBERED.search(tag):
             (encumbered if "Percentage" in tag else encumbered_shares).append(value)
+    # Files from 2025 on write percentages as fractions (0.1939), older ones as percent
+    # (19.39). The total says which: 1 or 100; without it, any figure above 1 means percent.
+    total = raw_pct.get(TOTAL)
+    if total is not None:
+        scale = Decimal(100) if total <= Decimal("1.5") else Decimal(1)
+    else:
+        scale = Decimal(1) if any(v > 1 for v in raw_pct.values()) else Decimal(100)
+    for name, value in raw_pct.items():
+        out.categories[name]["pct"] = str(_pct(value * scale))
+    if locked is not None:
+        out.locked_pct = _pct(locked * scale)
     # The form splits encumbrance into pledges, non-disposal undertakings and others, with a
     # total: the largest figure is the total.
     if encumbered:
-        out.pledged_pct = (max(encumbered) * 100).quantize(Decimal("0.0001"))
+        out.pledged_pct = _pct(max(encumbered) * scale)
     elif encumbered_shares and out.shares(PROMOTER):
-        out.pledged_pct = (max(encumbered_shares) * 100 / out.shares(PROMOTER)).quantize(
-            Decimal("0.0001")
-        )
+        out.pledged_pct = _pct(max(encumbered_shares) * 100 / out.shares(PROMOTER))
     return out

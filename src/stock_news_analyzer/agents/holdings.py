@@ -159,7 +159,12 @@ def import_holdings(
                     "run `sna holdings probe` and send its output"
                 )
                 continue
-            store(session, company.isin, filing, pattern)
+            try:
+                with session.begin_nested():  # a bad file loses itself, not the run
+                    store(session, company.isin, filing, pattern)
+            except Exception as exc:
+                result.errors.append(f"{company.nse_symbol} {filing['end']}: {exc}")
+                continue
             new += 1
         session.commit()
         result.filings += new

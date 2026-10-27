@@ -1,4 +1,4 @@
-.PHONY: setup up down health migrate securities watchlist filings news triage explain concalls promises orders results events flags bullion themes prices digest backfill run-all scheduler scheduler-logs scheduler-stop ui ui-docker ui-stop test lint format docker-health
+.PHONY: setup up down health migrate securities watchlist filings news triage explain concalls promises orders results events flags holdings bullion themes prices digest backfill run-all scheduler scheduler-logs scheduler-stop ui ui-docker ui-stop test lint format docker-health
 
 setup:          ## Install Python dependencies and create .env
 	uv sync
@@ -53,6 +53,10 @@ flags:          ## Red flags from the events and overdue results (no LLM)
 bullion:        ## Gold and silver: global prices, each day's split, notes on unusual days
 	uv run sna bullion run
 	uv run sna bullion list
+
+holdings:       ## Shareholding patterns from NSE's XBRL files (no LLM), then the biggest moves
+	uv run sna holdings run
+	uv run sna holdings moves
 
 themes:         ## Themes across companies (Haiku) and read-across between watchlist stocks
 	uv run sna themes run

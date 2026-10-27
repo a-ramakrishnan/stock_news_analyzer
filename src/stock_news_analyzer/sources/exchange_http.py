@@ -29,6 +29,9 @@ NSE_CORPORATE_ACTIONS_URL = "https://www.nseindia.com/api/corporates-corporateAc
 # the PDF and to the XBRL file (the same figures, tagged).
 NSE_FINANCIAL_RESULTS_URL = "https://www.nseindia.com/api/corporates-financial-results"
 NSE_INTEGRATED_URL = "https://www.nseindia.com/api/integrated-filing-results"
+# The list behind NSE's "Shareholding Pattern" page: one row per quarterly filing, with the
+# quarter-end date and a link to the XBRL file.
+NSE_SHAREHOLDINGS_URL = "https://www.nseindia.com/api/corporate-share-holdings-master"
 # The API behind NSE's "Bulk & block deals" report; it answers only after that page is opened.
 NSE_DEALS_URL = "https://www.nseindia.com/api/historicalOR/bulk-block-short-deals"
 NSE_DEALS_PAGE = "https://www.nseindia.com/report-detail/display-bulk-and-block-deals"
@@ -125,6 +128,12 @@ class ExchangeClient:
         2025: one row per filing with its quarter-end date (qe_Date) and XBRL link."""
         params = {"index": index, "symbol": symbol, "type": "Integrated Filing- Financials"}
         data = self._get_json("nse", NSE_INTEGRATED_URL, params)
+        return data if isinstance(data, list) else data.get("data", [])
+
+    def nse_shareholdings(self, symbol: str, index: str = "equities") -> list:
+        """A symbol's quarterly shareholding-pattern filings, newest first."""
+        params = {"index": index, "symbol": symbol}
+        data = self._get_json("nse", NSE_SHAREHOLDINGS_URL, params)
         return data if isinstance(data, list) else data.get("data", [])
 
     def nse_json(self, url: str, params: dict):

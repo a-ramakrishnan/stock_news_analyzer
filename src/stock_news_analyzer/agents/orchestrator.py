@@ -182,6 +182,17 @@ def job_xbrl(session: Session) -> str:
     return summary
 
 
+def job_holdings(session: Session) -> str:
+    from stock_news_analyzer.agents import holdings
+    from stock_news_analyzer.sources.exchange_http import ExchangeClient
+
+    result = holdings.import_holdings(session, ExchangeClient())
+    summary = f"{result.filings} shareholding patterns, {result.skipped} already stored"
+    if result.errors:
+        raise JobError(summary, result.errors)
+    return summary
+
+
 def job_results(session: Session) -> str:
     from stock_news_analyzer.agents import results
     from stock_news_analyzer.llm import LLM
@@ -324,6 +335,7 @@ JOBS: dict[str, Callable[[Session], str]] = {
     "deals": job_deals,
     "prices": job_prices,
     "xbrl": job_xbrl,
+    "holdings": job_holdings,
     "results": job_results,
     "events": job_events,
     "flags": job_flags,
@@ -344,6 +356,7 @@ RUN_ALL = (
     "deals",
     "prices",
     "xbrl",
+    "holdings",
     "results",
     "events",
     "explain",

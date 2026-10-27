@@ -723,6 +723,44 @@ def results(session: Session, isin: str) -> pd.DataFrame:
     return pd.DataFrame(table(session, isin), columns=RESULT_COLUMNS)
 
 
+SHAREHOLDING_COLUMNS = [
+    "quarter",
+    "promoter",
+    "fii",
+    "dii",
+    "mf",
+    "insurance",
+    "retail",
+    "pledged",
+    "shareholders",
+]
+
+
+def shareholding(session: Session, isin: str) -> pd.DataFrame:
+    """A company's shareholding by quarter, oldest first, in percent of all shares (pledged:
+    percent of the promoters' shares)."""
+    from stock_news_analyzer.agents.holdings import history
+
+    rows = [
+        (
+            r.quarter_end,
+            r.promoter_pct,
+            r.fii_pct,
+            r.dii_pct,
+            r.mf_pct,
+            r.insurance_pct,
+            r.retail_pct,
+            r.pledged_pct,
+            r.shareholders,
+        )
+        for r in reversed(history(session, isin, limit=20))
+    ]
+    df = pd.DataFrame(rows, columns=SHAREHOLDING_COLUMNS)
+    for col in SHAREHOLDING_COLUMNS[1:8]:
+        df[col] = pd.to_numeric(df[col])
+    return df
+
+
 EVENT_COLUMNS = [
     "id",
     "filed",

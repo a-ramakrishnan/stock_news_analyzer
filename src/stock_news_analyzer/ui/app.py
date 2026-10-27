@@ -261,6 +261,7 @@ def stock_page_body() -> None:
     (
         unusual_tab,
         results_tab,
+        holdings_tab,
         events_tab,
         calls_tab,
         orders_tab,
@@ -273,6 +274,7 @@ def stock_page_body() -> None:
         [
             "Unusual days",
             "Results",
+            "Shareholding",
             "Events",
             "Earnings calls",
             "Order book",
@@ -336,6 +338,8 @@ def stock_page_body() -> None:
                 )
     with results_tab:
         results(s)
+    with holdings_tab:
+        shareholding(s)
     with events_tab:
         events_tab_body(s)
     with calls_tab:
@@ -363,6 +367,70 @@ def stock_page_body() -> None:
                     "dividend": st.column_config.NumberColumn("Dividend", format="₹%.2f"),
                 },
             )
+
+
+def shareholding(s: dict) -> None:
+    """Who owns the company, quarter by quarter, from its shareholding patterns."""
+    df = load("shareholding", isin=s["isin"])
+    if df.empty:
+        no_data(
+            "No shareholding patterns yet. The scheduler reads new ones each morning; "
+            f"`sna holdings run --symbol {s['symbol']}` reads three years now."
+        )
+        return
+    latest = df.iloc[-1]
+    prev = df.iloc[-2] if len(df) > 1 else None
+    cols = st.columns(4)
+    for col, (key, label) in zip(
+        cols,
+        [
+            ("promoter", "Promoters"),
+            ("fii", "Foreign inst."),
+            ("dii", "Domestic inst."),
+            ("retail", "Retail"),
+        ],
+        strict=True,
+    ):
+        delta = (
+            f"{latest[key] - prev[key]:+.2f} pts"
+            if prev is not None and pd.notna(latest[key]) and pd.notna(prev[key])
+            else None
+        )
+        col.metric(f"{label}, {latest['quarter']:%b %Y}", _fmt(latest[key], "{:.2f}%"), delta)
+    st.line_chart(
+        df.set_index("quarter")[["promoter", "fii", "dii", "retail"]].rename(
+            columns={
+                "promoter": "Promoters",
+                "fii": "Foreign institutions",
+                "dii": "Domestic institutions",
+                "retail": "Retail",
+            }
+        ),
+        y_label="% of shares",
+        height=260,
+    )
+    st.dataframe(
+        df.iloc[::-1],
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "quarter": st.column_config.DateColumn("Quarter end", format="MMM YYYY"),
+            "promoter": st.column_config.NumberColumn("Promoters", format="%.2f%%"),
+            "fii": st.column_config.NumberColumn("Foreign inst.", format="%.2f%%"),
+            "dii": st.column_config.NumberColumn("Domestic inst.", format="%.2f%%"),
+            "mf": st.column_config.NumberColumn("Mutual funds", format="%.2f%%"),
+            "insurance": st.column_config.NumberColumn("Insurers", format="%.2f%%"),
+            "retail": st.column_config.NumberColumn("Retail", format="%.2f%%"),
+            "pledged": st.column_config.NumberColumn(
+                "Pledged", format="%.2f%%", help="Percent of the promoters' own shares."
+            ),
+            "shareholders": st.column_config.NumberColumn("Shareholders", format="localized"),
+        },
+    )
+    st.caption(
+        "Percent of all shares, from the quarterly shareholding pattern. Domestic institutions "
+        "include mutual funds and insurers; retail is individuals holding up to Rs 2 lakh."
+    )
 
 
 TONE = {"positive": "🟢", "neutral": "⚪", "cautious": "🟠", "negative": "🔴"}

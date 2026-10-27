@@ -78,6 +78,12 @@ flags_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(flags_app, name="flags")
+bullion_app = typer.Typer(
+    help="Bullion Analyst: Indian gold and silver moves split into global price, rupee and "
+    "the rest, with a note on unusual days.",
+    no_args_is_help=True,
+)
+app.add_typer(bullion_app, name="bullion")
 deals_app = typer.Typer(help="NSE bulk and block deals.", no_args_is_help=True)
 app.add_typer(deals_app, name="deals")
 app.add_typer(triage_app, name="triage")
@@ -2360,6 +2366,117 @@ def flags_dismiss(
             typer.echo(str(exc))
             raise typer.Exit(1) from exc
         typer.echo(f"#{f.id} dismissed: {f.title}")
+
+
+# --- bullion ---------------------------------------------------------------------
+
+
+@bullion_app.command("probe")
+def bullion_probe() -> None:
+    """Check which sources answer for global gold, silver and USD/INR (stooq, Yahoo)."""
+    from datetime import timedelta
+
+    from stock_news_analyzer.sources import markets
+    from stock_news_analyzer.sources.news import NewsClient
+
+    client = NewsClient()
+    end = datetime.now(fl.IST).date()
+    start = end - timedelta(days=14)
+    for series in markets.SERIES:
+        for source, url, parse in (
+            ("stooq", markets.stooq_url(series, start, end), markets.parse_stooq),
+            ("yahoo", markets.yahoo_url(series, start, end), markets.parse_yahoo),
+        ):
+            try:
+                rows = parse(client.fetch(url))
+                last_day, last = rows[-1]
+                typer.echo(f"{series:<7} {source:<6} ok: {len(rows)} days, {last_day} {last:,.4f}")
+            except Exception as exc:
+                typer.echo(f"{series:<7} {source:<6} FAILED: {str(exc)[:150]}")
+
+
+@bullion_app.command("run")
+def bullion_run(
+    notes: bool = typer.Option(True, help="Write notes on recent unusual days (Sonnet)."),
+) -> None:
+    """Fetch global prices, split each day's move, collect bullion news, explain unusual days."""
+    from stock_news_analyzer.agents import bullion as bu
+    from stock_news_analyzer.llm import LLM, month_spend
+    from stock_news_analyzer.sources.news import NewsClient
+
+    with get_session() as session:
+        if not bu.watched_metals(session):
+            typer.echo("no bullion on the watchlist; add it with: sna watchlist add gold")
+            raise typer.Exit(1)
+        llm = LLM(session) if notes and get_settings().anthropic_api_key else None
+        result = bu.run(session, llm, NewsClient().fetch, notes=notes, progress=typer.echo)
+        spent = month_spend(session)
+    sources = ", ".join(f"{s} from {src}" for s, src in result.series.items()) or "none"
+    typer.echo(
+        f"{result.points} global closes ({sources}); {result.days} days split, "
+        f"{result.unusual} unusual; {result.articles} new articles; {result.notes} notes, "
+        f"${result.cost_usd:.4f} (this month ${spent:.2f})"
+    )
+    for err in result.errors:
+        typer.echo(f"error: {err}")
+    if result.errors:
+        raise typer.Exit(1)
+
+
+@bullion_app.command("list")
+def bullion_list(
+    metal: str = typer.Argument("gold", help="gold or silver."),
+    days: int = typer.Option(30, help="How many days back."),
+    unusual: bool = typer.Option(False, "--unusual", help="Only unusual days."),
+) -> None:
+    """Day by day: the rupee move, its split, and the note on unusual days."""
+    from stock_news_analyzer.agents import bullion as bu
+
+    with get_session() as session:
+        rows = bu.recent_moves(session, metal.upper(), days)
+        rows = [m for m in rows if m.unusual] if unusual else rows
+        if not rows:
+            typer.echo(f"no {metal} moves stored for that window; run: sna bullion run")
+            return
+        typer.echo(
+            f"{'day':<10} {metal.upper() + ' ETF':>12} {'rupees':>8} {'global':>8} "
+            f"{'rupee':>8} {'other':>8} {'z':>5}  driver"
+        )
+        for m in rows:
+            typer.echo(
+                f"{m.trade_date:%d %b %y}  {m.close:>12,.2f} {bu._pct(m.inr_return):>8} "
+                f"{bu._pct(m.global_return):>8} {bu._pct(m.fx_return):>8} "
+                f"{bu._pct(m.other_return):>8} "
+                f"{(f'{m.zscore:+.1f}' if m.zscore is not None else '–'):>5}  "
+                f"{'*' if m.unusual else ' '}{m.driver or ''}"
+            )
+            if m.note:
+                typer.echo(f"{'':<12}{m.note}")
+    typer.echo(
+        "rupees = global + rupee + other (log returns). rupee: USD/INR. other: duty, local "
+        "premium, and the gap between the Indian and New York closes. * unusual (2σ)."
+    )
+
+
+@bullion_app.command("explain")
+def bullion_explain(
+    day: str = typer.Argument(..., help="YYYY-MM-DD."),
+    metal: str = typer.Option("gold", help="gold or silver."),
+) -> None:
+    """Write (or rewrite) the note for one day, after searching that day's news (Sonnet)."""
+    from stock_news_analyzer.agents import bullion as bu
+    from stock_news_analyzer.llm import LLM
+    from stock_news_analyzer.sources.news import NewsClient
+
+    when = datetime.strptime(day, "%Y-%m-%d").date()
+    with get_session() as session:
+        try:
+            m = bu.explain(session, LLM(session), metal.upper(), when, NewsClient().fetch)
+        except LookupError as exc:
+            typer.echo(str(exc))
+            raise typer.Exit(1) from exc
+        typer.echo(f"{m.metal.title()} {m.trade_date:%d %b %Y}: {bu.summary(m)}")
+        typer.echo(f"{m.driver}: {m.note}")
 
 
 # --- bulk and block deals ------------------------------------------------------

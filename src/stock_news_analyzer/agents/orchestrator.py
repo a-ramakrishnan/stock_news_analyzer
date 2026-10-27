@@ -226,6 +226,24 @@ def job_flags(session: Session) -> str:
     return f"{result.raised} red flags raised ({counts})"
 
 
+def job_bullion(session: Session) -> str:
+    from stock_news_analyzer.agents import bullion
+    from stock_news_analyzer.llm import LLM
+    from stock_news_analyzer.sources.news import NewsClient
+
+    if not bullion.watched_metals(session):
+        return "skipped: no bullion on the watchlist"
+    llm = LLM(session) if get_settings().anthropic_api_key else None
+    result = bullion.run(session, llm, NewsClient().fetch)
+    summary = (
+        f"{result.days} days split, {result.unusual} unusual; {result.notes} notes, "
+        f"${result.cost_usd:.4f}"
+    )
+    if result.errors:
+        raise JobError(summary, result.errors)
+    return summary
+
+
 def job_prices(session: Session) -> str:
     from stock_news_analyzer.agents.prices import (
         PriceCollector,
@@ -293,6 +311,7 @@ JOBS: dict[str, Callable[[Session], str]] = {
     "results": job_results,
     "events": job_events,
     "flags": job_flags,
+    "bullion": job_bullion,
     "explain": job_explain,
     "concalls": job_concalls,
     "promises": job_promises,
@@ -315,6 +334,7 @@ RUN_ALL = (
     "promises",
     "orders",
     "flags",
+    "bullion",
     "digest",
 )
 

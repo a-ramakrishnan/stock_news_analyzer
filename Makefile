@@ -1,4 +1,4 @@
-.PHONY: setup up down health migrate securities watchlist filings news triage explain concalls promises orders results events flags prices digest backfill run-all scheduler scheduler-logs scheduler-stop ui ui-docker ui-stop test lint format docker-health
+.PHONY: setup up down health migrate securities watchlist filings news triage explain concalls promises orders results events flags bullion prices digest backfill run-all scheduler scheduler-logs scheduler-stop ui ui-docker ui-stop test lint format docker-health
 
 setup:          ## Install Python dependencies and create .env
 	uv sync
@@ -49,6 +49,10 @@ events:         ## LLM events from other filings (capex, ratings, management...)
 flags:          ## Red flags from the events and overdue results (no LLM)
 	uv run sna flags run
 	uv run sna flags list
+
+bullion:        ## Gold and silver: global prices, each day's split, notes on unusual days
+	uv run sna bullion run
+	uv run sna bullion list
 
 orders:         ## LLM reading of order wins and order books, then the peer table
 	uv run sna orders run

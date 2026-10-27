@@ -214,7 +214,7 @@ def doc_types(session: Session) -> list[str]:
     return list(
         session.scalars(
             select(Document.doc_type)
-            .where(Document.doc_type != "news")
+            .where(Document.doc_type.not_in(("news", "bullion_news")))
             .distinct()
             .order_by(Document.doc_type)
         )
@@ -792,6 +792,44 @@ def red_flags(
     ]
 
 
+BULLION_COLUMNS = ["date", "close", "rupees", "global", "rupee", "other", "z", "driver", "note"]
+
+
+def bullion(session: Session, metal: str, days: int = 90) -> pd.DataFrame:
+    """A metal's days, newest first: the ETF close, the rupee move and its split (as simple
+    returns), the z-score, the driver and the note."""
+    import math
+
+    from stock_news_analyzer.agents.bullion import recent_moves
+
+    def pct(x):
+        return None if x is None else math.expm1(x)
+
+    return pd.DataFrame(
+        [
+            {
+                "date": m.trade_date,
+                "close": float(m.close),
+                "rupees": pct(m.inr_return),
+                "global": pct(m.global_return),
+                "rupee": pct(m.fx_return),
+                "other": pct(m.other_return),
+                "z": m.zscore,
+                "driver": (m.driver or "").replace("_", " "),
+                "note": m.note,
+            }
+            for m in recent_moves(session, metal, days)
+        ],
+        columns=BULLION_COLUMNS,
+    )
+
+
+def bullion_metals(session: Session) -> list[str]:
+    from stock_news_analyzer.agents.bullion import watched_metals
+
+    return watched_metals(session)
+
+
 def order_peers(session: Session) -> pd.DataFrame:
     """Order-driven watchlist companies side by side (see agents/orders.peers)."""
     from stock_news_analyzer.agents.orders import peers
@@ -863,6 +901,7 @@ def last_runs(session: Session) -> dict[str, dict]:
         "prices",
         "events",
         "flags",
+        "bullion",
         "explain",
         "securities",
         "digest",
@@ -892,10 +931,15 @@ def data_counts(session: Session) -> dict[str, object]:
         "price history": f"{first} to {last}" if first else "none",
         "price rows": session.scalar(select(func.count()).select_from(PriceDaily)),
         "filings": session.scalar(
-            select(func.count()).select_from(Document).where(Document.doc_type != "news")
+            select(func.count())
+            .select_from(Document)
+            .where(Document.doc_type.not_in(("news", "bullion_news")))
         ),
         "news articles": session.scalar(
             select(func.count()).select_from(Document).where(Document.doc_type == "news")
+        ),
+        "bullion news": session.scalar(
+            select(func.count()).select_from(Document).where(Document.doc_type == "bullion_news")
         ),
         "labels": session.scalar(select(func.count()).select_from(EventLabel)),
         "earnings calls analysed": session.scalar(

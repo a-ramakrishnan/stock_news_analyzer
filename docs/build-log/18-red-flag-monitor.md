@@ -22,7 +22,7 @@
 | Independent director resigns mid-term | medium; at the end of a term: none |
 | Rating downgrade | high; negative outlook or watch: medium |
 | Promoter pledge invoked | high; created or increased: medium; released: none |
-| Promoter sells shares | medium; a fund or other large holder selling 1% or more: low |
+| Promoter sells 1% or more | medium; 0.1% or more, or size unknown: low; a fund or other holder selling 1% or more: low |
 | Penalty, tax demand, court or regulator's order | by its amount against a year's revenue: 1% or more high, 0.1% or more medium, smaller low; without an amount, by importance; any SEBI order at least medium; a mixed outcome at most medium |
 | Disruption | high at importance 4-5, else medium |
 | Results not filed by the deadline | medium; 30 days late: high |
@@ -46,6 +46,8 @@ Results deadlines follow SEBI's LODR Regulation 33: 45 days after a quarter or h
 - **Small amounts lost to rounding.** Events stored before amounts kept four decimals showed "Rs 0 lakh". Amounts under Rs 1 crore now show as the filing writes them ("Rs. 4,55,000").
 
 Open flags graded by an older rule are re-graded on the next scan; dismissed ones are left alone.
+
+The re-graded run then showed KMEW's MD selling 1,800 shares as a medium flag: the filing gave no percentage, and a promoter sale of unknown size counted as medium. Events now also record the number of shares (checked against the filing), and a sale given only in shares is sized against the shares outstanding, worked out from the market cap and the latest close. A promoter selling 1% or more is medium, 0.1% or more low, less nothing; a sale of unknown size is low. The model is also told that `stake_pct` is the stake in the event, not the holding after it (BlackBuck's promoter "reducing his holding to 10.70%"). Prompt version `events-4`.
 
 ## Not yet
 

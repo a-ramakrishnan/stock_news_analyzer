@@ -194,6 +194,9 @@ def code_checks(session: Session, event: Event, text: str) -> list[str]:
     if event.event_date and not (published - EARLIEST <= event.event_date <= published + LATEST):
         notes.append(f"date {event.event_date:%d %b %Y} is far from the filing's; dropped")
         event.event_date = None
+    if event.shares is not None and Decimal(event.shares) not in rs.numbers_in(text):
+        notes.append(f"{event.shares:,} shares not found in the filing; dropped")
+        event.shares = None
     if event.stake_pct is not None and not 0 < event.stake_pct <= 100:
         notes.append(f"stake {event.stake_pct}% is not a percentage; dropped")
         event.stake_pct = None

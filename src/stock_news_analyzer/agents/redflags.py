@@ -7,8 +7,10 @@ so the monitor only has to pick out the ones that warn of trouble and say how se
 - The CEO, MD or CFO leaving: resigning or retiring early (high), otherwise ceasing (medium);
   an independent director resigning mid-term (medium).
 - A rating downgrade (high); a negative outlook or watch (medium).
-- A promoter's pledge invoked (high) or created (medium); a promoter selling (medium); a fund
-  or other large holder selling 1% or more (low).
+- A promoter's pledge invoked (high) or created (medium); a promoter selling 1% or more of the
+  company (medium), 0.1% or more or an unknown amount (low); a fund or other large holder
+  selling 1% or more (low). A sale given only in shares is sized against the shares
+  outstanding (market cap ÷ the latest close).
 - A penalty, tax demand or regulator's order, by its size against revenue: 1% or more (high),
   0.1% or more (medium), smaller (low); any SEBI order is at least medium; a mixed outcome
   (a hearing adjourned, a stay continuing) one step lower.
@@ -35,6 +37,7 @@ from stock_news_analyzer.models import (
     Document,
     DocumentCompany,
     Event,
+    PriceDaily,
     QuarterlyResult,
     RedFlag,
     WatchlistItem,
@@ -60,6 +63,7 @@ INVOKED = re.compile(r"invok|invoc")
 CREATED = re.compile(r"creat|increas|additional")
 SELLING = re.compile(r"\bsold\b|\bsell|\bsale\b|offload|divest|reduc")
 REGULATOR = re.compile(r"\bsebi\b")
+MINOR_STAKE = 0.1  # percent: a promoter selling less than this raises nothing
 RESULTS_LAG = {3: 45, 6: 45}  # days after the period ends (LODR Regulation 33)
 YEAR_END_LAG = 60  # the March quarter or half year comes with the annual results
 
@@ -88,8 +92,9 @@ def _filed(e: Event) -> date:
     return e.published_at.astimezone(IST).date()
 
 
-def judge(e: Event, symbol: str) -> Flag | None:
-    """The red flag an event raises, if any."""
+def judge(e: Event, symbol: str, shares_out: float | None = None) -> Flag | None:
+    """The red flag an event raises, if any. `shares_out`, the company's shares outstanding,
+    sizes a sale whose filing gives the number of shares but no percentage."""
     who = _text(e.role, e.person)
     what = _text(e.action, e.headline)
     if e.event_type == "management_change":
@@ -126,10 +131,19 @@ def judge(e: Event, symbol: str) -> Flag | None:
         if SELLING.search(what):
             # A promoter selling is a signal; a fund or early investor trimming, much less.
             promoter = "promoter" in _text(e.person, e.counterparty, e.action, e.headline)
-            if promoter and (e.stake_pct is None or e.stake_pct >= 1):
-                return Flag("promoter_selling", "medium", f"{symbol}: {e.headline}")
-            if (e.stake_pct or 0) >= 1:
-                return Flag("holder_selling", "low", f"{symbol}: {e.headline}")
+            stake = e.stake_pct
+            if stake is None and e.shares and shares_out:
+                stake = 100 * e.shares / shares_out
+            detail = f"{stake:.2f}% of the company" if stake is not None else None
+            if promoter:
+                if stake is None:  # size unknown
+                    return Flag("promoter_selling", "low", f"{symbol}: {e.headline}")
+                if stake >= 1:
+                    return Flag("promoter_selling", "medium", f"{symbol}: {e.headline}", detail)
+                if stake >= MINOR_STAKE:
+                    return Flag("promoter_selling", "low", f"{symbol}: {e.headline}", detail)
+            elif (stake or 0) >= 1:
+                return Flag("holder_selling", "low", f"{symbol}: {e.headline}", detail)
         return None
     if e.event_type == "legal_regulatory" and e.sentiment in ("negative", "mixed"):
         m = e.materiality
@@ -168,8 +182,11 @@ def _event_flags(session: Session, since: date | None) -> list[tuple[RedFlag, Ev
     if since:
         query = query.where(Event.published_at >= datetime.combine(since, datetime.min.time(), IST))
     out = []
+    shares_out: dict[str, float | None] = {}
     for e, company in session.execute(query).all():
-        flag = judge(e, company.nse_symbol or company.name)
+        if e.isin not in shares_out:
+            shares_out[e.isin] = shares_outstanding(session, company)
+        flag = judge(e, company.nse_symbol or company.name, shares_out[e.isin])
         if flag is None:
             continue
         out.append(
@@ -186,6 +203,20 @@ def _event_flags(session: Session, since: date | None) -> list[tuple[RedFlag, Ev
             )
         )
     return out
+
+
+def shares_outstanding(session: Session, company: Company) -> float | None:
+    """Shares outstanding, from the market cap (BSE's scrip list) and the latest close. Good
+    enough to size a sale: shares change little between refreshes."""
+    if not company.market_cap_cr:
+        return None
+    close = session.scalar(
+        select(PriceDaily.close)
+        .where(PriceDaily.isin == company.isin, PriceDaily.close.is_not(None))
+        .order_by(PriceDaily.trade_date.desc())
+        .limit(1)
+    )
+    return float(company.market_cap_cr) * 1e7 / float(close) if close else None
 
 
 def _next_period(end: date, months: int) -> date:

@@ -2194,6 +2194,7 @@ def events_show(
             "rating_from",
             "rating_to",
             "stake_pct",
+            "shares",
         ):
             if getattr(e, name) is not None:
                 typer.echo(f"  {name}: {getattr(e, name)}")

@@ -772,6 +772,26 @@ def events(session: Session, isin: str, days: int = 730) -> pd.DataFrame:
     return pd.DataFrame(out, columns=EVENT_COLUMNS)
 
 
+def red_flags(
+    session: Session, isin: str | None = None, days: int = 30, severities=("high", "medium")
+) -> list[dict]:
+    """Red flags not dismissed, most serious and newest first (see agents/redflags)."""
+    from stock_news_analyzer.agents.redflags import open_flags
+
+    return [
+        {
+            "id": f.id,
+            "symbol": c.nse_symbol or c.isin,
+            "severity": f.severity,
+            "kind": f.kind.replace("_", " "),
+            "title": f.title,
+            "detail": f.detail,
+            "date": f.flagged_on,
+        }
+        for f, c in open_flags(session, days=days, severities=tuple(severities), isin=isin)
+    ]
+
+
 def order_peers(session: Session) -> pd.DataFrame:
     """Order-driven watchlist companies side by side (see agents/orders.peers)."""
     from stock_news_analyzer.agents.orders import peers
@@ -841,6 +861,8 @@ def last_runs(session: Session) -> dict[str, dict]:
         "triage",
         "deals",
         "prices",
+        "events",
+        "flags",
         "explain",
         "securities",
         "digest",

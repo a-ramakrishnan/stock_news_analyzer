@@ -1,6 +1,6 @@
 # Indian Market News Intelligence System — Design
 
-Version 1.10 · Oct 27, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
+Version 1.11 · Oct 27, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
 
 ## Goal and principles
 
@@ -26,7 +26,8 @@ A map of what is built and what is pending, agent by agent, is in [Agent design:
 | Earnings call analysis and promise ledger | Built (Claude Sonnet 5.5): calls in step 12; promises checked against later results, and a credibility score per company, in step 13; every watchlist stock, owned or not, from step 15 |
 | Order and execution tracker | Built, steps 14–16: orders from filings (Claude Haiku 5.5), quarterly order books (Sonnet 5.5), metrics and peer ranks in code; coverage per stock; revenue gaps filled from results |
 | Bullion, tenders, MF holdings, macro; SAST and pledge data beyond the filings | Not started (rating, SAST and pledge filings are read as events) |
-| Telegram or email delivery, Q&A, red flags, themes | Not started |
+| Red flags | Built, step 18: rules over the checked events and results deadlines, no LLM; in the digest and dashboard |
+| Telegram or email delivery, Q&A, themes | Not started |
 
 - **Filings first, news second.** Under SEBI LODR Regulation 30, listed companies must report material events (order wins, capacity additions, fundraises, rating changes, management exits) to NSE/BSE, generally within 24 hours. These filings are the factual record. News adds context, sentiment and rumour.
 - **Concalls are mandatory disclosures.** Companies must upload earnings call audio within about 24 hours and the transcript within about 5 working days. So the concall archive can be built from exchange filings.
@@ -272,6 +273,7 @@ The database is managed by Alembic migrations (0001–0016). Built tables and ho
 | `orders`, `order_filings` | `orders` | Each order announced (client, client type, value or range in Rs crore, segment, geography, execution months), and each order-win filing read with its outcome |
 | `order_book_snapshots` | `order_book_snapshots` | Per company and quarter: order book, inflow and revenue as reported, as written and whether found, the documents tried |
 | `results`, `result_filings` | `events` (results) | Per company and period (quarter, half year, year): revenue, other income, finance costs, depreciation, profit before and after tax, EPS in Rs crore, the basis, each figure as written and whether found, and whether it came from the period's own filing; `model` is `xbrl` for figures from XBRL (with the PDF value each replaced) or `xbrl-rejected` for a half year put back; and each results filing read with its outcome |
+| `red_flags` | `alerts` (in Agent design) | Each red flag: company, kind, severity, title, the event or results deadline behind it, the date, and whether you dismissed it (with a note) |
 | `events`, `event_filings` | `events`, `review_queue` (in Agent design) | Each typed event (type, headline, date, sentiment, importance, amount in Rs crore and as written, materiality, parties, rating, stake, quote and whether found), its QA status and notes, the second pass's model, your review; each filing read with its outcome |
 
 Not built yet: `sources` (feeds are listed in config files instead). Credibility scores are computed from `promises` when shown, not stored. The `vector` extension is installed but not used yet.

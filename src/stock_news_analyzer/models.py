@@ -638,8 +638,9 @@ class Event(Base):
     event_date: Mapped[date | None] = mapped_column(Date)  # when it happens or takes effect
     sentiment: Mapped[str] = mapped_column(String(16))  # positive/negative/neutral/mixed
     importance: Mapped[int] = mapped_column()  # 1 (routine) .. 5 (could move the stock)
-    # The main amount, in Rs crore (capex, issue size, consideration, penalty...).
-    value_cr: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    # The main amount, in Rs crore (capex, issue size, consideration, penalty...); four
+    # decimals, so a penalty of Rs 4,55,000 is 0.0455, not 0.05.
+    value_cr: Mapped[Decimal | None] = mapped_column(Numeric(16, 4))
     value_as_written: Mapped[str | None] = mapped_column(Text)
     value_kind: Mapped[str | None] = mapped_column(Text)
     # value_cr divided by the company's revenue for the 12 months before the filing.
@@ -666,4 +667,30 @@ class Event(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     model: Mapped[str] = mapped_column(String(64))
     prompt_version: Mapped[str] = mapped_column(String(16))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class RedFlag(Base):
+    """Red-flag Monitor (agent 15): a governance or balance-sheet warning about a company.
+
+    Raised by rules over the checked events (an auditor or CFO leaving, a rating downgrade, a
+    pledge, a penalty...) and over the filings (results not filed by the deadline). `ref` names
+    what raised it ('event:123', 'results:Q2 FY27'), so a flag is raised once.
+    """
+
+    __tablename__ = "red_flags"
+    __table_args__ = (UniqueConstraint("isin", "kind", "ref", name="red_flag_ref"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    isin: Mapped[str] = mapped_column(ForeignKey("companies.isin"), index=True)
+    kind: Mapped[str] = mapped_column(String(32), index=True)  # auditor_exit, downgrade...
+    severity: Mapped[str] = mapped_column(String(8), index=True)  # high / medium / low
+    title: Mapped[str] = mapped_column(Text)
+    detail: Mapped[str | None] = mapped_column(Text)
+    flagged_on: Mapped[date] = mapped_column(Date, index=True)  # the filing's date, or a deadline
+    ref: Mapped[str] = mapped_column(String(64))
+    event_id: Mapped[int | None] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"))
+    document_id: Mapped[int | None] = mapped_column(ForeignKey("documents.id", ondelete="SET NULL"))
+    dismissed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    note: Mapped[str | None] = mapped_column(Text)  # why you dismissed it
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

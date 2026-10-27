@@ -39,7 +39,7 @@ from stock_news_analyzer.text import clean
 
 log = logging.getLogger(__name__)
 
-PROMPT_VERSION = "events-2"
+PROMPT_VERSION = "events-3"
 EVENT_DAYS = 400  # how far back the first run reads
 BATCH_SIZE = 6  # filings per LLM call
 FILING_CHARS = 5000  # of each filing's text; event letters are short
@@ -92,6 +92,8 @@ director resigning and another appointed). Event types:
   joint venture or new subsidiary.
 - fundraise: a QIP, preferential issue, rights issue, warrants, debentures or loans raised, or
   a buyback; also an agreement with an investor to subscribe to shares the company issues.
+  Not the deposits a bank takes from customers (FCNR deposits included): they are its
+  business, so record them as guidance, with value_cr null.
 - promoter_action: promoters buying or selling shares, or creating, releasing or invoking a
   pledge.
 - disruption: a fire, accident, strike, lockout, shutdown, cyber attack or natural disaster.
@@ -180,7 +182,7 @@ def _start(day: date) -> datetime:
 
 
 def _dec(x: float | None) -> Decimal | None:
-    return None if x is None else Decimal(str(round(x, 2)))
+    return None if x is None else Decimal(str(round(x, 4)))
 
 
 def _text(value: str | None) -> str | None:
@@ -414,10 +416,17 @@ def amount(e: Event) -> str:
     debt rated, not money spent or raised, so it says so: 'Rs 12,000 cr rated'."""
     if e.value_cr is None:
         return ""
+    if e.value_cr < 1:  # a penalty of Rs 4,55,000: in lakh, not "Rs 0 cr"
+        value = f"Rs {e.value_cr * 100:,.1f} lakh".replace(".0 lakh", " lakh")
+    else:
+        value = f"Rs {e.value_cr:,.0f} cr"
     if e.event_type == "credit_rating":
-        return f"Rs {e.value_cr:,.0f} cr rated"
-    share = f" ({e.materiality:.0%} of revenue)" if e.materiality is not None else ""
-    return f"Rs {e.value_cr:,.0f} cr{share}"
+        return f"{value} rated"
+    if e.materiality is None:
+        return value
+    m = e.materiality
+    share = f"{m:.0%}" if m >= 0.01 else f"{m:.1%}" if m >= 0.001 else "under 0.1%"
+    return f"{value} ({share} of revenue)"
 
 
 def coverage(session: Session) -> list[dict]:

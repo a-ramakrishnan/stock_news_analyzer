@@ -162,6 +162,7 @@ def today_page() -> None:
         else "No prices loaded yet: run `make prices`."
     )
     index_tiles(load("market"))
+    red_flag_list(load("red_flags"), "Red flags, last 30 days")
 
     owned = [s for s in watch if s["owned"]]
     watching = [s for s in watch if not s["owned"]]
@@ -557,9 +558,23 @@ def results(s: dict) -> None:
     )
 
 
+def red_flag_list(flags: list[dict], title: str) -> None:
+    """High flags in red, medium in amber; nothing when there are none."""
+    if not flags:
+        return
+    st.subheader(title)
+    for f in flags:
+        line = f"**{f['date']:%d %b}** · {f['kind']} · {f['title']}"
+        if f["detail"]:
+            line += f" ({f['detail']})"
+        (st.error if f["severity"] == "high" else st.warning)(line)
+    st.caption("`sna flags list` for all of them; `sna flags dismiss ID` once dealt with.")
+
+
 def events_tab_body(s: dict) -> None:
     """Events from filings (capex, ratings, management changes...), each checked by the QA
-    Checker."""
+    Checker, with the red flags they raised."""
+    red_flag_list(load("red_flags", isin=s["isin"], days=365), "Red flags, last 12 months")
     rows = load("events", isin=s["isin"])
     if rows.empty:
         no_data(

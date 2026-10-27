@@ -218,6 +218,14 @@ def job_events(session: Session) -> str:
     return summary
 
 
+def job_flags(session: Session) -> str:
+    from stock_news_analyzer.agents import redflags
+
+    result = redflags.scan(session)
+    counts = ", ".join(f"{n} {s}" for s, n in sorted(result.by_severity.items())) or "none"
+    return f"{result.raised} red flags raised ({counts})"
+
+
 def job_prices(session: Session) -> str:
     from stock_news_analyzer.agents.prices import (
         PriceCollector,
@@ -284,6 +292,7 @@ JOBS: dict[str, Callable[[Session], str]] = {
     "xbrl": job_xbrl,
     "results": job_results,
     "events": job_events,
+    "flags": job_flags,
     "explain": job_explain,
     "concalls": job_concalls,
     "promises": job_promises,
@@ -305,6 +314,7 @@ RUN_ALL = (
     "concalls",
     "promises",
     "orders",
+    "flags",
     "digest",
 )
 

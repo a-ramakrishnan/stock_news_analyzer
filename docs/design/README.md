@@ -11,6 +11,14 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.11 · Oct 27, 2026
+
+- Step 18, the Red-flag Monitor:
+  - agent 15 marked built, with "As built" notes: rules over the checked events and results deadlines, no LLM (the plan had Sonnet score severity; the checked events make rules enough)
+  - the `red_flags` table mapped to the plan's `alerts`
+- Event amounts kept to four decimals of a crore, so penalties in lakh keep their value
+- Status tables and the block diagram updated; the next step is Telegram delivery
+
 ### 1.10 · Oct 27, 2026
 
 - Step 17, the rest of the Event Extractor and the QA Checker:

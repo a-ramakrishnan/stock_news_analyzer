@@ -37,6 +37,7 @@ from stock_news_analyzer.models import (
 from stock_news_analyzer.sources.announcements import IST
 
 MAX_FILINGS = 12
+FLAG_DAYS = 14  # red flags about older filings (a first scan of history) stay out
 DIGEST_IMPORTANCE = 3  # events at least this important are listed
 MAX_NEWS = 8
 LABEL_TYPES = (
@@ -340,6 +341,33 @@ def _events(session: Session, since: datetime, until: datetime) -> list[str]:
     return lines
 
 
+def _red_flags(session: Session, since: datetime, until: datetime) -> list[str]:
+    """High and medium red flags raised since the previous digest, about recent filings."""
+    from stock_news_analyzer.models import RedFlag
+
+    rows = session.execute(
+        select(RedFlag, Company.nse_symbol)
+        .join(Company, Company.isin == RedFlag.isin)
+        .where(
+            RedFlag.created_at >= since,
+            RedFlag.created_at < until,
+            RedFlag.flagged_on >= (until - timedelta(days=FLAG_DAYS)).astimezone(IST).date(),
+            RedFlag.severity.in_(("high", "medium")),
+            RedFlag.dismissed_at.is_(None),
+        )
+        .order_by(RedFlag.severity, RedFlag.flagged_on.desc())
+    ).all()
+    if not rows:
+        return []
+    lines = ["", "## Red flags", ""]
+    for f, _sym in rows:
+        mark = "**HIGH**" if f.severity == "high" else "medium"
+        detail = f" ({f.detail})" if f.detail else ""
+        lines.append(f"- {mark} {f.flagged_on:%d %b}: {f.title}{detail}")
+    lines.append("\nAll open flags: `sna flags list`")
+    return lines
+
+
 def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
     lines = [
         f"# Daily digest, {until.astimezone(IST):%d %b %Y %H:%M} IST",
@@ -357,6 +385,7 @@ def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
         close_s = f"{close:,.2f}" if close is not None else "–"
         lines.append(f"| {name} | {day} | {close_s} | {pct(change)} |")
 
+    lines += _red_flags(session, since, until)
     lines += _results(session, since, until)
     lines += _earnings_calls(session, since, until)
     lines += _promises(session, since, until)
@@ -506,6 +535,7 @@ def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
         "xbrl",
         "results",
         "events",
+        "flags",
         "explain",
         "concalls",
         "promises",

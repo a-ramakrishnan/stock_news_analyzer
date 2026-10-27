@@ -2108,11 +2108,9 @@ def events_run(
 
 
 def _event_line(e, symbol: str | None = None) -> str:
-    value = ""
-    if e.value_cr is not None:
-        value = f"  Rs {e.value_cr:,.0f} cr"
-        if e.materiality is not None:
-            value += f" ({e.materiality:.0%} of revenue)"
+    from stock_news_analyzer.agents.events import amount
+
+    value = f"  {amount(e)}" if e.value_cr is not None else ""
     who = f"{symbol:<11} " if symbol else ""
     return (
         f"#{e.id:<5} {who}{e.published_at.astimezone(fl.IST):%d %b %Y}  "

@@ -730,8 +730,7 @@ EVENT_COLUMNS = [
     "importance",
     "sentiment",
     "headline",
-    "value_cr",
-    "materiality",
+    "amount",
     "qa",
     "qa_notes",
     "quote",
@@ -742,6 +741,7 @@ EVENT_COLUMNS = [
 def events(session: Session, isin: str, days: int = 730) -> pd.DataFrame:
     """A company's events, newest first: those shown (see agents/qa.shown), with their QA
     status ('unchecked' for flagged ones not reviewed)."""
+    from stock_news_analyzer.agents.events import amount
     from stock_news_analyzer.agents.qa import shown
 
     since = datetime.now(IST) - timedelta(days=days)
@@ -762,8 +762,7 @@ def events(session: Session, isin: str, days: int = 730) -> pd.DataFrame:
                 "importance": e.importance,
                 "sentiment": e.sentiment,
                 "headline": e.headline,
-                "value_cr": float(e.value_cr) if e.value_cr is not None else None,
-                "materiality": e.materiality,
+                "amount": amount(e),
                 "qa": "you accepted it" if e.review == "accepted" else qa,
                 "qa_notes": "; ".join(e.qa_notes),
                 "quote": e.quote,

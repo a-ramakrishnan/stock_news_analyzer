@@ -312,6 +312,7 @@ def _results(session: Session, since: datetime, until: datetime) -> list[str]:
 
 def _events(session: Session, since: datetime, until: datetime) -> list[str]:
     """Events from filings read since the previous digest, most important first."""
+    from stock_news_analyzer.agents.events import amount
     from stock_news_analyzer.agents.qa import shown
 
     rows = session.execute(
@@ -329,10 +330,7 @@ def _events(session: Session, since: datetime, until: datetime) -> list[str]:
         return []
     lines = ["", "## Events", ""]
     for e, sym in rows:
-        value = ""
-        if e.value_cr is not None:
-            share = f", {e.materiality:.0%} of a year's revenue" if e.materiality else ""
-            value = f" (Rs {e.value_cr:,.0f} cr{share})"
+        value = f" ({amount(e)})" if e.value_cr is not None else ""
         unchecked = " *(unchecked)*" if e.qa_status == "flagged" and e.review is None else ""
         lines.append(
             f"- {sym} {e.published_at.astimezone(IST):%d %b}, {e.event_type.replace('_', ' ')}, "

@@ -180,6 +180,8 @@ def test_event_candidates():
     assert not event_candidate("insider_trading", "Closure of Trading Window", "")
     assert not event_candidate("other", "Certificate under Regulation 74(5) of SEBI (DP)", "")
     assert not event_candidate("other", "Copy of newspaper publication", "")
+    assert not event_candidate("other", "Intimation of ESG Rating", "")
+    assert not event_candidate("credit_rating", "ESG Rating by NSE Sustainability Ratings", "")
     assert not event_candidate("other", "General updates", "")
     assert not event_candidate("other", "Revised operating amount", "")  # not "rating", "mou"
     assert not event_candidate("results", "Appointment of auditor and financial results", "")
@@ -196,6 +198,14 @@ def test_amounts_as_written_in_crore():
     assert qa.to_crore("Rs. 450 crore (approx.)") == 450
     assert qa.to_crore("USD 20 million") is None  # foreign currency: not converted
     assert qa.to_crore("450") is None  # no unit
+
+
+def test_amounts_shown_with_their_meaning():
+    e = Event(event_type="fundraise", value_cr=Decimal("249.04"), materiality=0.031)
+    assert ev.amount(e) == "Rs 249 cr (3% of revenue)"
+    e = Event(event_type="credit_rating", value_cr=Decimal(12000), materiality=None)
+    assert ev.amount(e) == "Rs 12,000 cr rated"
+    assert ev.amount(Event(event_type="capex", value_cr=None)) == ""
 
 
 # --- extraction and QA ----------------------------------------------------------------
@@ -380,7 +390,7 @@ def test_digest_lists_important_events(loaded):  # noqa: F811
     md = dg.build_digest(loaded, now - timedelta(days=1), now + timedelta(minutes=1)).markdown
     assert "## Events" in md
     assert "- LT 20 Oct, credit rating, positive: CARE upgraded the long-term rating" in md
-    assert "(Rs 5,000 cr)" in md
+    assert "(Rs 5,000 cr rated)" in md  # the debt rated, not money raised
 
 
 @pytest.mark.db

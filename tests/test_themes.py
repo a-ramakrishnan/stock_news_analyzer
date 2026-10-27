@@ -129,6 +129,7 @@ def items(loaded):  # noqa: F811
     loaded.commit()
     lt = order(loaded, LT, NOW - timedelta(days=2), 5000, "Hyperscale data centre campus in Mumbai")
     kvb = event(loaded, KVB, NOW - timedelta(days=30), "Loans to data centre developers grow")
+    event(loaded, KVB, NOW - timedelta(days=60), "Data centre lending book doubles")
     msumi = event(loaded, MSUMI, NOW - timedelta(days=5), "New CFO appointed", importance=5)
     return lt, kvb, msumi
 
@@ -138,13 +139,14 @@ def test_items_are_tagged_once_and_unknown_themes_dropped(items):
     lt, kvb, msumi = items
     session = _session(items)
     pending = th.pending(session, date(2025, 1, 1))
-    assert {p.key for p in pending} == {f"O{lt.id}", f"E{kvb.id}", f"E{msumi.id}"}
+    assert {f"O{lt.id}", f"E{kvb.id}", f"E{msumi.id}"} <= {p.key for p in pending}
+    assert len(pending) == 4
     llm, client = _llm(
         session, tagging({"data centre": ["data_centres", "buildings_factories", "made_up"]})
     )
     result = th.run(session, llm, since=date(2025, 1, 1))
     assert client.requests[0]["model"] == "claude-haiku-5-5"
-    assert (result.items, result.tags, result.untagged, result.calls) == (3, 4, 1, 1)
+    assert (result.items, result.tags, result.untagged, result.calls) == (4, 6, 1, 1)
     tags = {(t.item_type, t.item_id, t.theme) for t in session.query(ThemeTag)}
     assert ("order", lt.id, "data_centres") in tags and ("event", msumi.id, "none") in tags
     assert not any(t[2] == "made_up" for t in tags)
@@ -167,7 +169,7 @@ def test_read_across_to_peers_and_theme_companies(items):
     llm, _ = _llm(session, tagging({"data centre": ["data_centres"]}))
     result = th.run(session, llm, since=date(2025, 1, 1))
     # The L&T order (Rs 5,000 crore, 2% of a Rs 2.4 lakh crore year) reads across to its
-    # approved peer MSUMI and to KVB, in data centres a month earlier.
+    # approved peer MSUMI and to KVB, which has data centres among its core themes.
     signals = {(s.target_isin, s.relation) for s in session.query(PeerSignal)}
     assert signals == {(MSUMI, "peer"), (KVB, "theme:data_centres")}
     assert result.signals == 2
@@ -185,12 +187,35 @@ def test_theme_strength(items):
     llm, _ = _llm(session, tagging({"data centre": ["data_centres"]}))
     th.run(session, llm, since=date(2025, 1, 1))
     top = th.summary(session)[0]
-    assert top["theme"] == "data_centres" and top["items"] == 2 and top["before"] == 0
+    assert top["theme"] == "data_centres" and top["items"] == 3 and top["before"] == 0
     assert top["companies"] == ["KARURVYSYA", "LT"] and top["order_value_cr"] == 5000
     months = th.monthly(session, "data_centres")
-    assert sum(m["items"] for m in months) == 2
+    assert sum(m["items"] for m in months) == 3
     table = queries.themes(session)
     assert table.iloc[0]["theme"] == "Data centres"
     detail_months, detail_items = queries.theme_detail(session, "data_centres")
-    assert len(detail_items) == 2
+    assert len(detail_items) == 3
     assert th.reset(session) > 0 and session.query(ThemeTag).count() == 0
+
+
+@pytest.mark.db
+def test_broad_themes_and_single_items_dont_read_across(items):
+    lt, kvb, msumi = items
+    session = _session(items)
+    # MSUMI has one data-centre item (not a core theme); everything is also "exports".
+    event(session, MSUMI, NOW - timedelta(days=20), "Wiring for a data centre client")
+    llm, _ = _llm(
+        session, tagging({"data centre": ["data_centres", "exports_overseas"], "cfo": []})
+    )
+    th.run(session, llm, since=date(2025, 1, 1))
+    core = th.core_themes(session)
+    assert core[KVB] == ["data_centres"]  # exports_overseas allows no read-across
+    assert core.get(MSUMI, []) == []  # one data-centre item of two: not enough items
+    targets = {(s.target_isin, s.relation) for s in session.query(PeerSignal)}
+    assert targets == {(KVB, "theme:data_centres")}
+    # The same order filed twice reads across once.
+    dup = order(session, LT, lt.announced_at + timedelta(minutes=5), 5000, "Hyperscale data centre")
+    llm, _ = _llm(session, tagging({"data centre": ["data_centres"]}))
+    th.run(session, llm, since=date(2025, 1, 1))
+    assert session.query(PeerSignal).count() == 1 and dup.id
+    assert th.reset(session, signals_only=True) == 1 and session.query(ThemeTag).count() > 0

@@ -2,6 +2,8 @@
 # `key` names the theme in the database, so keep it stable once tags are stored; `hint`
 # tells the model what belongs to it. Add, rename or remove themes freely, then run
 # `sna themes run` (new items only) or `sna themes reset` and run again to re-tag everything.
+# `read_across: false` keeps a theme out of read-across: it says where or how the work is,
+# not what industry it is in, so sharing it links unrelated companies.
 themes:
   - key: data_centres
     name: Data centres
@@ -54,3 +56,4 @@ themes:
   - key: exports_overseas
     name: Exports and overseas
     hint: export orders, Middle East and other overseas projects, tariffs, global demand
+    read_across: false

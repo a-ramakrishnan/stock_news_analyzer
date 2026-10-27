@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.14 · Oct 27, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.15 · Oct 27, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -58,17 +58,17 @@ flowchart LR
         A11["11 · Concall Analyst"]:::built
         A12["12 · Promise Ledger"]:::built
         A13["13 · Bullion Analyst<br/>split + notes on unusual days"]:::built
-        A14["14 · Theme & Peer Analyst"]:::pendingNext
+        A14["14 · Theme & Peer Analyst<br/>themes (Haiku), read-across"]:::built
         A15["15 · Red-flag Monitor<br/>rules over events,<br/>late results"]:::built
     end
 
     subgraph DEL["Deliver"]
         direction TB
         A16["16 · Reporter<br/>digest + dashboard;<br/>email later"]:::partly
-        A17["17 · Analyst Q&A"]:::pending
+        A17["17 · Analyst Q&A"]:::pendingNext
     end
 
-    DB[("Shared Postgres database, point-in-time<br/>built: filings, news, prices and labels, deals, moves,<br/>concalls, promises, orders and order books, results,<br/>typed events with QA status, red flags, bullion moves<br/>to do: themes")]:::db
+    DB[("Shared Postgres database, point-in-time<br/>built: filings, news, prices and labels, deals, moves,<br/>concalls, promises, orders and order books, results,<br/>typed events with QA status, red flags, bullion moves, themes and read-across")]:::db
 
     O -. runs every agent .-> A1
     S1 --> A2
@@ -88,10 +88,10 @@ flowchart LR
 
 | Status | Agents |
 | --- | --- |
-| Built | 0 Orchestrator, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15 |
+| Built | 0 Orchestrator, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 |
 | Partly built | 4 Market Signals, 16 Reporter |
-| Not started | 14, 17 |
-| Recommended next | The Theme & Peer Analyst (14), then Analyst Q&A (17). Email delivery of the digest and high-severity flags (16) comes later; Telegram is set aside for now |
+| Not started | 17 |
+| Recommended next | Analyst Q&A (17), the last agent. Email delivery of the digest and high-severity flags (16) comes later; Telegram is set aside for now |
 
 | # | Agent | Status | Build step |
 | --- | --- | --- | --- |
@@ -109,7 +109,7 @@ flowchart LR
 | 11 | Concall Analyst | Built (Sonnet 5.5): structured reading of each call, comparison with the previous one, promises recorded; every watchlist stock | 12, 15 |
 | 12 | Promise Ledger | Built (Sonnet 5.5): promises past their date checked against later results and filings; credibility score per company | 12, 13 |
 | 13 | Bullion Analyst | Built: each day's rupee move split into global price, USD/INR and the rest; notes by Sonnet 5.5 on unusual days, from bullion news | 19 |
-| 14 | Theme & Peer Analyst | Not started (peers exist for the Move Explainer) | — |
+| 14 | Theme & Peer Analyst | Built: events, orders and call points tagged with themes (Haiku 5.5); theme strength and read-across in code; no customer and supplier map yet | 20 |
 | 15 | Red-flag Monitor | Built: rules over the checked events (auditor, CEO/MD/CFO and independent director exits, downgrades, pledges, holders selling, penalties, disruptions) and overdue results; no LLM | 18 |
 | 16 | Reporter | Partly: Markdown digest and Streamlit dashboard; no email or weekly report yet (email later; Telegram set aside for now); no LLM | 6, 7 |
 | 17 | Analyst Q&A | Not started | — |
@@ -540,6 +540,12 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **Trigger:** daily after extraction; weekly summary.
 - **LLM:** Sonnet 5.5.
 - **Reads / writes:** `events`, `relationships` → `themes`, `peer_signals`.
+- **As built (step 20).** `agents/themes.py` writes `theme_tags` and `peer_signals`.
+  - **Tags:** Haiku 5.5, not Sonnet (it is classification, and cheap at 40 items a call). It tags checked events (not management changes, ratings or promoter actions), orders and forward-looking call points with up to three themes from `config/themes.yaml`. Each item is read once; no theme is stored as `none`.
+  - **Strength, in code:** per theme, items and companies in the last 90 days against the 90 before, positive and negative items, order value; per month.
+  - **Read-across, in code:** an event of importance 4–5, or an order of 1% or more of yearly revenue, is listed for the watchlist companies that are its approved peers or had an item in the same theme in the previous 180 days. No direction: the signal says why it may matter, not whether it helps or hurts.
+  - **Where it shows:** `sna themes run/list/show/signals/reset`, the 07:52 `themes` job, a "Read-across" section in the digest, a **Themes** page on the dashboard.
+  - **Not yet:** a customer and supplier map from annual reports and calls; a weekly theme summary in the digest.
 
 1. Tag each event with themes (data centres, defence, railways, transmission, and so on).
 2. Track event count, order value and sentiment per theme per month.
@@ -575,7 +581,7 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **LLM:** Opus 5.5 to write; code to format.
 - **As built (steps 6, 7):** the daily digest is put together in code (no LLM yet) and saved as Markdown under `data/digests/`. It has filings, triaged news with stars and topics, unusual moves with their likely cause, and bulk/block deals.
   
-  The Streamlit dashboard (`make ui`) has seven pages: Today, Stock, Filings, News, What moves the stock, Manage stocks, System. System shows AI usage.
+  The Streamlit dashboard (`make ui`) has eight pages: Today, Stock, Filings, News, Themes, What moves the stock, Manage stocks, System. System shows AI usage.
   
   Email and the weekly report are not built yet: email delivery is planned for later, and Telegram is set aside for now (Oct 27, 2026).
 - **Reads / writes:** all output tables → Telegram, email, dashboard.

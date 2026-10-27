@@ -739,3 +739,43 @@ class BullionMove(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class ThemeTag(Base):
+    """Theme & Peer Analyst (agent 14): a theme an event, order or earnings-call point belongs
+    to. An item tagged with no theme gets one row with theme 'none', so it is read once."""
+
+    __tablename__ = "theme_tags"
+    __table_args__ = (UniqueConstraint("item_type", "item_id", "theme", name="theme_tag_item"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    item_type: Mapped[str] = mapped_column(String(16))  # event / order / point
+    item_id: Mapped[int] = mapped_column(BigInteger)
+    theme: Mapped[str] = mapped_column(String(32), index=True)
+    isin: Mapped[str] = mapped_column(ForeignKey("companies.isin"), index=True)
+    on_date: Mapped[date] = mapped_column(Date, index=True)
+    value_cr: Mapped[Decimal | None] = mapped_column(Numeric(16, 4))  # orders and events
+    sentiment: Mapped[str | None] = mapped_column(String(16))
+    title: Mapped[str] = mapped_column(Text)
+    model: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PeerSignal(Base):
+    """A read-across: an important order or event at one company that is worth a look for
+    another watchlist company, its approved peer or one in the same theme."""
+
+    __tablename__ = "peer_signals"
+    __table_args__ = (
+        UniqueConstraint("source_type", "source_id", "target_isin", name="peer_signal_target"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_type: Mapped[str] = mapped_column(String(16))  # event / order
+    source_id: Mapped[int] = mapped_column(BigInteger)
+    source_isin: Mapped[str] = mapped_column(ForeignKey("companies.isin"), index=True)
+    target_isin: Mapped[str] = mapped_column(ForeignKey("companies.isin"), index=True)
+    relation: Mapped[str] = mapped_column(String(48))  # 'peer' or 'theme:<key>'
+    on_date: Mapped[date] = mapped_column(Date, index=True)
+    title: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

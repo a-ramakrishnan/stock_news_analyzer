@@ -244,6 +244,22 @@ def job_bullion(session: Session) -> str:
     return summary
 
 
+def job_themes(session: Session) -> str:
+    from stock_news_analyzer.agents import themes
+    from stock_news_analyzer.llm import LLM
+
+    if not get_settings().anthropic_api_key:
+        return "skipped: ANTHROPIC_API_KEY is not set in .env"
+    result = themes.run(session, LLM(session))
+    summary = (
+        f"{result.items} items tagged ({result.tags} tags), {result.signals} read-across; "
+        f"${result.cost_usd:.4f}"
+    )
+    if result.errors:
+        raise JobError(summary, result.errors)
+    return summary
+
+
 def job_prices(session: Session) -> str:
     from stock_news_analyzer.agents.prices import (
         PriceCollector,
@@ -312,6 +328,7 @@ JOBS: dict[str, Callable[[Session], str]] = {
     "events": job_events,
     "flags": job_flags,
     "bullion": job_bullion,
+    "themes": job_themes,
     "explain": job_explain,
     "concalls": job_concalls,
     "promises": job_promises,
@@ -333,6 +350,7 @@ RUN_ALL = (
     "concalls",
     "promises",
     "orders",
+    "themes",
     "flags",
     "bullion",
     "digest",

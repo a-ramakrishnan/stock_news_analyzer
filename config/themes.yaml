@@ -1,0 +1,56 @@
+# Themes the Theme & Peer Analyst tags events, orders and earnings-call points with.
+# `key` names the theme in the database, so keep it stable once tags are stored; `hint`
+# tells the model what belongs to it. Add, rename or remove themes freely, then run
+# `sna themes run` (new items only) or `sna themes reset` and run again to re-tag everything.
+themes:
+  - key: data_centres
+    name: Data centres
+    hint: data centre construction, cooling, power and cabling for data centres, cloud capacity
+  - key: defence
+    name: Defence
+    hint: defence and aerospace orders, indigenisation, military shipbuilding
+  - key: railways_metro
+    name: Railways and metro
+    hint: railway lines, wagons, electrification, metro rail, high-speed rail
+  - key: roads
+    name: Roads and highways
+    hint: highways, expressways, bridges, tunnels, NHAI
+  - key: power_td
+    name: Power transmission and distribution
+    hint: transmission lines, substations, transformers, cables, smart meters, grid
+  - key: renewables
+    name: Renewable energy
+    hint: solar, wind, hydro, green hydrogen, batteries and storage
+  - key: water
+    name: Water
+    hint: water supply, irrigation, sewage treatment, desalination
+  - key: marine_ports
+    name: Ports and marine
+    hint: ports, dredging, shipping, marine services, shipbuilding (non-defence)
+  - key: oil_gas
+    name: Oil and gas
+    hint: hydrocarbons, refineries, petrochemicals, pipelines, offshore platforms
+  - key: buildings_factories
+    name: Buildings and factories
+    hint: commercial and residential buildings, factories, airports, real estate
+  - key: recycling_metals
+    name: Recycling and metals
+    hint: lead, aluminium, copper, plastic recycling, metal prices
+  - key: auto_ev
+    name: Autos and EVs
+    hint: auto components, wiring harnesses, electric vehicles, vehicle volumes
+  - key: consumer_demand
+    name: Consumer demand
+    hint: FMCG, food, rural and urban consumption, pricing, raw material costs
+  - key: credit_deposits
+    name: Credit and deposits
+    hint: bank loan growth, deposits, asset quality, interest rates and margins, microfinance
+  - key: digital_commerce
+    name: Digital commerce and logistics
+    hint: quick commerce, food delivery, e-commerce, trucking and logistics platforms
+  - key: healthcare
+    name: Healthcare
+    hint: hospitals, fertility and IVF clinics, pharma, medical devices
+  - key: exports_overseas
+    name: Exports and overseas
+    hint: export orders, Middle East and other overseas projects, tariffs, global demand

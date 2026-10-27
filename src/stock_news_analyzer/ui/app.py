@@ -919,6 +919,66 @@ def news_page() -> None:
     news_table(df)
 
 
+def themes_page() -> None:
+    st.title("Themes")
+    st.caption(
+        "Events, orders and earnings-call points of your stocks, tagged with themes (Haiku). "
+        "Items: the last 90 days; before: the 90 days before that."
+    )
+    themes = load("themes")
+    if themes.empty:
+        no_data("No themes yet: run `sna themes run`.")
+        return
+    st.dataframe(
+        themes.drop(columns=["key"]),
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "theme": st.column_config.TextColumn("Theme"),
+            "items": st.column_config.NumberColumn("Items, 90 days"),
+            "before": st.column_config.NumberColumn("90 days before"),
+            "positive": st.column_config.NumberColumn("Positive"),
+            "negative": st.column_config.NumberColumn("Negative"),
+            "orders_cr": st.column_config.NumberColumn("Orders, Rs crore", format="localized"),
+            "companies": st.column_config.TextColumn("Companies", width="large"),
+        },
+    )
+    names = dict(zip(themes["theme"], themes["key"], strict=True))
+    choice = st.selectbox("Theme", list(names))
+    months, items = load("theme_detail", theme=names[choice])
+    if not months.empty:
+        st.bar_chart(months, x="month", y="items", height=220)
+    st.dataframe(
+        items,
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "date": st.column_config.DateColumn("Date", format="DD MMM YYYY"),
+            "item": st.column_config.TextColumn("Item", width="large"),
+            "value_cr": st.column_config.NumberColumn("Rs crore", format="localized"),
+        },
+    )
+    st.subheader("Read-across")
+    signals = load("read_across")
+    if signals.empty:
+        st.caption("None in the last 90 days.")
+    else:
+        st.dataframe(
+            signals,
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "date": st.column_config.DateColumn("Date", format="DD MMM YYYY"),
+                "item": st.column_config.TextColumn("Item", width="large"),
+            },
+        )
+    st.caption(
+        "An important order or event (importance 4-5, or an order of 1% or more of a year's "
+        "revenue) is listed for the watchlist stocks that are its approved peers or share its "
+        "theme."
+    )
+
+
 def moves_page() -> None:
     st.title("What moves the stock")
     st.caption(
@@ -1165,6 +1225,7 @@ PAGES = {
         filings_page, title="Filings", icon=":material/description:", url_path="filings"
     ),
     "news": st.Page(news_page, title="News", icon=":material/newspaper:", url_path="news"),
+    "themes": st.Page(themes_page, title="Themes", icon=":material/hub:", url_path="themes"),
     "moves": st.Page(
         moves_page, title="What moves the stock", icon=":material/insights:", url_path="moves"
     ),

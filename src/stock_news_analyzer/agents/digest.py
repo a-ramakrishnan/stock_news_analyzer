@@ -403,6 +403,30 @@ def _bullion(session: Session, since: datetime, until: datetime) -> list[str]:
     return ["", "## Bullion", "", *lines, "", "Day by day: `sna bullion list gold`"]
 
 
+def _read_across(session: Session, since: datetime, until: datetime) -> list[str]:
+    """Read-across signals raised since the previous digest, about recent items."""
+    from stock_news_analyzer.models import PeerSignal
+
+    rows = session.execute(
+        select(PeerSignal, Company.nse_symbol)
+        .join(Company, Company.isin == PeerSignal.target_isin)
+        .where(
+            PeerSignal.created_at >= since,
+            PeerSignal.created_at < until,
+            PeerSignal.on_date >= (until - timedelta(days=FLAG_DAYS)).astimezone(IST).date(),
+        )
+        .order_by(PeerSignal.on_date.desc(), Company.nse_symbol)
+    ).all()
+    if not rows:
+        return []
+    lines = ["", "## Read-across", ""]
+    for s, target in rows:
+        why = "a peer" if s.relation == "peer" else s.relation.split(":", 1)[1].replace("_", " ")
+        lines.append(f"- For {target} ({why}), {s.on_date:%d %b}: {s.title}")
+    lines.append("\nThemes: `sna themes list`")
+    return lines
+
+
 def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
     lines = [
         f"# Daily digest, {until.astimezone(IST):%d %b %Y %H:%M} IST",
@@ -427,6 +451,7 @@ def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
     lines += _promises(session, since, until)
     lines += _orders(session, since, until)
     lines += _events(session, since, until)
+    lines += _read_across(session, since, until)
 
     owned = dict(session.execute(select(WatchlistItem.isin, WatchlistItem.owned)).all())
     total_filings = total_news = total_unusual = 0
@@ -573,6 +598,7 @@ def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
         "events",
         "flags",
         "bullion",
+        "themes",
         "explain",
         "concalls",
         "promises",

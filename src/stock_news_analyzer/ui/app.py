@@ -257,6 +257,7 @@ def stock_page_body() -> None:
     (
         unusual_tab,
         results_tab,
+        events_tab,
         calls_tab,
         orders_tab,
         filings_tab,
@@ -268,6 +269,7 @@ def stock_page_body() -> None:
         [
             "Unusual days",
             "Results",
+            "Events",
             "Earnings calls",
             "Order book",
             "Filings",
@@ -330,6 +332,8 @@ def stock_page_body() -> None:
                 )
     with results_tab:
         results(s)
+    with events_tab:
+        events_tab_body(s)
     with calls_tab:
         earnings_calls(s)
     with orders_tab:
@@ -550,6 +554,45 @@ def results(s: dict) -> None:
     st.caption(
         "Rs crore, from the results filed with the exchanges (consolidated where given). y/y: "
         "on the same period a year earlier."
+    )
+
+
+def events_tab_body(s: dict) -> None:
+    """Events from filings (capex, ratings, management changes...), each checked by the QA
+    Checker."""
+    rows = load("events", isin=s["isin"])
+    if rows.empty:
+        no_data(
+            "No events recorded for this stock yet. The scheduler reads new filings each "
+            f"morning; `sna events run --symbol {s['symbol']}` reads the last 400 days now."
+        )
+        return
+    st.dataframe(
+        rows.drop(columns=["id"]),
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "filed": st.column_config.DateColumn("Filed", format="DD MMM YYYY"),
+            "type": st.column_config.TextColumn("Type"),
+            "importance": st.column_config.ProgressColumn(
+                "Importance", min_value=1, max_value=5, format="%d"
+            ),
+            "sentiment": st.column_config.TextColumn("Sentiment"),
+            "headline": st.column_config.TextColumn("Event", width="large"),
+            "value_cr": st.column_config.NumberColumn("Rs crore", format="localized"),
+            "materiality": st.column_config.NumberColumn(
+                "Of revenue", format="percent", help="The amount ÷ the 12 months' revenue."
+            ),
+            "qa": st.column_config.TextColumn("QA"),
+            "qa_notes": st.column_config.TextColumn("QA notes", width="medium"),
+            "quote": st.column_config.TextColumn("From the filing", width="large"),
+            "link": st.column_config.LinkColumn("Filing", display_text="open"),
+        },
+    )
+    st.caption(
+        "Read from the company's filings (Haiku), every quote and amount checked against the "
+        "filing; important or doubtful events checked again by Sonnet. Unchecked: a check "
+        "failed and nothing settled it; `sna events review` lists them for your decision."
     )
 
 

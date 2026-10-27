@@ -592,3 +592,78 @@ class QuarterlyResult(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class EventFiling(Base):
+    """Event Extractor (agent 7): a filing looked at for events, so it is read once.
+
+    status: 'extracted' (its events are in `events`), 'no_event' (routine, nothing to record),
+    'duplicate' (the same announcement on the other exchange), 'failed' (the model's answer was
+    unusable).
+    """
+
+    __tablename__ = "event_filings"
+
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True
+    )
+    isin: Mapped[str] = mapped_column(ForeignKey("companies.isin"), index=True)
+    status: Mapped[str] = mapped_column(String(16))
+    note: Mapped[str | None] = mapped_column(Text)
+    model: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Event(Base):
+    """A typed event from a filing: capex, guidance, a management change, a rating action, a
+    legal or regulatory matter, an acquisition, a fundraise, a promoter's action, a disruption,
+    an agreement or an approval. Each carries the sentence it came from.
+
+    The QA Checker (agent 8) sets `qa_status`: 'pending' (not checked yet), 'passed', 'flagged'
+    (a check failed and no second pass settled it), 'failed' (the second pass disagreed) or
+    'duplicate' (the same event from an earlier filing). Flagged and failed events wait in the
+    review queue; `review` records your decision ('accepted' or 'rejected').
+    """
+
+    __tablename__ = "events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    isin: Mapped[str] = mapped_column(ForeignKey("companies.isin"), index=True)
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    event_type: Mapped[str] = mapped_column(String(24), index=True)
+    headline: Mapped[str] = mapped_column(Text)
+    event_date: Mapped[date | None] = mapped_column(Date)  # when it happens or takes effect
+    sentiment: Mapped[str] = mapped_column(String(16))  # positive/negative/neutral/mixed
+    importance: Mapped[int] = mapped_column()  # 1 (routine) .. 5 (could move the stock)
+    # The main amount, in Rs crore (capex, issue size, consideration, penalty...).
+    value_cr: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    value_as_written: Mapped[str | None] = mapped_column(Text)
+    value_kind: Mapped[str | None] = mapped_column(Text)
+    # value_cr divided by the company's revenue for the 12 months before the filing.
+    materiality: Mapped[float | None] = mapped_column()
+    counterparty: Mapped[str | None] = mapped_column(Text)  # agency, regulator, target...
+    person: Mapped[str | None] = mapped_column(Text)
+    role: Mapped[str | None] = mapped_column(Text)
+    action: Mapped[str | None] = mapped_column(Text)  # appointed, upgraded, pledge created...
+    rating_from: Mapped[str | None] = mapped_column(Text)
+    rating_to: Mapped[str | None] = mapped_column(Text)
+    stake_pct: Mapped[float | None] = mapped_column()
+    quote: Mapped[str | None] = mapped_column(Text)
+    quote_found: Mapped[bool] = mapped_column(Boolean, default=False)
+    qa_status: Mapped[str] = mapped_column(
+        String(16), default="pending", server_default="pending", index=True
+    )
+    qa_notes: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), default=list, server_default="{}", nullable=False
+    )
+    duplicate_of: Mapped[int | None] = mapped_column(ForeignKey("events.id", ondelete="SET NULL"))
+    qa_model: Mapped[str | None] = mapped_column(String(64))  # the second pass, if any
+    review: Mapped[str | None] = mapped_column(String(16))
+    review_note: Mapped[str | None] = mapped_column(Text)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    model: Mapped[str] = mapped_column(String(64))
+    prompt_version: Mapped[str] = mapped_column(String(16))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

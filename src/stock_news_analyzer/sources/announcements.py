@@ -148,6 +148,155 @@ _RULES = [
 # Documents the Concall Analyst (agent 11) reads.
 CONCALL_MATERIAL = {"concall_transcript", "concall_audio", "investor_presentation", "results"}
 
+# The Event Extractor (agent 7) reads filings of these types whose title names an event.
+# Results, order wins and call material have their own agents.
+EVENT_DOC_TYPES = {"other", "board_meeting", "credit_rating", "insider_trading"}
+EVENT_WORDS = (
+    # capacity and capex
+    "capacity",
+    "expansion",
+    "commission",
+    "commercial production",
+    "commercial operation",
+    "capex",
+    "capital expenditure",
+    "plant",
+    "facility",
+    "greenfield",
+    "brownfield",
+    # guidance and updates
+    "guidance",
+    "outlook",
+    "business update",
+    "operational update",
+    # management
+    "appointment",
+    "resignation",
+    "cessation",
+    "change in director",
+    "change in management",
+    "senior management",
+    "key managerial",
+    "managing director",
+    "chief executive",
+    "chief financial",
+    "auditor",
+    # ratings ("rating" alone would match "operating")
+    "credit rating",
+    "ratings",
+    "rating action",
+    "rating agenc",
+    # legal and regulatory
+    "litigation",
+    "dispute",
+    "penalty",
+    "show cause",
+    "demand",
+    "tax",
+    "search",
+    "sebi",
+    "nclt",
+    "arbitra",
+    "court",
+    "tribunal",
+    "regulatory action",
+    # deals and funding
+    "acqui",
+    "merger",
+    "amalgamation",
+    "demerger",
+    "scheme of arrangement",
+    "joint venture",
+    "subsidiary",
+    "stake ",  # not "stakeholder"
+    "divest",
+    "disinvest",
+    "slump sale",
+    "sale of",
+    "fund rais",
+    "raising of funds",
+    "qip",
+    "qualified institution",
+    "preferential",
+    "rights issue",
+    "warrant",
+    "debenture",
+    "ncd",
+    "buyback",
+    "buy-back",
+    # promoters
+    "pledge",
+    "encumbrance",
+    "promoter",
+    "sast",
+    "takeover",
+    "offer for sale",
+    # disruptions
+    "fire",
+    "accident",
+    "strike",
+    "lockout",
+    "shutdown",
+    "suspension of operation",
+    "cyber",
+    "flood",
+    "force majeure",
+    "disruption",
+    "incident",
+    # agreements and approvals
+    "agreement",
+    " mou",  # not "amount"
+    "memorandum of understanding",
+    "partnership",
+    "collaboration",
+    "launch",
+    "approval",
+    "licen",
+    "usfda",
+    "inspection",
+)
+# Routine filings that use the same words: skipped before any are read.
+ROUTINE_WORDS = (
+    "trading window",
+    "share certificate",
+    "74(5)",
+    "regulation 74",
+    "compliance certificate",
+    "esop",
+    "esos",
+    "employee stock",
+    "newspaper",
+    "investor complaint",
+    "secretarial compliance",
+    "annual report",
+    "record date",
+    "book closure",
+    "iepf",
+    "unclaimed",
+    "related party transaction",
+    "statement of deviation",
+    "monitoring agency",
+    "large corporate",
+    "initial disclosure",
+    "annual disclosure",
+    "voting result",
+    "scrutini",
+    "business responsibility",
+    "loss of share",
+)
+
+
+def event_candidate(doc_type: str, title: str | None, subject: str | None) -> bool:
+    """Whether a filing may announce an event the Event Extractor records."""
+    if doc_type not in EVENT_DOC_TYPES:
+        return False
+    if doc_type == "credit_rating":
+        return True
+    text = f"{title or ''} {subject or ''}".lower()
+    if any(w in text for w in ROUTINE_WORDS):
+        return False
+    return any(w in text for w in EVENT_WORDS)
+
 
 def classify(subject: str, title: str, category: str | None, raw: dict | None = None) -> str:
     if raw and raw.get("AUDIO_VIDEO_FILE"):

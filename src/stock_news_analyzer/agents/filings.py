@@ -21,9 +21,11 @@ from sqlalchemy.orm import Session
 from stock_news_analyzer.models import Company, Document, DocumentCompany, WatchlistItem
 from stock_news_analyzer.sources.announcements import (
     CONCALL_MATERIAL,
+    EVENT_DOC_TYPES,
     IST,
     Announcement,
     bse_total_rows,
+    event_candidate,
     parse_bse,
     parse_nse,
 )
@@ -33,8 +35,13 @@ log = logging.getLogger(__name__)
 
 SOURCES = ("bse", "nse")
 CHUNK_DAYS = 30
-# Attachments downloaded under the 'important' policy (backfills default to this).
+# Attachments downloaded under the 'important' policy (backfills default to this), with
+# those of filings whose title names an event (see announcements.event_candidate).
 IMPORTANT_TYPES = CONCALL_MATERIAL | {"order_win", "credit_rating", "concall_schedule"}
+
+
+def important(doc: Document) -> bool:
+    return doc.doc_type in IMPORTANT_TYPES or event_candidate(doc.doc_type, doc.title, doc.subject)
 
 
 class Client(Protocol):
@@ -213,9 +220,13 @@ class FilingsCollector:
     def _wants_attachment(self, doc: Document) -> bool:
         if doc.attachment_url is None or self.pdf_policy == "none":
             return False
-        return self.pdf_policy == "all" or doc.doc_type in IMPORTANT_TYPES
+        return self.pdf_policy == "all" or important(doc)
 
     # --- attachments ---------------------------------------------------------
+
+    def fetch_attachment(self, doc: Document, isin: str) -> bool:
+        """Download one document's attachment now, whatever the policy."""
+        return doc.attachment_url is not None and self._fetch_attachment(doc, isin)
 
     def _fetch_attachment(self, doc: Document, isin: str, ann: Announcement | None = None) -> bool:
         urls = ann.attachment_urls if ann else bse_alternatives(doc.attachment_url)
@@ -261,16 +272,16 @@ class FilingsCollector:
             .join(DocumentCompany, DocumentCompany.document_id == Document.id)
             .where(Document.attachment_url.is_not(None), missing)
             .order_by(Document.published_at.desc())
-            .limit(limit)
         )
         if isin:
             query = query.where(DocumentCompany.isin == isin)
         if self.pdf_policy == "important":
             # Filter before the limit, or older important files are never reached.
-            query = query.where(Document.doc_type.in_(IMPORTANT_TYPES))
+            query = query.where(Document.doc_type.in_(IMPORTANT_TYPES | EVENT_DOC_TYPES))
+        wanted = [(d, i) for d, i in self.session.execute(query).all() if self._wants_attachment(d)]
         fetched = 0
-        for doc, doc_isin in self.session.execute(query).all():
-            if self._wants_attachment(doc) and self._fetch_attachment(doc, doc_isin):
+        for doc, doc_isin in wanted[:limit]:
+            if self._fetch_attachment(doc, doc_isin):
                 fetched += 1
         return fetched
 

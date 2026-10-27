@@ -26,7 +26,8 @@ Every command block below can be pasted into Terminal as is; explanations are in
 | 13 | Promise Ledger (Claude Sonnet): promises checked against later results; credibility per company | done |
 | 14 | Order Book Tracker: orders from filings (Claude Haiku), quarterly order books (Claude Sonnet), book-to-bill and peers | done |
 | 15 | Wider coverage: earnings calls for every watchlist stock, single-order filings, `sna orders coverage` | done |
-| 16 | Results Reader (Claude Haiku): revenue, profit and margins from quarterly and half-yearly results; fills order-book revenue gaps | this PR |
+| 16 | Results Reader (Claude Haiku): revenue, profit and margins from quarterly and half-yearly results; fills order-book revenue gaps; XBRL first | done |
+| 17 | Event Extractor (Claude Haiku) and QA Checker (code checks + Claude Sonnet): capex, ratings, management changes, legal matters, deals, fundraises, promoter actions, disruptions | this PR |
 
 ## Run it on a Mac
 
@@ -316,6 +317,40 @@ uv run sna results coverage
 
 EBITDA here is profit before tax + finance costs + depreciation − other income. The scheduler reads new results at 07:20, before the order books. New results appear in a "Results" section of the digest, and the Stock page has a **Results** tab: the latest revenue, profit and margin, a revenue chart and the table.
 
+## Events and QA (Phase 2, LLM)
+
+**Event Extractor.** Results, order wins and earnings calls have their own agents. This one reads the rest of a watchlist stock's filings whose title names an event, and records typed events: capex and capacity, guidance, management changes (directors, MD, CEO, CFO, auditor), credit ratings, legal and regulatory matters, acquisitions and other deals, fundraises, promoters' buying, selling and pledges, disruptions (fire, strike, shutdown), agreements and approvals. Routine filings (trading window, certificates, newspaper copies) are skipped by their title before any LLM call. Claude Haiku reads six filings a call; each event gets a headline, date, sentiment, importance (1-5), its main amount as written and in Rs crore, the parties, and the sentence it came from. The PDFs of these filings weren't downloaded before; the run downloads them first (up to 300 a run), and the collector now downloads them as they come.
+
+**QA Checker.** Every new event is checked in code:
+
+- the quote is in the filing
+- the amount, as written, is in the filing, and its unit gives the value recorded: the code converts "Rs 75 lakh" or "INR 1,200 million" itself and corrects the model's arithmetic
+- the amount against the company's revenue for the 12 months before: shown as a share of revenue, and flagged above a year's revenue
+- the fields a type needs (a rating action's agency and new rating, a management change's person, role and action)
+- the date is near the filing's; a stake is a percentage
+- not the same event as an earlier filing's (an intimation and its outcome)
+
+Events a check flagged, and every event of importance 4 or 5, then get a second pass with Claude Sonnet: is the filing about this company, is it a real event, is the type right, is the amount right. It can correct the type or the amount (when the right amount is in the filing). Events it can't confirm wait in the review queue; your decisions are kept with the events as training data.
+
+```bash
+uv run sna events run
+uv run sna events coverage
+uv run sna events list
+uv run sna events review
+```
+
+| Command | What it does |
+| --- | --- |
+| `uv run sna events run` | Download missing PDFs, read filings of the last 400 days not read yet (Haiku), check the new events (QA); shows the cost first and asks above $1 |
+| `uv run sna events list LT` | Events, newest first: type, importance, sentiment, headline, amount and share of revenue; `--type credit_rating`, `--importance 3`, `--days 365`, `--all` for hidden ones |
+| `uv run sna events show 12` | One event in full: its fields, quote, QA notes and the filing's link |
+| `uv run sna events review` | The review queue: events the QA Checker flagged or failed, with the reasons |
+| `uv run sna events accept 12` / `reject 12` | Your decision (`--note` to say why); accepted events are shown, rejected ones hidden |
+| `uv run sna events coverage` | Every watchlist stock: candidate filings, read, with no event, copies, failed, waiting; events passed, flagged, failed, repeated |
+| `uv run sna events reset --symbol LT` | Forget events (and reviews) so they are read again |
+
+The scheduler reads new filings at 07:25. Events of importance 3 or more appear in an "Events" section of the digest, flagged ones marked *unchecked*, and the Stock page has an **Events** tab.
+
 ## Prices, moves and labels
 
 ```bash
@@ -367,7 +402,7 @@ make scheduler
 | --- | --- |
 | `uv run sna orchestrator show` | The schedule and when each job runs next |
 | `make run-all` | Run every job once, now, in order: collect, triage, measure, explain, read calls, digest |
-| `uv run sna run news` | Run one job now: `filings`, `news`, `triage`, `deals`, `prices`, `xbrl`, `results`, `explain`, `concalls`, `promises`, `orders`, `securities` or `digest` |
+| `uv run sna run news` | Run one job now: `filings`, `news`, `triage`, `deals`, `prices`, `xbrl`, `results`, `events`, `explain`, `concalls`, `promises`, `orders`, `securities` or `digest` |
 | `uv run sna runs` | Recent runs: when, how long, result, errors |
 | `make digest` | Print the digest covering everything since the last scheduled digest (`--hours 24` for a fixed window) |
 | `make scheduler` | Start the orchestrator in Docker; it keeps running while Docker Desktop is open |

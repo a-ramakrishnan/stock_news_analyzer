@@ -11,6 +11,15 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.10 · Oct 27, 2026
+
+- Step 17, the rest of the Event Extractor and the QA Checker:
+  - agents 7 and 8 marked built, with "As built" notes
+  - typed events from filings that results, orders and calls don't cover, with materiality against trailing revenue
+  - code checks on every event, a Sonnet 5.5 second pass on flagged and important ones, a review queue kept on the events themselves
+  - the `events` and `event_filings` tables mapped to the plan
+- Status tables and the block diagram updated; the next step is the Red-flag Monitor, built on the events
+
 ### 1.9 · Oct 26, 2026
 
 - Results from the exchange's XBRL files (no LLM) as the first source, the PDF reader as the fallback:

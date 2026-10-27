@@ -17,6 +17,7 @@ from stock_news_analyzer.models import (
     CorporateAction,
     Document,
     DocumentCompany,
+    Event,
     EventLabel,
     IndexDaily,
     LlmCall,
@@ -720,6 +721,56 @@ def results(session: Session, isin: str) -> pd.DataFrame:
     from stock_news_analyzer.agents.results import table
 
     return pd.DataFrame(table(session, isin), columns=RESULT_COLUMNS)
+
+
+EVENT_COLUMNS = [
+    "id",
+    "filed",
+    "type",
+    "importance",
+    "sentiment",
+    "headline",
+    "value_cr",
+    "materiality",
+    "qa",
+    "qa_notes",
+    "quote",
+    "link",
+]
+
+
+def events(session: Session, isin: str, days: int = 730) -> pd.DataFrame:
+    """A company's events, newest first: those shown (see agents/qa.shown), with their QA
+    status ('unchecked' for flagged ones not reviewed)."""
+    from stock_news_analyzer.agents.qa import shown
+
+    since = datetime.now(IST) - timedelta(days=days)
+    rows = session.execute(
+        select(Event, Document.attachment_url)
+        .join(Document, Document.id == Event.document_id)
+        .where(Event.isin == isin, Event.published_at >= since, shown())
+        .order_by(Event.published_at.desc(), Event.id)
+    ).all()
+    out = []
+    for e, url in rows:
+        qa = "unchecked" if e.qa_status == "flagged" and e.review is None else "checked"
+        out.append(
+            {
+                "id": e.id,
+                "filed": e.published_at.astimezone(IST).date(),
+                "type": e.event_type.replace("_", " "),
+                "importance": e.importance,
+                "sentiment": e.sentiment,
+                "headline": e.headline,
+                "value_cr": float(e.value_cr) if e.value_cr is not None else None,
+                "materiality": e.materiality,
+                "qa": "you accepted it" if e.review == "accepted" else qa,
+                "qa_notes": "; ".join(e.qa_notes),
+                "quote": e.quote,
+                "link": url,
+            }
+        )
+    return pd.DataFrame(out, columns=EVENT_COLUMNS)
 
 
 def order_peers(session: Session) -> pd.DataFrame:

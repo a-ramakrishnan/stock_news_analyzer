@@ -62,14 +62,21 @@ def _day(text: str | None) -> date | None:
         return None
 
 
+def quarter_end(day: date) -> bool:
+    """True for 31 Mar, 30 Jun, 30 Sep and 31 Dec."""
+    return day.month in (3, 6, 9, 12) and (day + timedelta(days=1)).day == 1
+
+
 def filings(rows: list[dict], since: date) -> list[dict]:
     """One filing per quarter from NSE's listing (the latest, when a filing was revised),
-    for quarters ending on or after `since`, oldest first."""
+    for quarters ending on or after `since`, oldest first. Patterns filed for an event on
+    another date (before a share issue or listing) are left out: they don't compare with
+    the quarters around them."""
     best: dict[date, dict] = {}
     for row in rows:
         end = _day(row.get("date"))
         link = row.get("xbrl") or ""
-        if end is None or end < since or not link.endswith(".xml"):
+        if end is None or end < since or not quarter_end(end) or not link.endswith(".xml"):
             continue
         try:
             filed = datetime.strptime(row.get("broadcastDate") or "", "%d-%b-%Y %H:%M:%S")
@@ -135,6 +142,17 @@ def import_holdings(
         except ExchangeError as exc:
             result.errors.append(f"{company.nse_symbol}: {exc}")
             continue
+        for old in session.scalars(select(Shareholding).where(Shareholding.isin == company.isin)):
+            if not quarter_end(old.quarter_end):  # stored before event filings were left out
+                session.delete(old)
+                for flag in session.scalars(
+                    select(RedFlag).where(
+                        RedFlag.isin == company.isin,
+                        RedFlag.ref.like(f"holdings:%:{old.quarter_end}"),
+                    )
+                ):
+                    session.delete(flag)
+        session.flush()
         stored = dict(
             session.execute(
                 select(Shareholding.quarter_end, Shareholding.record_id).where(

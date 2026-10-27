@@ -124,6 +124,7 @@ def test_listing_keeps_the_latest_filing_per_quarter():
         row(q2, 2, date(2026, 7, 16)),
         row(date(2020, 3, 31), 1, date(2020, 4, 15)),
         {**row(date(2026, 3, 31), 9, date(2026, 4, 15)), "xbrl": "-"},
+        row(date(2025, 11, 20), 8, date(2025, 11, 25)),  # filed for a share issue
     ]
     found = holdings.filings(rows, date(2025, 1, 1))
     assert [(f["end"], f["record_id"]) for f in found] == [(q2, "2"), (q3, "4")]
@@ -134,7 +135,8 @@ def stored(loaded):  # noqa: F811
     """Three quarters of LT (promoters sell 3 points, then pledge 25% of their shares) and
     two of KVB (promoter stake diluted by new shares, not sold)."""
     today = datetime.now(IST).date()
-    q = [today - timedelta(days=d) for d in (200, 110, 20)]
+    ends = [d for d in (today - timedelta(days=n) for n in range(400)) if holdings.quarter_end(d)]
+    q = sorted(ends[:3])  # the last three quarter ends
     files = {}
     listings = {"LT": [], "KARURVYSYA": []}
     lt = [
@@ -143,11 +145,11 @@ def stored(loaded):  # noqa: F811
         (cats(570_000, 110_000, 165_000, 120_000), 0.25),
     ]
     for i, (c, pledged) in enumerate(lt):
-        r = row(q[i], 100 + i, q[i] + timedelta(days=15))
+        r = row(q[i], 100 + i, min(q[i] + timedelta(days=15), today))
         files[r["xbrl"]] = xbrl(q[i], c, pledged)
         listings["LT"].append(r)
     for i, promoter in enumerate((500_000, 480_000)):
-        r = row(q[i + 1], 200 + i, q[i + 1] + timedelta(days=15))
+        r = row(q[i + 1], 200 + i, min(q[i + 1] + timedelta(days=15), today))
         c = cats(promoter, 50_000, 10_000, 300_000)
         files[r["xbrl"]] = xbrl(q[i + 1], c)
         listings["KARURVYSYA"].append(r)

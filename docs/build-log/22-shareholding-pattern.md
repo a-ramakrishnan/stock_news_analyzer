@@ -28,6 +28,8 @@
 
 The first run on the Mac stopped at a 2023 filing with a promoter stake of 5,117%. Files from 2025 on write percentages as fractions (0.5117), but older ones write percent (51.17). The parser now reads the scale from each file's total category, 1 or 100, and refuses any percentage outside 0–100. A file that fails is reported and skipped; until now one bad file stopped the whole run.
 
+The second run read 189 quarters for the 15 stocks. Sathlokhar's promoters went 62.71% → 58.27% (Nov 2025) → 62.71% (Dec 2025) → 58.27% (Mar 2026) while holding the same 15.1 million shares. The November pattern was filed for a share issue and already counted the new shares; the December quarterly one did not yet. Patterns filed for an event on a date other than a quarter end are now left out, and any already stored are removed with their flags.
+
 ## Red flags
 
 - **Promoters selling:** only when the promoters hold fewer shares than the quarter before. A stake that falls because new shares were issued, such as a QIP or a merger, is dilution and raises nothing.

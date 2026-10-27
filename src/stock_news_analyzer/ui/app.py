@@ -1,7 +1,8 @@
 """The dashboard: `sna ui` (or `make ui`) starts it at http://localhost:8501.
 
 Every page only reads, except Manage stocks, which adds, edits and removes watchlist stocks
-and can load a new stock's history. Regular collecting is done by the scheduler.
+and can load a new stock's history, and Ask, which asks the Analyst Q&A (an LLM call) and keeps
+the question. Regular collecting is done by the scheduler.
 """
 
 import html
@@ -979,6 +980,64 @@ def themes_page() -> None:
     )
 
 
+def ask_page() -> None:
+    from stock_news_analyzer.agents import ask as qa
+    from stock_news_analyzer.llm import LLM, LLMError
+
+    st.title("Ask")
+    st.caption(
+        "Ask about your companies in plain English. The Analyst Q&A looks things up in the "
+        "database (read-only) and answers with sources; each question costs a few cents."
+    )
+    with st.form("ask"):
+        question = st.text_area(
+            "Question", placeholder="Which of my companies raised guidance this year?"
+        )
+        save = st.text_input("Save as report (optional name)", max_chars=64)
+        asked = st.form_submit_button("Ask", icon=":material/search:")
+    with Session(engine()) as session:
+        if asked and question.strip():
+            steps = st.status("Looking things up...", expanded=True)
+            try:
+                answer = qa.ask(
+                    session,
+                    LLM(session),
+                    question.strip(),
+                    name=save.strip() or None,
+                    progress=steps.write,
+                )
+            except LLMError as exc:
+                steps.update(label="Failed", state="error")
+                st.error(str(exc))
+            else:
+                steps.update(
+                    label=f"{answer.steps} lookups, ${answer.cost_usd:.4f}",
+                    state="complete",
+                    expanded=False,
+                )
+                st.markdown(answer.text)
+                for ref in answer.sources:
+                    st.caption(qa.describe_source(session, ref))
+        st.subheader("Earlier questions")
+        rows = qa.history(session)
+        if not rows:
+            st.caption("None yet.")
+        for r in rows:
+            label = (
+                f"{r.asked_at.astimezone(IST):%d %b %H:%M} "
+                + (f"[{r.name}] " if r.name else "")
+                + r.question[:100]
+            )
+            with st.expander(label):
+                st.markdown(r.answer)
+                for ref in r.sources:
+                    try:
+                        st.caption(qa.describe_source(session, ref))
+                    except AttributeError:  # the source was deleted since
+                        st.caption(f"[{ref}] (no longer stored)")
+                st.caption(f"{r.steps} lookups with {r.model}, ${r.cost_usd:.4f}")
+
+
 def moves_page() -> None:
     st.title("What moves the stock")
     st.caption(
@@ -1226,6 +1285,7 @@ PAGES = {
     ),
     "news": st.Page(news_page, title="News", icon=":material/newspaper:", url_path="news"),
     "themes": st.Page(themes_page, title="Themes", icon=":material/hub:", url_path="themes"),
+    "ask": st.Page(ask_page, title="Ask", icon=":material/question_answer:", url_path="ask"),
     "moves": st.Page(
         moves_page, title="What moves the stock", icon=":material/insights:", url_path="moves"
     ),

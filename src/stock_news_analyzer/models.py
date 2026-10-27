@@ -779,3 +779,23 @@ class PeerSignal(Base):
     on_date: Mapped[date] = mapped_column(Date, index=True)
     title: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Question(Base):
+    """Analyst Q&A (agent 17): a question asked of the database, and its answer with the
+    sources it cites. A question given a `name` is a saved report: `sna questions rerun NAME`
+    asks it again."""
+
+    __tablename__ = "questions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    asked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    name: Mapped[str | None] = mapped_column(String(64), index=True)
+    question: Mapped[str] = mapped_column(Text)
+    answer: Mapped[str] = mapped_column(Text)
+    sources: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), default=list, server_default="{}", nullable=False
+    )  # 'doc:123', 'event:45'...
+    steps: Mapped[int] = mapped_column(default=0)  # tool calls made
+    model: Mapped[str] = mapped_column(String(64))
+    cost_usd: Mapped[Decimal] = mapped_column(Numeric(10, 5), default=0)

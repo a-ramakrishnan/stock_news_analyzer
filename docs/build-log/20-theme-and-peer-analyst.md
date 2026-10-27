@@ -27,10 +27,21 @@ Per theme: items and companies in the last 90 days and the 90 before, positive a
 An important item at one company is listed for the other watchlist companies it may matter to:
 
 - **Important:** an event of importance 4 or 5, or an order of 1% or more of the company's revenue for the 12 months before
-- **Matters to:** the company's approved peers on the watchlist, and watchlist companies with an item in the same theme in the previous 180 days
+- **Matters to:** the company's approved peers on the watchlist, and watchlist companies with the item's theme among their core themes (see below)
 - At most five per item, each once
 
 It is plain code with no direction. The design had Sonnet judge whether a peer's news helps or hurts. A rival's order win can be bad news, and a supplier's can be good. The signal says "worth a look" and why, rather than guess the sign.
+
+## After the first run
+
+644 items were tagged for $0.02, 130 of them with no theme. The theme table read well. "Exports and overseas" (+175%) is L&T's run of Middle East orders, "Power T&D" is L&T and Diamond Power's cables, and "Credit and deposits" is the three banks.
+
+The read-across didn't: 186 signals, mostly noise. L&T's airport order went to Dabur and Gaudium IVF, because one item in a broad theme put a company in it. Dabur's factory build made it "Buildings and factories", Gaudium's new clinic did the same, and every overseas order linked through "Exports and overseas". The same order filed twice gave two signals.
+
+- **Core themes.** A company now counts as in a theme only if it is among its top three of the past year, with at least two items and 15% of them. `sna themes companies` lists them.
+- **Not every theme links companies.** "Exports and overseas" says where the work is, not the industry. It is marked `read_across: false` in `config/themes.yaml`.
+- **Once per day.** One source company, target and reason gives one signal a day.
+- **Rebuild without re-tagging.** `sna themes reset --signals-only` forgets the read-across and keeps the tags.
 
 ## Not yet
 

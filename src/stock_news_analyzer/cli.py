@@ -2604,6 +2604,31 @@ def themes_show(
         typer.echo(f"{t.on_date:%d %b %Y}  {symbol:<11} {t.title[:110]}{value}")
 
 
+@themes_app.command("companies")
+def themes_companies() -> None:
+    """Each watchlist stock's core themes: the ones read-across uses."""
+    from sqlalchemy import select
+
+    from stock_news_analyzer.agents import themes as th
+    from stock_news_analyzer.models import Company, WatchlistItem
+
+    names = {k: t["name"] for k, t in th.load_themes().items()}
+    with get_session() as session:
+        core = th.core_themes(session)
+        stocks = session.execute(
+            select(Company.isin, Company.nse_symbol)
+            .join(WatchlistItem, WatchlistItem.isin == Company.isin)
+            .order_by(Company.nse_symbol)
+        ).all()
+    for isin, symbol in stocks:
+        themes = ", ".join(names.get(t, t) for t in core.get(isin, [])) or "none yet"
+        typer.echo(f"{symbol or isin:<11} {themes}")
+    typer.echo(
+        "Core themes: a stock's top three of the past year, each with at least two items and 15% "
+        "of them. Read-across by theme goes only to stocks with the theme among these."
+    )
+
+
 @themes_app.command("signals")
 def themes_signals(
     symbol: str = typer.Argument(None, help="Only read-across for this NSE symbol."),
@@ -2624,15 +2649,21 @@ def themes_signals(
 
 
 @themes_app.command("reset")
-def themes_reset(yes: bool = typer.Option(False, "--yes", help="Don't ask.")) -> None:
+def themes_reset(
+    signals: bool = typer.Option(
+        False, "--signals-only", help="Forget only the read-across, keep the tags (no LLM cost)."
+    ),
+    yes: bool = typer.Option(False, "--yes", help="Don't ask."),
+) -> None:
     """Forget theme tags and read-across, so `sna themes run` tags everything again."""
     from stock_news_analyzer.agents import themes as th
 
-    if not yes and not typer.confirm("Forget all theme tags and read-across?"):
+    what = "read-across" if signals else "all theme tags and read-across"
+    if not yes and not typer.confirm(f"Forget {what}?"):
         raise typer.Exit(1)
     with get_session() as session:
-        count = th.reset(session)
-    typer.echo(f"{count} rows removed; run `sna themes run` to tag again")
+        count = th.reset(session, signals_only=signals)
+    typer.echo(f"{count} rows removed; run `sna themes run` to write them again")
 
 
 # --- bulk and block deals ------------------------------------------------------

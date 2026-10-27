@@ -420,7 +420,7 @@ The Theme & Peer Analyst connects what happens across your companies.
 
 - **Themes:** Claude Haiku tags each checked event, order and forward-looking earnings-call point (guidance, demand, capex, order book, initiatives) with up to three themes from [`config/themes.yaml`](config/themes.yaml). Examples are data centres, defence, railways and metro, power T&D, ports and marine, credit and deposits, consumer demand and recycling. Edit that file to add or rename themes. Each item is read once.
 - **Strength, in code:** per theme, the items and companies in the last 90 days against the 90 before, the positive and negative items, and the value of orders. Per month too.
-- **Read-across, in code:** an important order or event (importance 4–5, or an order of 1% or more of the company's yearly revenue) is listed for the other watchlist stocks that are its approved peers (`sna watchlist peers`) or that had an item in the same theme in the last 180 days.
+- **Read-across, in code:** an important order or event (importance 4–5, or an order of 1% or more of the company's yearly revenue) is listed for the other watchlist stocks that are its approved peers (`sna watchlist peers`) or have its theme among their **core themes**. A stock's core themes are its top three of the past year, each with at least two items and 15% of them. One factory build doesn't make a consumer company part of "Buildings and factories". A theme marked `read_across: false` in the file ("Exports and overseas") links no one.
 
 ```bash
 uv run sna themes run
@@ -434,8 +434,9 @@ uv run sna themes signals
 | `uv run sna themes run` | Tag events, orders and call points of the last 400 days not tagged yet (Haiku, 40 a call), then write read-across; shows the cost first |
 | `uv run sna themes list` | Every theme: items in the last 90 days and the 90 before, the trend, positive and negative items, order value, companies |
 | `uv run sna themes show data_centres` | One theme month by month, and its recent items |
+| `uv run sna themes companies` | Each stock's core themes, the ones read-across uses |
 | `uv run sna themes signals LT` | Read-across for a stock (or all): the order or event elsewhere, and why it is relevant (peer or theme) |
-| `uv run sna themes reset --yes` | Forget tags and read-across, e.g. after changing the themes |
+| `uv run sna themes reset --yes` | Forget tags and read-across, e.g. after changing the themes; `--signals-only` forgets only the read-across (no LLM cost to rebuild) |
 
 The scheduler tags new items at 07:52. New read-across appears in a "Read-across" section of the digest, and the dashboard has a **Themes** page: the theme table, a theme's months and items, and the read-across.
 

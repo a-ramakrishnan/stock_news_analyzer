@@ -7,7 +7,9 @@
    balance of positive and negative items; and the last 90 days against the 90 before.
 3. Read-across, in code: an important order or event at one company (importance 4-5, or an
    order of 1% or more of its yearly revenue) is written as a signal for the other watchlist
-   companies that are its approved peers or share the item's theme.
+   companies that are its approved peers or have the item's theme among their core themes:
+   the top three of their past year, each with at least two items and 15% of them. One item
+   in a broad theme (a consumer company building a factory) doesn't make a company part of it.
 """
 
 import logging
@@ -50,7 +52,10 @@ SKIP_EVENT_TYPES = ("management_change", "credit_rating", "promoter_action")
 POINT_CATEGORIES = ("guidance", "demand", "capex", "order_book", "initiative")
 READ_ACROSS_IMPORTANCE = 4
 READ_ACROSS_SHARE = 0.01  # an order this share of the company's yearly revenue
-READ_ACROSS_DAYS = 180  # a company "in" a theme has an item in it this recent
+CORE_DAYS = 365  # a company's core themes come from its items this recent
+CORE_TOP = 3
+CORE_MIN_ITEMS = 2
+CORE_MIN_SHARE = 0.15
 MAX_TARGETS = 5
 WINDOW = 90  # days, for the trend
 
@@ -98,9 +103,16 @@ class ThemesResult:
 
 
 def load_themes(path: Path = THEMES_FILE) -> dict[str, dict]:
-    """{key: {'name': ..., 'hint': ...}} from config/themes.yaml."""
+    """{key: {'name': ..., 'hint': ..., 'read_across': bool}} from config/themes.yaml."""
     data = yaml.safe_load(path.read_text()) or {}
-    return {t["key"]: {"name": t["name"], "hint": t.get("hint", "")} for t in data["themes"]}
+    return {
+        t["key"]: {
+            "name": t["name"],
+            "hint": t.get("hint", ""),
+            "read_across": bool(t.get("read_across", True)),
+        }
+        for t in data["themes"]
+    }
 
 
 def _start(day: date) -> datetime:
@@ -304,11 +316,49 @@ def _significant(session: Session, since: date) -> list[tuple[ThemeTag, list[str
     return out
 
 
+def core_themes(session: Session, today: date | None = None) -> dict[str, list[str]]:
+    """{isin: its core themes}: the top CORE_TOP themes of its items in the past year (themes
+    that allow read-across), each with CORE_MIN_ITEMS items and CORE_MIN_SHARE of them."""
+    today = today or datetime.now(IST).date()
+    allowed = {k for k, t in load_themes().items() if t["read_across"]}
+    rows = session.execute(
+        select(ThemeTag.isin, ThemeTag.item_type, ThemeTag.item_id, ThemeTag.theme).where(
+            ThemeTag.on_date > today - timedelta(days=CORE_DAYS)
+        )
+    ).all()
+    items: dict[str, set] = defaultdict(set)
+    counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    for isin, item_type, item_id, theme in rows:
+        items[isin].add((item_type, item_id))
+        if theme in allowed:
+            counts[isin][theme] += 1
+    out = {}
+    for isin, by_theme in counts.items():
+        ranked = sorted(by_theme.items(), key=lambda kv: -kv[1])[:CORE_TOP]
+        total = len(items[isin])
+        out[isin] = [t for t, n in ranked if n >= CORE_MIN_ITEMS and n >= CORE_MIN_SHARE * total]
+    return out
+
+
 def read_across(session: Session, since: date | None = None) -> int:
     """Write read-across signals for important items since `since`. Returns new signals."""
     since = since or datetime.now(IST).date() - timedelta(days=THEME_DAYS)
     watch = set(session.scalars(select(WatchlistItem.isin).where(WatchlistItem.isin.is_not(None))))
     names = dict(session.execute(select(Company.isin, Company.nse_symbol)).all())
+    core = core_themes(session)
+    allowed = {k for k, t in load_themes().items() if t["read_across"]}
+    # (source company, target, relation, day) already signalled: the same order filed twice
+    # is one read-across.
+    seen = set(
+        session.execute(
+            select(
+                PeerSignal.source_isin,
+                PeerSignal.target_isin,
+                PeerSignal.relation,
+                PeerSignal.on_date,
+            )
+        ).all()
+    )
     new = 0
     for tag_row, item_themes in _significant(session, since):
         targets: dict[str, str] = {}
@@ -317,20 +367,15 @@ def read_across(session: Session, since: date | None = None) -> int:
         ):
             if peer in watch and peer != tag_row.isin:
                 targets.setdefault(peer, "peer")
-        for theme in item_themes:
-            for isin in session.scalars(
-                select(ThemeTag.isin)
-                .where(
-                    ThemeTag.theme == theme,
-                    ThemeTag.on_date >= tag_row.on_date - timedelta(days=READ_ACROSS_DAYS),
-                    ThemeTag.on_date <= tag_row.on_date,
-                    ThemeTag.isin != tag_row.isin,
-                )
-                .distinct()
-            ):
-                if isin in watch:
+        for theme in (t for t in item_themes if t in allowed):
+            for isin in sorted(watch - {tag_row.isin}):
+                if theme in core.get(isin, []):
                     targets.setdefault(isin, f"theme:{theme}")
         for isin, relation in list(targets.items())[:MAX_TARGETS]:
+            key = (tag_row.isin, isin, relation, tag_row.on_date)
+            if key in seen:
+                continue
+            seen.add(key)
             symbol = names.get(tag_row.isin) or tag_row.isin
             inserted = session.execute(
                 insert(PeerSignal)
@@ -462,8 +507,12 @@ def signals(
     return [(s, symbol or s.target_isin) for s, symbol in session.execute(query)]
 
 
-def reset(session: Session) -> int:
+def reset(session: Session, signals_only: bool = False) -> int:
+    """Forget read-across, and the theme tags too unless `signals_only`."""
     count = session.execute(delete(PeerSignal)).rowcount
+    if signals_only:
+        session.commit()
+        return count
     count += session.execute(delete(ThemeTag)).rowcount
     session.commit()
     return count

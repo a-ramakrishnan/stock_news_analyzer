@@ -140,12 +140,18 @@ def parse_feed(content: bytes, source: str, publisher: str) -> list[Article]:
 
 
 class NewsClient:
-    """Fetches feeds with a browser-like client, one request per `delay` seconds."""
+    """Fetches feeds with a browser-like client, one request per `delay` seconds.
+
+    Some sites refuse the browser imitation itself: from Oct 2026 Google News answered every
+    search from it with HTTP 503, while a plain client got 200. A refused request is tried
+    once more with a plain client (httpx).
+    """
 
     def __init__(self, delay: float = 1.0, timeout: float = 30):
         self.delay = delay
         self.timeout = timeout
         self._session = creq.Session(impersonate="chrome")
+        self._plain = None
         self._last = 0.0
 
     def fetch(self, url: str) -> bytes:
@@ -155,8 +161,24 @@ class NewsClient:
         self._last = time.monotonic()
         try:
             resp = self._session.get(url, timeout=self.timeout)
+            status, content = resp.status_code, resp.content
         except Exception as exc:  # network errors from curl_cffi
-            raise NewsError(f"{type(exc).__name__}: {exc}") from exc
-        if resp.status_code != 200:
-            raise NewsError(f"HTTP {resp.status_code}")
-        return resp.content
+            status, content = None, f"{type(exc).__name__}: {exc}"
+        if status == 200:
+            return content
+        plain_status, plain_content = self._fetch_plain(url)
+        if plain_status == 200:
+            return plain_content
+        raise NewsError(f"HTTP {status}" if status else content)
+
+    def _fetch_plain(self, url: str) -> tuple[int | None, bytes]:
+        import httpx
+
+        if self._plain is None:
+            self._plain = httpx.Client(timeout=self.timeout, follow_redirects=True)
+        try:
+            resp = self._plain.get(url)
+        except httpx.HTTPError as exc:
+            log.debug("plain client: %s", exc)
+            return None, b""
+        return resp.status_code, resp.content

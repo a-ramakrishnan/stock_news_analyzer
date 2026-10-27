@@ -1,7 +1,8 @@
 """The one place that calls an LLM (Claude), so every Phase 2 agent shares the same rules.
 
-Each call asks for a structured answer (a pydantic model), is logged in `llm_calls` with its
-tokens and cost, and is refused once this month's spend reaches LLM_MONTHLY_BUDGET_USD.
+Each call asks for a structured answer (a pydantic model), or for one turn of a conversation
+with tools (`message`, for the Analyst Q&A); each is logged in `llm_calls` with its tokens and
+cost, and refused once this month's spend reaches LLM_MONTHLY_BUDGET_USD.
 """
 
 import logging
@@ -145,6 +146,50 @@ class LLM:
         if not call.ok:
             raise BadAnswer(call.error)
         return parsed
+
+    def message(
+        self,
+        task: str,
+        model: str,
+        system: str,
+        messages: list[dict],
+        tools: list[dict] | None = None,
+        max_tokens: int = 4000,
+    ):
+        """One turn of a conversation that may use tools (the Analyst Q&A). Returns the raw
+        response; logs the call. The system prompt and tools are cached between turns."""
+        self.check_budget()
+        import anthropic
+
+        call = LlmCall(at=datetime.now(UTC), task=task, model=model)
+        kwargs = {}
+        if tools:
+            *rest, last = tools
+            kwargs["tools"] = [*rest, {**last, "cache_control": {"type": "ephemeral"}}]
+        try:
+            response = self.client.messages.create(
+                model=model,
+                max_tokens=max_tokens,
+                system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
+                messages=messages,
+                **kwargs,
+            )
+        except anthropic.APIError as exc:
+            call.ok, call.error = False, f"{type(exc).__name__}: {exc}"[:2000]
+            self._record(call)
+            raise LLMError(call.error) from exc
+        usage = response.usage
+        call.input_tokens = usage.input_tokens or 0
+        call.output_tokens = usage.output_tokens or 0
+        call.cache_read_tokens = getattr(usage, "cache_read_input_tokens", 0) or 0
+        call.cache_write_tokens = getattr(usage, "cache_creation_input_tokens", 0) or 0
+        call.cost_usd = cost(model, usage)
+        if response.stop_reason == "refusal":
+            call.ok, call.error = False, "declined by the model's safety checks"
+        self._record(call)
+        if not call.ok:
+            raise BadAnswer(call.error)
+        return response
 
     def _record(self, call: LlmCall) -> None:
         self.session.add(call)

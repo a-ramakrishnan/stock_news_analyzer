@@ -90,6 +90,11 @@ themes_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(themes_app, name="themes")
+questions_app = typer.Typer(
+    help="Analyst Q&A: questions asked so far and saved reports (ask with `sna ask`).",
+    no_args_is_help=True,
+)
+app.add_typer(questions_app, name="questions")
 deals_app = typer.Typer(help="NSE bulk and block deals.", no_args_is_help=True)
 app.add_typer(deals_app, name="deals")
 app.add_typer(triage_app, name="triage")
@@ -2775,3 +2780,112 @@ def deals_list(
                 f"{d.trade_date:%d %b %Y}  {d.symbol:<11} {d.kind:<5} {d.side:<4} "
                 f"{d.quantity:>12,} @ {price}  {d.client[:60]}"
             )
+
+
+def _print_answer(session, answer) -> None:
+    from stock_news_analyzer.agents import ask as qa
+
+    typer.echo("")
+    typer.echo(answer.text)
+    if answer.sources:
+        typer.echo("\nSources:")
+        for ref in answer.sources:
+            typer.echo(qa.describe_source(session, ref))
+    typer.echo(f"\n{answer.steps} lookups with {answer.model}, ${answer.cost_usd:.4f}")
+
+
+def _ask(question: str, model: str | None, name: str | None) -> None:
+    from stock_news_analyzer.agents import ask as qa
+    from stock_news_analyzer.llm import LLM, LLMError, LLMNotConfigured
+
+    with get_session() as session:
+        try:
+            answer = qa.ask(
+                session,
+                LLM(session),
+                question,
+                model=model,
+                name=name,
+                progress=lambda line: typer.echo(f"  {line}"),
+            )
+        except LLMNotConfigured as exc:
+            typer.echo(f"{exc}: add ANTHROPIC_API_KEY=... to .env (see .env.example)")
+            raise typer.Exit(1) from exc
+        except LLMError as exc:
+            typer.echo(f"error: {exc}")
+            raise typer.Exit(1) from exc
+        _print_answer(session, answer)
+        if name:
+            typer.echo(f"saved as '{name}': ask again with `sna questions rerun {name}`")
+
+
+@app.command("ask")
+def ask_command(
+    question: str = typer.Argument(..., help="The question, in quotes."),
+    model: str = typer.Option(None, help="Model to use (default: the analysis model)."),
+    save: str = typer.Option(None, "--save", help="Keep it as a saved report under this name."),
+) -> None:
+    """Analyst Q&A: ask a question about your companies; answered from the database, with
+    sources."""
+    _ask(question, model, save)
+
+
+@questions_app.command("list")
+def questions_list(
+    limit: int = typer.Option(20, help="How many recent questions."),
+    saved: bool = typer.Option(False, "--saved", help="Saved reports only."),
+) -> None:
+    """Recent questions (and saved reports) with their cost."""
+    from sqlalchemy import select
+
+    from stock_news_analyzer.models import Question
+
+    with get_session() as session:
+        q = select(Question).order_by(Question.asked_at.desc()).limit(limit)
+        if saved:
+            q = q.where(Question.name.is_not(None))
+        rows = list(session.scalars(q))
+        if not rows:
+            typer.echo('no questions yet: try `sna ask "..."`')
+        for r in rows:
+            label = f"[{r.name}] " if r.name else ""
+            typer.echo(
+                f"{r.id:>5} {r.asked_at.astimezone(fl.IST):%d %b %H:%M} ${r.cost_usd:.3f} "
+                f"{r.steps:>2} steps  {label}{r.question[:90]}"
+            )
+
+
+@questions_app.command("show")
+def questions_show(ref: str = typer.Argument(..., help="Question id or saved name.")) -> None:
+    """Show a stored answer again (no LLM call)."""
+    from stock_news_analyzer.agents import ask as qa
+    from stock_news_analyzer.models import Question
+
+    with get_session() as session:
+        row = session.get(Question, int(ref)) if ref.isdigit() else qa.saved(session, ref)
+        if row is None:
+            typer.echo(f"no question {ref}")
+            raise typer.Exit(1)
+        typer.echo(f"Q: {row.question}  ({row.asked_at.astimezone(fl.IST):%d %b %Y %H:%M})\n")
+        typer.echo(row.answer)
+        if row.sources:
+            typer.echo("\nSources:")
+            for s in row.sources:
+                typer.echo(qa.describe_source(session, s))
+
+
+@questions_app.command("rerun")
+def questions_rerun(
+    name: str = typer.Argument(..., help="The saved report's name."),
+    model: str = typer.Option(None, help="Model to use (default: the analysis model)."),
+) -> None:
+    """Ask a saved report's question again, on today's data."""
+    from stock_news_analyzer.agents import ask as qa
+
+    with get_session() as session:
+        row = qa.saved(session, name)
+        question = row.question if row else None
+    if question is None:
+        typer.echo(f"no saved report '{name}'")
+        raise typer.Exit(1)
+    _ask(question, model, name)

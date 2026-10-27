@@ -440,6 +440,32 @@ uv run sna themes signals
 
 The scheduler tags new items at 07:52. New read-across appears in a "Read-across" section of the digest, and the dashboard has a **Themes** page: the theme table, a theme's months and items, and the read-across.
 
+## Analyst Q&A (Phase 2, LLM)
+
+Ask anything about your companies in plain English. Claude Sonnet looks the answer up in your own database, step by step, and cites what it used.
+
+- **Tools, all read-only:** `run_sql` (one SELECT, in a read-only transaction with a 5-second limit, at most 100 rows back), `search_text` (full-text search over filings, news, earnings-call points, events and promises) and `read_document` (the start of one filing or article).
+- **It knows the tables:** the prompt lists every table with its columns, generated from the code, so new tables are known at once.
+- **Sources:** facts from a document, event, call point or promise are cited as `[doc:123]`, `[event:45]`, `[point:6]` or `[promise:7]`. The sources are listed under the answer with dates and links. Citations to rows that don't exist are dropped.
+- **Kept:** every question, answer, sources and cost go in the `questions` table. Give one a name with `--save` and ask it again later on fresh data.
+- **Cost:** about 2–10 cents a question (at most 10 lookups). The monthly budget applies.
+
+```bash
+uv run sna ask "Which of my companies raised guidance this year?"
+uv run sna questions list
+```
+
+| Command | What it does |
+| --- | --- |
+| `uv run sna ask "..."` | Answer a question; shows each lookup as it goes, then the answer, sources and cost |
+| `uv run sna ask "..." --save weekly-orders` | The same, kept as a saved report |
+| `uv run sna ask "..." --model claude-opus-5-5` | Use another model, e.g. Opus for a hard question (about 5x the cost) |
+| `uv run sna questions list` | Recent questions with cost; `--saved` for saved reports only |
+| `uv run sna questions show 12` | A stored answer again, by id or saved name (no LLM call) |
+| `uv run sna questions rerun weekly-orders` | Ask a saved report again on today's data |
+
+The dashboard has an **Ask** page: a question box, the answer with its sources, and earlier questions.
+
 ## Prices, moves and labels
 
 ```bash
@@ -502,7 +528,7 @@ Scheduled digests are saved as Markdown under `data/digests/`. While the Mac sle
 
 ## Dashboard
 
-A local web page over everything collected. Every page only reads, except **Manage stocks**, where you add, edit and remove stocks.
+A local web page over everything collected. Every page only reads, except **Manage stocks**, where you add, edit and remove stocks, and **Ask**, which asks the Analyst Q&A (an LLM call).
 
 ```bash
 make ui
@@ -519,6 +545,8 @@ make ui
 | Stock | Stock vs sector vs Nifty 50 indexed to 100, key filings and unusual days marked; unusual days with their likely cause, results, earnings calls and the promise ledger, the order book, filings, news, deals, reactions and corporate actions |
 | Filings | Search by stock, type, words and date; read a filing's extracted text |
 | News | Search headlines; links to the articles |
+| Themes | Theme strength, a theme's months and items, read-across |
+| Ask | Ask a question in plain English; the answer with sources, and earlier questions |
 | What moves the stock | Average return vs Nifty 50 after each kind of filing, 1, 5 and 20 trading days later |
 | Manage stocks | Search any listed company and add it to Stocks I own or Watchlist, with news aliases and a sector benchmark; edit or remove stocks; **Load history now** fetches a new stock's filings, news and moves since Oct 2023 |
 | System | Schedule, stored data, recent runs and errors |

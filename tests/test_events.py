@@ -52,6 +52,7 @@ def rating(**kw):
         rating_from="CARE AA+; Positive",
         rating_to="CARE AAA; Stable",
         stake_pct=None,
+        shares=None,
         quote="CARE Ratings Limited has upgraded the long-term rating of the Company's bank "
         "facilities of Rs. 5,000 crore to CARE AAA; Stable from CARE AA+; Positive.",
     )
@@ -75,6 +76,7 @@ def capex(**kw):
         rating_from=None,
         rating_to=None,
         stake_pct=None,
+        shares=None,
         quote="The Board approved a capital expenditure of Rs. 450 crore for a new plant at Hosur",
     )
     return ev.EventItem(**{**fields, **kw})

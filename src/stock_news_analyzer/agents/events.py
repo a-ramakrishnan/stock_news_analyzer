@@ -39,7 +39,7 @@ from stock_news_analyzer.text import clean
 
 log = logging.getLogger(__name__)
 
-PROMPT_VERSION = "events-3"
+PROMPT_VERSION = "events-4"
 EVENT_DAYS = 400  # how far back the first run reads
 BATCH_SIZE = 6  # filings per LLM call
 FILING_CHARS = 5000  # of each filing's text; event letters are short
@@ -121,7 +121,10 @@ For each event:
 - person and role: for a management change; action: what happened, in a few words
   ("appointed", "resigned", "upgraded", "pledge created").
 - rating_from, rating_to: the old and new rating, as written, for a rating action.
-- stake_pct: a stake bought, sold or pledged, in percent of the company or target.
+- stake_pct: the stake bought, sold or pledged in this event, in percent of the company or
+  target; not the holding before or after it. Null if the filing doesn't give it.
+- shares: the number of shares bought, sold, pledged, allotted or issued, as a whole number
+  (written "3,45,620" -> 345620); null if not stated.
 - quote: the sentence or two from the filing that states the event, copied exactly; it must
   contain value_as_written if there is one.
 
@@ -145,6 +148,7 @@ class EventItem(BaseModel):
     rating_from: str | None
     rating_to: str | None
     stake_pct: float | None
+    shares: int | None
     quote: str
 
 
@@ -276,6 +280,7 @@ def _store(session: Session, doc: Document, company: Company, item: FilingEvents
                 rating_from=_text(e.rating_from),
                 rating_to=_text(e.rating_to),
                 stake_pct=e.stake_pct,
+                shares=e.shares,
                 quote=_text(e.quote),
                 model=model,
                 prompt_version=PROMPT_VERSION,

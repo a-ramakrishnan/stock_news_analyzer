@@ -652,6 +652,7 @@ class Event(Base):
     rating_from: Mapped[str | None] = mapped_column(Text)
     rating_to: Mapped[str | None] = mapped_column(Text)
     stake_pct: Mapped[float | None] = mapped_column()
+    shares: Mapped[int | None] = mapped_column(BigInteger)  # bought, sold, pledged or issued
     quote: Mapped[str | None] = mapped_column(Text)
     quote_found: Mapped[bool] = mapped_column(Boolean, default=False)
     qa_status: Mapped[str] = mapped_column(

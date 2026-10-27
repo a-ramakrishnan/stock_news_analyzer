@@ -363,7 +363,7 @@ The Red-flag Monitor reads the checked events and raises warnings about governan
 | Independent director resigns mid-term | medium |
 | Rating downgrade | high; negative outlook or watch: medium |
 | Promoter pledge invoked | high; pledge created: medium |
-| Promoter sells shares | medium; a fund or other large holder selling 1% or more: low |
+| Promoter sells 1% or more of the company | medium; 0.1% or more, or size unknown: low; a fund or other large holder selling 1% or more: low. A sale given only in shares is sized against the shares outstanding (market cap ÷ latest close) |
 | Penalty, tax demand, court or regulator's order | by size against a year's revenue: 1%+ high, 0.1%+ medium, smaller low; any SEBI order at least medium; a mixed outcome (hearing adjourned, stay continuing) one step lower |
 | Fire, strike, shutdown or other disruption | high when important (4-5), else medium |
 | Results not filed by the deadline (45 days; 60 for the year) | medium; 30 days late: high |

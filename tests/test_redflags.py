@@ -82,8 +82,19 @@ def test_ratings_pledges_and_selling():
         "low",
     )
     assert flag(event("promoter_action", action="sold shares", stake_pct=0.2)) is None
-    promoter = event("promoter_action", action="sold shares", headline="Promoter sold 20,00,000")
-    assert flag(promoter) == ("promoter_selling", "medium")
+    # A promoter's sale: by its stake, or its shares against the shares outstanding.
+    sold = "Promoter sold shares"
+    assert flag(event("promoter_action", action="sold", headline=sold, stake_pct=3.1)) == (
+        "promoter_selling",
+        "medium",
+    )
+    unknown = event("promoter_action", action="sold", headline=sold)
+    assert flag(unknown) == ("promoter_selling", "low")  # size unknown
+    kmew = event("promoter_action", action="sold", headline=sold, shares=345620)
+    f = rf.judge(kmew, "KMEW", shares_out=11_000_000)
+    assert (f.kind, f.severity, f.detail) == ("promoter_selling", "medium", "3.14% of the company")
+    tiny = event("promoter_action", action="sold", headline=sold, shares=1800)
+    assert rf.judge(tiny, "KMEW", shares_out=11_000_000) is None  # 0.02%: nothing
     assert flag(event("promoter_action", action="reclassification to public")) is None
 
 
@@ -182,3 +193,21 @@ def test_digest_shows_recent_flags_only(loaded):  # noqa: F811
     assert "## Red flags" in md
     assert "- **HIGH** 20 Oct: LT: auditor exit. Auditor quit" in md
     assert "Old CFO exit" not in md  # a flag about a filing months old: history, not news
+
+
+@pytest.mark.db
+def test_shares_outstanding_from_market_cap_and_price(loaded):  # noqa: F811
+    from stock_news_analyzer.models import Company, PriceDaily
+
+    lt = loaded.get(Company, LT)
+    lt.market_cap_cr = Decimal(500_000)
+    loaded.commit()
+    close = (
+        loaded.query(PriceDaily.close)
+        .filter(PriceDaily.isin == LT)
+        .order_by(PriceDaily.trade_date.desc())
+        .first()[0]
+    )
+    assert rf.shares_outstanding(loaded, lt) == pytest.approx(500_000 * 1e7 / float(close))
+    lt.market_cap_cr = None
+    assert rf.shares_outstanding(loaded, lt) is None

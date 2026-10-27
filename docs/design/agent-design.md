@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.17 · Oct 27, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.18 · Oct 27, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -32,7 +32,7 @@ flowchart LR
         S3["NSE prices, indices,<br/>corporate actions"]:::built
         S4["NSE bulk and block deals"]:::built
         S5["Bullion: global prices, USD/INR,<br/>NSE gold/silver ETFs; macro to do"]:::partly
-        S6["SAST, pledges, ratings,<br/>tenders, MF holdings"]:::pending
+        S6["Shareholding patterns (NSE XBRL);<br/>SAST data, tenders, monthly MF to do"]:::partly
     end
 
     subgraph COL["Collect"]
@@ -40,7 +40,7 @@ flowchart LR
         A1["1 · Watchlist Manager"]:::built
         A2["2 · Filings Collector"]:::built
         A3["3 · News Collector"]:::built
-        A4["4 · Market Signals<br/>deals only"]:::partly
+        A4["4 · Market Signals<br/>deals, shareholding"]:::partly
         A5["5 · Price & Label<br/>stocks and bullion ETFs"]:::built
     end
 
@@ -99,7 +99,7 @@ flowchart LR
 | 1 | Watchlist Manager | Built: no LLM needed (fuzzy matching in code); NSE SME list; peers; dashboard page | 2, 7, 11 |
 | 2 | Filings Collector | Built: BSE + NSE | 3 |
 | 3 | News Collector | Built: RSS + Google News, history since Oct 2023 | 4, 8 |
-| 4 | Market Signals Collector | Partly: NSE bulk and block deals only | 11 |
+| 4 | Market Signals Collector | Partly: NSE bulk and block deals; quarterly shareholding patterns with promoter pledges (no LLM); not SAST data, tenders or monthly MF holdings | 11, 22 |
 | 5 | Price & Label | Built: stocks, and bullion through the NSE gold and silver ETFs in the same bhavcopy | 5, 19 |
 | 6 | Triage & Dedup | Built (Haiku 5.5) | 9 |
 | 7 | Event Extractor | Built: results figures for every stock, from XBRL where filed, else the PDF (Haiku 5.5); typed events from the other filings (Haiku 5.5) | 16, 17 |
@@ -311,6 +311,11 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **Trigger:** daily after close; monthly for MF portfolios.
 - **LLM:** Haiku 5.5 only to read messy tender PDFs.
 - **As built (step 11), deals only:** NSE bulk and block deals from the CSV download (the JSON API stops at 70 rows), twice each weekday evening, stored in `deals`. About 83,000 deals since Oct 2023, about 220 of them in watchlist stocks. SAST, pledges, ratings, tenders and MF holdings are not started.
+- **As built (step 22), shareholding patterns:** `agents/holdings.py` reads each watchlist company's quarterly shareholding pattern from the XBRL file NSE lists (`corporate-share-holdings-master`), in code. It stores the stakes of promoters, foreign and domestic institutions, mutual funds, insurers and retail, the number of shareholders, and the pledged and locked-in share of the promoters' holding, in `shareholdings` (the plan's `signals`). About three years per stock: 168 quarters for 15 stocks on the first run.
+  - **Format:** files from 2025 write percentages as fractions, older ones as percent; the scale is read from each file's total. Patterns filed for an event (a share issue) on a date other than a quarter end are left out, since they don't compare with the quarters around them.
+  - **Red flags:** promoters selling (fewer promoter shares than the quarter before; a fall from dilution alone raises nothing) and pledges rising. A quarter's fall that the promoters' own sale disclosures, already flagged, account for (80% or more) raises nothing more. On the first run this caught a Shaily promoter sale of 2.3% that no filing had flagged.
+  - **Where it shows:** a "Shareholding" section in the digest, a Shareholding tab on the Stock page, `sna holdings run/show/moves`, the 07:10 `holdings` job; Analyst Q&A reads the table too.
+  - **Not yet:** NSE's structured SAST and insider-trading data (the filings are read as events), monthly mutual fund portfolios, tenders.
 - **Reads / writes:** `signals` (bulk/block deals, SAST, pledges, ratings, tenders, MF holdings).
 
 1. Download NSE/BSE bulk and block deal files and SAST disclosures.

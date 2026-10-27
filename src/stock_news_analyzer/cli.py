@@ -2328,13 +2328,16 @@ def events_reset(
 
 @flags_app.command("run")
 def flags_run() -> None:
-    """Raise red flags from the checked events and from overdue results (no LLM)."""
+    """Raise red flags from the checked events, overdue results and shareholding patterns
+    (no LLM)."""
     from stock_news_analyzer.agents import redflags
 
     with get_session() as session:
         result = redflags.scan(session)
     counts = ", ".join(f"{n} {s}" for s, n in sorted(result.by_severity.items())) or "none new"
     regraded = f"; {result.regraded} re-graded" if result.regraded else ""
+    if result.removed:
+        regraded += f"; {result.removed} shareholding flags removed (already flagged from filings)"
     typer.echo(
         f"{result.raised} red flags raised ({counts}){regraded}; see them with: sna flags list"
     )

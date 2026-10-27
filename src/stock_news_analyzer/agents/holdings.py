@@ -8,7 +8,8 @@ shareholders, and the share of the promoters' holding that is pledged or locked 
 
 Changes feed the Red-flag Monitor: promoters selling (their share count falls) or pledging
 more of their holding. A promoter stake that falls only because new shares were issued is
-dilution, not selling, and raises nothing.
+dilution, not selling, and raises nothing; nor do sales already flagged from the promoters'
+own disclosures in that quarter.
 """
 
 import logging
@@ -20,7 +21,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from stock_news_analyzer.models import Company, RedFlag, Shareholding, WatchlistItem
+from stock_news_analyzer.models import Company, Event, RedFlag, Shareholding, WatchlistItem
 from stock_news_analyzer.sources import shareholding as shp
 from stock_news_analyzer.sources.announcements import IST
 from stock_news_analyzer.sources.exchange_http import SME_SERIES, ExchangeError
@@ -35,6 +36,9 @@ SOLD_POINTS = {"high": Decimal(5), "medium": Decimal(2), "low": Decimal(1)}
 # Pledged share of the promoters' holding, after a rise of PLEDGE_RISE points or more.
 PLEDGED = {"high": Decimal(50), "medium": Decimal(20), "low": Decimal(0)}
 PLEDGE_RISE = Decimal(2)
+# Promoter sales already flagged from their own filings that make up this much of a
+# quarter's fall in promoter shares: the shareholding pattern adds nothing.
+COVERED = 0.8
 COLUMNS = ("promoter_pct", "fii_pct", "dii_pct", "mf_pct", "retail_pct")
 LABELS = {
     "promoter_pct": "promoters",
@@ -255,6 +259,27 @@ def describe(move: dict) -> str:
     return f"{move['symbol']} {cur.quarter_end:%b %Y}: " + ", ".join(parts)
 
 
+def flagged_sales(session: Session, isin: str, start: date, end: date, total: int | None) -> int:
+    """Shares in the promoter sales flagged from filings between `start` (exclusive) and
+    `end`. A sale given only as a stake is sized against `total` shares."""
+    sold = 0
+    for e in session.scalars(
+        select(Event)
+        .join(RedFlag, RedFlag.event_id == Event.id)
+        .where(
+            RedFlag.isin == isin,
+            RedFlag.kind == "promoter_selling",
+            RedFlag.flagged_on > start,
+            RedFlag.flagged_on <= end,
+        )
+    ):
+        if e.shares:
+            sold += e.shares
+        elif e.stake_pct and total:
+            sold += int(e.stake_pct * total / 100)
+    return sold
+
+
 def _severity(value: Decimal, thresholds: dict[str, Decimal]) -> str | None:
     return next((s for s, t in thresholds.items() if value >= t), None)
 
@@ -281,7 +306,14 @@ def flags(session: Session, today: date | None = None) -> list[RedFlag]:
         if recent and cur.promoter_shares is not None and prev.promoter_shares:
             fall = (prev.promoter_pct or 0) - (cur.promoter_pct or 0)
             severity = _severity(fall, SOLD_POINTS)
-            if cur.promoter_shares < prev.promoter_shares and severity:
+            drop = prev.promoter_shares - cur.promoter_shares
+            if severity and drop > 0:
+                known = flagged_sales(
+                    session, cur.isin, prev.quarter_end, cur.quarter_end, cur.total_shares
+                )
+                if known >= COVERED * drop:
+                    severity = None  # the sales were flagged when they were filed
+            if severity and drop > 0:
                 out.append(
                     RedFlag(
                         isin=cur.isin,

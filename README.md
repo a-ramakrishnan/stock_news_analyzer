@@ -32,7 +32,7 @@ Every command block below can be pasted into Terminal as is; explanations are in
 | 19 | Bullion Analyst: Indian gold and silver moves split into global price, rupee and the rest; notes on unusual days (Claude Sonnet) | done |
 | 20 | Theme & Peer Analyst: events, orders and call points tagged with themes (Claude Haiku); theme strength over time; read-across between watchlist stocks | done |
 | 21 | Analyst Q&A (Claude Sonnet): plain-English questions answered from the database with sources; saved reports; an Ask page | done |
-| 22 | Shareholding pattern each quarter from NSE's XBRL files (no LLM): promoters, foreign and domestic institutions, mutual funds, retail, pledges; red flags for promoters selling or pledging | testing |
+| 22 | Shareholding pattern each quarter from NSE's XBRL files (no LLM): promoters, foreign and domestic institutions, mutual funds, retail, pledges; red flags for promoters selling or pledging | done |
 
 ## Run it on a Mac
 
@@ -371,7 +371,7 @@ The Red-flag Monitor reads the checked events and raises warnings about governan
 | Penalty, tax demand, court or regulator's order | by size against a year's revenue: 1%+ high, 0.1%+ medium, smaller low; any SEBI order at least medium; a mixed outcome (hearing adjourned, stay continuing) one step lower |
 | Fire, strike, shutdown or other disruption | high when important (4-5), else medium |
 | Results not filed by the deadline (45 days; 60 for the year) | medium; 30 days late: high |
-| Promoters selling, from the shareholding pattern (fewer promoter shares than the quarter before) | stake down 5 points or more: high; 2 or more: medium; 1 or more: low. A stake that falls only because new shares were issued raises nothing |
+| Promoters selling, from the shareholding pattern (fewer promoter shares than the quarter before) | stake down 5 points or more: high; 2 or more: medium; 1 or more: low. A stake that falls only because new shares were issued raises nothing, nor does a fall that sales already flagged from the promoters' own filings account for |
 | More of the promoters' shares pledged or encumbered, from the shareholding pattern (up 2 points or more) | by the level reached: 50% of their shares high, 20% medium, less low |
 
 ```bash

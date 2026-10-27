@@ -219,3 +219,33 @@ def test_moves_digest_and_dashboard(stored):
     assert "## Shareholding" in text and "promoters 57.0% (-3.0)" in text
     df = queries.shareholding(session, LT)
     assert list(df["promoter"]) == [60.0, 57.0, 57.0] and df["pledged"].iloc[-1] == 25.0
+
+
+@pytest.mark.db
+def test_a_sale_flagged_from_its_filing_is_not_flagged_again(stored):
+    from test_themes import event
+
+    session, _ = stored
+    redflags.scan(session)
+    ref = next(f.ref for f in session.query(RedFlag).filter_by(isin=LT, kind="promoter_selling"))
+    # The promoters' own disclosure of 25,000 of the 30,000 shares sold that quarter.
+    newer, older = holdings.history(session, LT)[1:3]
+    when = datetime.combine(older.quarter_end + timedelta(days=10), datetime.min.time(), IST)
+    sale = event(session, LT, when, "Promoter sold shares", event_type="promoter_action")
+    sale.shares = 25_000
+    session.add(
+        RedFlag(
+            isin=LT,
+            kind="promoter_selling",
+            severity="medium",
+            title="LT: promoter sold 25,000 shares",
+            flagged_on=when.date(),
+            ref=f"test:{sale.id}",
+            event_id=sale.id,
+        )
+    )
+    session.commit()
+    assert newer.quarter_end > when.date()
+    result = redflags.scan(session)
+    assert result.removed == 1
+    assert session.query(RedFlag).filter_by(isin=LT, ref=ref).count() == 0

@@ -831,3 +831,17 @@ class Shareholding(Base):
     locked_pct: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))  # of the promoters' shares
     categories: Mapped[dict] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SavedSetting(Base):
+    """A setting saved on the dashboard's Settings page (the API key, budget, models, unusual
+    threshold, paused jobs). It takes the place of the same setting in `.env`; see config.py.
+    """
+
+    __tablename__ = "settings"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

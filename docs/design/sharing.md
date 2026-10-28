@@ -1,6 +1,6 @@
 # Making it usable by others
 
-Version 1.1 · Oct 28, 2026 · @Ramki · companion to the [system design](design.md) and [agent design](agent-design.md); changes are listed in [README.md](README.md)
+Version 1.2 · Oct 28, 2026 · @Ramki · companion to the [system design](design.md) and [agent design](agent-design.md); changes are listed in [README.md](README.md)
 
 ## Goal
 
@@ -56,8 +56,8 @@ Updating is the same `start` script: it pulls the newest image and applies datab
 - **Prebuilt image:** a GitHub Actions job builds the image for Intel and Apple Silicon and pushes it to GitHub Container Registry on each release tag, so users never build it.
 - **One compose file for users:** Postgres, the dashboard and the scheduler all start by default, using the image rather than `build: .`. The dashboard listens on localhost only. The developer compose file stays as it is.
 - **Database changes on start:** the container runs `sna db upgrade` before starting, so there is no `make migrate` step.
-- **Settings in the database, not `.env`:** the API key, budget, models and threshold are saved from the Settings page in a `settings` table. Values in `.env` still win when set, for developers.
-- **The scheduler reads the job switches from the database:** turning a job off in Settings takes effect without editing `config/schedule.yaml`.
+- **Settings in the database, not `.env`:** the API key, budget, models and threshold are saved from the Settings page in a `settings` table. A saved value takes the place of `.env`, so the page works for someone who also has a `.env`; removing it goes back to `.env`. Built in step 24.
+- **The scheduler reads the job switches from the database:** turning a job off in Settings takes effect within a minute, without editing `config/schedule.yaml` or restarting. Built in step 24.
 - **Example watchlist:** `config/watchlist.example.yaml` with a few large companies. The personal `config/watchlist.yaml` stops being tracked in Git.
 - **Licence:** MIT is the simplest, if the author agrees. A notice in the README and the Guide says:
   - the data comes from the public NSE, BSE and news websites, for personal use
@@ -134,7 +134,7 @@ Each step is one PR, tested on the Mac like the agents:
 | Step | What | Size |
 | --- | --- | --- |
 | 23 | Guide page and its text file; one-line help and a help link on every page (done) | Small |
-| 24 | Settings page and `settings` table; API key, budget and job switches from the app | Medium |
+| 24 | Settings page and `settings` table; API key, budget and job switches from the app (done) | Medium |
 | 25 | Navigation regrouped; Red flags page; Run now buttons with progress | Medium |
 | 26 | First-run setup | Medium |
 | 27 | Packaging: prebuilt image, user compose file, start scripts, migrations on start, example watchlist, licence | Medium |

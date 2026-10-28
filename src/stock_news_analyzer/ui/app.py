@@ -1376,6 +1376,183 @@ def system_page() -> None:
         )
 
 
+MODEL_NAMES = {
+    "claude-haiku-5-5": "Haiku 5.5 (cheapest)",
+    "claude-sonnet-5-5": "Sonnet 5.5",
+    "claude-opus-5-5": "Opus 5.5 (strongest, about 2x Sonnet)",
+}
+
+
+SETTING_NAMES = {
+    "anthropic_api_key": "API key",
+    "llm_monthly_budget_usd": "Monthly budget",
+    "llm_model_triage": "Model for sorting and extracting",
+    "llm_model_analysis": "Model for explaining and analysing",
+    "unusual_threshold": "Unusual-day threshold",
+    "paused_jobs": "Jobs turned off",
+}
+
+
+def settings_page() -> None:
+    from stock_news_analyzer import settings_store as store
+    from stock_news_analyzer.agents.orchestrator import job_notes
+    from stock_news_analyzer.llm import PRICES, check_key
+
+    st.title("Settings")
+    st.caption(
+        "The AI key and budget, the unusual-day threshold, and which scheduled jobs run. "
+        "Saved here, a setting takes the place of the same one in .env; the scheduler picks "
+        "changes up within a minute."
+    )
+    help_link("settings")
+    cfg = get_settings()
+    with Session(engine()) as session:
+        st.subheader("AI features")
+        key_from = store.source(session, "anthropic_api_key")
+        if cfg.anthropic_api_key:
+            st.success(
+                f"An API key is set (from {key_from}), ending in ...{cfg.anthropic_api_key[-4:]}.",
+                icon=":material/key:",
+            )
+        else:
+            st.warning(
+                "No API key: the AI features are off. Collecting, prices, shareholding and the "
+                "dashboard still work.",
+                icon=":material/key_off:",
+            )
+        with st.form("key", clear_on_submit=True):
+            new_key = st.text_input(
+                "Anthropic API key",
+                type="password",
+                placeholder="sk-ant-...",
+                help="From console.anthropic.com. It is checked with Anthropic before saving, "
+                "and kept in this computer's database.",
+            )
+            if st.form_submit_button("Check and save the key", icon=":material/check:"):
+                problem = check_key(new_key.strip()) if new_key.strip() else "enter a key first"
+                if problem:
+                    st.error(problem)
+                else:
+                    store.save(session, "anthropic_api_key", new_key.strip())
+                    st.rerun()
+        c1, c2 = st.columns(2)
+        if cfg.anthropic_api_key and c1.button("Check the current key"):
+            problem = check_key(cfg.anthropic_api_key)
+            (st.error if problem else st.success)(problem or "Anthropic accepts the key.")
+        if key_from == "Settings page" and c2.button("Remove the saved key"):
+            store.remove(session, "anthropic_api_key")
+            st.rerun()
+
+        usage = queries.llm_usage(session)
+        spent, budget = usage["spent"], cfg.llm_monthly_budget_usd
+        st.progress(
+            min(spent / budget, 1.0) if budget else 1.0,
+            # "\\$": two plain $ signs would be read as a formula.
+            text=f"{usage['month']}: \\${spent:.2f} spent of the \\${budget:.2f} budget",
+        )
+        models = list(PRICES)
+        with st.form("ai"):
+            new_budget = st.number_input(
+                "Monthly budget, US$",
+                min_value=0.0,
+                step=1.0,
+                value=float(budget),
+                help="AI calls stop for the rest of the month when this much has been spent. "
+                "0 turns the AI features off.",
+            )
+            triage = st.selectbox(
+                "Model for sorting and extracting (news triage, events, orders, results, themes)",
+                models,
+                index=models.index(cfg.llm_model_triage) if cfg.llm_model_triage in models else 0,
+                format_func=lambda m: MODEL_NAMES.get(m, m),
+            )
+            analysis = st.selectbox(
+                "Model for explaining and analysing (unusual days, earnings calls, promises, Ask)",
+                models,
+                index=models.index(cfg.llm_model_analysis)
+                if cfg.llm_model_analysis in models
+                else 1,
+                format_func=lambda m: MODEL_NAMES.get(m, m),
+            )
+            if st.form_submit_button("Save", icon=":material/save:"):
+                store.save(session, "llm_monthly_budget_usd", new_budget)
+                store.save(session, "llm_model_triage", triage)
+                store.save(session, "llm_model_analysis", analysis)
+                st.rerun()
+
+        st.subheader("Unusual days")
+        with st.form("unusual"):
+            threshold = st.slider(
+                "Mark a day unusual when the stock's move against the Nifty 50 is at least this "
+                "many standard deviations of its last 60 days",
+                min_value=1.5,
+                max_value=3.0,
+                step=0.1,
+                value=float(cfg.unusual_threshold),
+                help="2.0 marks about 1 trading day in 20; 2.5 about 1 in 80. Applies to days "
+                "worked out from now on.",
+            )
+            if st.form_submit_button("Save", icon=":material/save:"):
+                store.save(session, "unusual_threshold", threshold)
+                st.rerun()
+
+        st.subheader("Scheduled jobs")
+        schedule = load_schedule(SCHEDULE_FILE)
+        notes = job_notes(SCHEDULE_FILE)
+        paused = store.paused_jobs(cfg)
+        upcoming = next_runs(schedule, datetime.now(IST))
+        jobs = pd.DataFrame(
+            [
+                {
+                    "on": j.enabled and j.name not in paused,
+                    "job": j.name,
+                    "what": notes.get(j.name, ""),
+                    "next": upcoming[j.name].strftime("%a %d %b %H:%M")
+                    if j.name in upcoming
+                    else "off in schedule.yaml",
+                }
+                for j in schedule
+            ]
+        )
+        edited = st.data_editor(
+            jobs,
+            hide_index=True,
+            width="stretch",
+            disabled=["job", "what", "next"],
+            height=35 * (len(jobs) + 1) + 3,  # every job, no scrolling
+            column_config={
+                "on": st.column_config.CheckboxColumn("On", width="small"),
+                "job": st.column_config.TextColumn("Job"),
+                "what": st.column_config.TextColumn("What it does", width="large"),
+                "next": st.column_config.TextColumn("Next run (India time)"),
+            },
+            key="jobs",
+        )
+        off = sorted(set(edited.loc[~edited["on"], "job"]))
+        if off != sorted(paused) and st.button("Save the jobs", icon=":material/save:"):
+            store.save(session, "paused_jobs", ",".join(off))
+            st.rerun()
+        st.caption(
+            "A job turned off here doesn't run on its schedule; it still runs when started by "
+            "hand. Times are changed in config/schedule.yaml."
+        )
+
+        st.subheader("Where each setting comes from")
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {"setting": label, "from": store.source(session, k)}
+                    for k, label in SETTING_NAMES.items()
+                ]
+            ),
+            hide_index=True,
+        )
+        st.caption(
+            "Settings page: saved here, in this computer's database. .env: the project's .env "
+            "file. default: neither. Removing a saved value goes back to .env or the default."
+        )
+
+
 def guide_page() -> None:
     st.title("Guide")
     st.caption(
@@ -1406,7 +1583,12 @@ PAGES = {
     "manage": st.Page(
         manage_page, title="Manage stocks", icon=":material/playlist_add:", url_path="manage"
     ),
-    "system": st.Page(system_page, title="System", icon=":material/settings:", url_path="system"),
+    "settings": st.Page(
+        settings_page, title="Settings", icon=":material/tune:", url_path="settings"
+    ),
+    "system": st.Page(
+        system_page, title="System", icon=":material/monitor_heart:", url_path="system"
+    ),
     "guide": st.Page(guide_page, title="Guide", icon=":material/help:", url_path="guide"),
 }
 

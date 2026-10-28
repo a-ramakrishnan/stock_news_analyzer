@@ -125,6 +125,7 @@ def test_charts_build(loaded):  # noqa: F811
         "ask_page",
         "moves_page",
         "manage_page",
+        "settings_page",
         "system_page",
         "guide_page",
     ],
@@ -152,6 +153,7 @@ def test_every_page_renders(loaded, test_database_url, monkeypatch, tmp_path, pa
         "Ask",
         "What moves the stock",
         "Manage stocks",
+        "Settings",
         "System",
         "Guide",
     }
@@ -169,7 +171,7 @@ def test_main_registers_every_page():
         "st.markdown(str(len(nav.call_args.args[0])))\n"
     )
     at.run()
-    assert not at.exception and at.markdown[-1].value == "10"
+    assert not at.exception and at.markdown[-1].value == "11"
 
 
 def test_guide_sections():
@@ -177,6 +179,7 @@ def test_guide_sections():
 
     parts = guide.sections()
     assert list(parts)[:3] == ["What it is", "Getting started", "A daily routine"]
+    assert "Settings" in parts
     assert all(body for body in parts.values())
     slugs = [guide.slug(t) for t in parts]
     assert len(set(slugs)) == len(slugs) and "keeping-it-running" in slugs
@@ -196,5 +199,5 @@ def test_guide_opens_at_the_linked_section():
     at.run()
     assert not at.exception
     opened = [e.label for e in at.expander if e.proto.expanded]
-    assert opened == ["Words used"] and len(at.expander) == 10
+    assert opened == ["Words used"] and len(at.expander) == 11
     assert any("Book-to-bill" in m.value for m in at.markdown)

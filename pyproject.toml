@@ -43,6 +43,7 @@ packages = ["src/stock_news_analyzer"]
 testpaths = ["tests"]
 markers = [
     "db: tests that need a running Postgres (skipped when it is unreachable)",
+    "saved_settings: tests that read settings saved in the database (others never do)",
 ]
 
 [tool.ruff]

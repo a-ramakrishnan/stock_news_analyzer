@@ -5,6 +5,7 @@ from sqlalchemy import create_engine, make_url, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from stock_news_analyzer import config
 from stock_news_analyzer.config import get_settings
 from stock_news_analyzer.db import get_engine, upgrade_database
 from stock_news_analyzer.models import Base
@@ -18,6 +19,14 @@ def _fresh_settings():
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def _no_saved_settings(request, monkeypatch):
+    """Settings saved on your dashboard (an API key, a budget) never reach tests, unless a test
+    is marked `saved_settings`."""
+    if "saved_settings" not in request.keywords:
+        monkeypatch.setattr(config, "saved_values", lambda base: {})
 
 
 @pytest.fixture

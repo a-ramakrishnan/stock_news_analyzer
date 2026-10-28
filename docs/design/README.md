@@ -12,6 +12,10 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### sharing.md 1.2 · Oct 28, 2026
+
+- Step 24 built: a value saved on the Settings page takes the place of `.env` (the plan had `.env` winning), so the page also works for a developer with a `.env`
+
 ### sharing.md 1.1 · Oct 28, 2026
 
 - Step 23 built: the Guide's text lives in `src/stock_news_analyzer/ui/guide.md` (the Docker image copies only `src/`), and help links open the page's section in the same tab

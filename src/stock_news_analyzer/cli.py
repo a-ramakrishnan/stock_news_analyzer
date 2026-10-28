@@ -1027,7 +1027,7 @@ def triage_run(
                 progress=typer.echo,
             )
         except LLMNotConfigured as exc:
-            typer.echo(f"{exc}: add ANTHROPIC_API_KEY=... to .env (see .env.example)")
+            typer.echo(str(exc))
             raise typer.Exit(1) from exc
         spent = month_spend(session)
     typer.echo(
@@ -1185,7 +1185,7 @@ def explain_run(
                 progress=typer.echo,
             )
         except LLMNotConfigured as exc:
-            typer.echo(f"{exc}: add ANTHROPIC_API_KEY=... to .env (see .env.example)")
+            typer.echo(str(exc))
             raise typer.Exit(1) from exc
         spent = month_spend(session)
     typer.echo(
@@ -1299,7 +1299,7 @@ def concalls_run(
                 session, LLM(session), since=start, symbol=symbol, limit=limit, progress=typer.echo
             )
         except LLMNotConfigured as exc:
-            typer.echo(f"{exc}: add ANTHROPIC_API_KEY=... to .env (see .env.example)")
+            typer.echo(str(exc))
             raise typer.Exit(1) from exc
         spent = month_spend(session)
     typer.echo(
@@ -1492,7 +1492,7 @@ def promises_check(
                 session, LLM(session), symbol=symbol, limit=limit, progress=typer.echo
             )
         except LLMNotConfigured as exc:
-            typer.echo(f"{exc}: add ANTHROPIC_API_KEY=... to .env (see .env.example)")
+            typer.echo(str(exc))
             raise typer.Exit(1) from exc
         spent = month_spend(session)
     if result.held:
@@ -1598,7 +1598,7 @@ def orders_run(
                 progress=typer.echo,
             )
         except LLMNotConfigured as exc:
-            typer.echo(f"{exc}: add ANTHROPIC_API_KEY=... to .env (see .env.example)")
+            typer.echo(str(exc))
             raise typer.Exit(1) from exc
         spent = month_spend(session)
     typer.echo(
@@ -1806,7 +1806,7 @@ def results_run(
                 session, LLM(session), since=start, symbol=symbol, limit=limit, progress=typer.echo
             )
         except LLMNotConfigured as exc:
-            typer.echo(f"{exc}: add ANTHROPIC_API_KEY=... to .env (see .env.example)")
+            typer.echo(str(exc))
             raise typer.Exit(1) from exc
         spent = month_spend(session)
     typer.echo(
@@ -2108,7 +2108,7 @@ def events_run(
                 progress=typer.echo,
             )
         except LLMNotConfigured as exc:
-            typer.echo(f"{exc}: add ANTHROPIC_API_KEY=... to .env (see .env.example)")
+            typer.echo(str(exc))
             raise typer.Exit(1) from exc
         spent = month_spend(session)
     typer.echo(
@@ -2550,7 +2550,7 @@ def themes_run(
         try:
             result = th.run(session, LLM(session), since=start, limit=limit, progress=typer.echo)
         except LLMNotConfigured as exc:
-            typer.echo(f"{exc}: add ANTHROPIC_API_KEY=... to .env (see .env.example)")
+            typer.echo(str(exc))
             raise typer.Exit(1) from exc
         spent = month_spend(session)
     typer.echo(
@@ -2817,7 +2817,7 @@ def _ask(question: str, model: str | None, name: str | None) -> None:
                 progress=lambda line: typer.echo(f"  {line}"),
             )
         except LLMNotConfigured as exc:
-            typer.echo(f"{exc}: add ANTHROPIC_API_KEY=... to .env (see .env.example)")
+            typer.echo(str(exc))
             raise typer.Exit(1) from exc
         except LLMError as exc:
             typer.echo(f"error: {exc}")

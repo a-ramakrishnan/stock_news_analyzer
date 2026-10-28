@@ -44,6 +44,9 @@ class JobError(Exception):
 # --- jobs --------------------------------------------------------------------
 
 
+NO_KEY = "skipped: no Anthropic API key (add one on the Settings page)"
+
+
 def job_filings(session: Session) -> str:
     from stock_news_analyzer.agents.filings import FilingsCollector, watchlist_companies
     from stock_news_analyzer.sources.exchange_http import ExchangeClient
@@ -76,7 +79,7 @@ def job_triage(session: Session) -> str:
     from stock_news_analyzer.llm import LLM
 
     if not get_settings().anthropic_api_key:
-        return "skipped: ANTHROPIC_API_KEY is not set in .env"
+        return NO_KEY
     result = triage_news(session, LLM(session), limit=TRIAGE_LIMIT)
     summary = (
         f"{result.triaged} articles triaged ({result.same_story} same event as an earlier "
@@ -98,7 +101,7 @@ def job_explain(session: Session) -> str:
     from stock_news_analyzer.llm import LLM
 
     if not get_settings().anthropic_api_key:
-        return "skipped: ANTHROPIC_API_KEY is not set in .env"
+        return NO_KEY
     today = datetime.now(IST).date()
     # Up to yesterday: the morning's news often says why a stock moved the day before.
     result = explain_moves(
@@ -124,7 +127,7 @@ def job_concalls(session: Session) -> str:
     from stock_news_analyzer.llm import LLM
 
     if not get_settings().anthropic_api_key:
-        return "skipped: ANTHROPIC_API_KEY is not set in .env"
+        return NO_KEY
     since = datetime.now(IST).date() - timedelta(days=CONCALL_DAYS)
     result = analyse_calls(session, LLM(session), since=since)
     summary = (
@@ -141,7 +144,7 @@ def job_promises(session: Session) -> str:
     from stock_news_analyzer.llm import LLM
 
     if not get_settings().anthropic_api_key:
-        return "skipped: ANTHROPIC_API_KEY is not set in .env"
+        return NO_KEY
     result = check_promises(session, LLM(session))
     summary = (
         f"{result.checked} promises checked for {result.companies} companies, "
@@ -157,7 +160,7 @@ def job_orders(session: Session) -> str:
     from stock_news_analyzer.llm import LLM
 
     if not get_settings().anthropic_api_key:
-        return "skipped: ANTHROPIC_API_KEY is not set in .env"
+        return NO_KEY
     result = orders.run(session, LLM(session))
     summary = (
         f"{result.orders} orders from {result.filings} filings ({result.duplicates} copies), "
@@ -198,7 +201,7 @@ def job_results(session: Session) -> str:
     from stock_news_analyzer.llm import LLM
 
     if not get_settings().anthropic_api_key:
-        return "skipped: ANTHROPIC_API_KEY is not set in .env"
+        return NO_KEY
     since = datetime.now(IST).date() - timedelta(days=CONCALL_DAYS)
     result = results.run(session, LLM(session), since=since)
     summary = (
@@ -217,7 +220,7 @@ def job_events(session: Session) -> str:
     from stock_news_analyzer.sources.exchange_http import ExchangeClient
 
     if not get_settings().anthropic_api_key:
-        return "skipped: ANTHROPIC_API_KEY is not set in .env"
+        return NO_KEY
     collector = FilingsCollector(session, ExchangeClient(), get_settings().data_dir)
     result = events.run(session, LLM(session), fetch=collector.fetch_attachment)
     summary = (
@@ -260,7 +263,7 @@ def job_themes(session: Session) -> str:
     from stock_news_analyzer.llm import LLM
 
     if not get_settings().anthropic_api_key:
-        return "skipped: ANTHROPIC_API_KEY is not set in .env"
+        return NO_KEY
     result = themes.run(session, LLM(session))
     summary = (
         f"{result.items} items tagged ({result.tags} tags), {result.signals} read-across; "
@@ -401,6 +404,17 @@ def run_job(name: str, jobs: dict[str, Callable[[Session], str]] | None = None) 
         return run
 
 
+def scheduled_run(name: str) -> Run | None:
+    """A run started by the schedule: skipped while the job is paused on the Settings page
+    (a run by hand, `sna run <job>`, always runs)."""
+    from stock_news_analyzer.settings_store import paused_jobs
+
+    if name in paused_jobs(get_settings()):
+        log.info("%s: paused on the Settings page, not run", name)
+        return None
+    return run_job(name)
+
+
 # --- schedule ----------------------------------------------------------------
 
 
@@ -447,6 +461,16 @@ def load_schedule(path: Path = SCHEDULE_FILE) -> list[ScheduledJob]:
     return out
 
 
+def job_notes(path: Path = SCHEDULE_FILE) -> dict[str, str]:
+    """{job: its comment in the schedule file}, e.g. 'filings': 'new BSE + NSE announcements'."""
+    notes = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        found = re.match(r"^\s{2}(\w+):\s*#\s*(.+)$", line)
+        if found:
+            notes[found.group(1)] = found.group(2).strip()
+    return notes
+
+
 def next_runs(schedule: list[ScheduledJob], now: datetime | None = None) -> dict[str, datetime]:
     now = now or datetime.now(IST)
     return {j.name: j.trigger.get_next_fire_time(None, now) for j in schedule if j.enabled}
@@ -465,5 +489,7 @@ def build_scheduler(schedule: list[ScheduledJob]) -> BlockingScheduler:
     )
     for job in schedule:
         if job.enabled:
-            scheduler.add_job(run_job, job.trigger, args=[job.name], id=job.name, name=job.name)
+            scheduler.add_job(
+                scheduled_run, job.trigger, args=[job.name], id=job.name, name=job.name
+            )
     return scheduler

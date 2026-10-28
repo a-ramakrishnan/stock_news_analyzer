@@ -29,7 +29,23 @@ The author chose the **MIT licence** and to **keep the repository private** for 
 - **The project name is pinned** to `stock_news_analyzer`, so the data volume keeps its name whatever the folder is called. That matters when someone unzips a new version into a differently named folder. It is also the name the author's existing volume already has.
 - **The dashboard listens on 127.0.0.1 only,** so other machines on the same Wi-Fi can't open it.
 
-## Tests
+## Prebuilt image (added after the first merge)
+
+The author asked for the prebuilt image anyway, private for now:
+- **`.github/workflows/image.yml`** builds the image for linux/amd64 and linux/arm64 (Apple Silicon) and pushes it to `ghcr.io/a-ramakrishnan/stock_news_analyzer`:
+  - a tag `v0.2.0` publishes `0.2.0` and `latest`
+  - every push to main publishes `main`
+  - each build also gets `sha-<commit>`
+  - it can be run by hand from the Actions tab
+  - layers are cached between runs
+- **`make release VERSION=0.2.0`** tags a release.
+- **The compose file** names that image for every app service:
+  - `pull_policy: ${SNA_PULL_POLICY:-build}` keeps building here by default
+  - `SNA_PULL_POLICY=always` in `.env` pulls the newest instead; `SNA_VERSION` picks a release
+  - the start scripts no longer pass `--build`, which would override the setting
+- **While the repository is private,** pulling needs `docker login ghcr.io` with a token that can read packages.
+- **docs/TODO.md** lists what waits for a public repository: taking the watchlist out of the history, and making the package public.
+
 
 - **`tests/test_watchlist.py`:**
   - the example watchlist loads without crashing

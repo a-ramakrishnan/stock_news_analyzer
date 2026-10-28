@@ -146,6 +146,13 @@ def test_compose_starts_everything_after_the_migrations():
             "service_completed_successfully"
         )
     assert services["ui"]["ports"] == ["127.0.0.1:8501:8501"]
+    # The prebuilt image is named, and built here unless SNA_PULL_POLICY says to pull it.
+    for name in ("migrate", "ui", "scheduler", "app"):
+        assert services[name]["image"].startswith("ghcr.io/a-ramakrishnan/stock_news_analyzer:")
+        assert (
+            services[name]["build"] == "."
+            and "SNA_PULL_POLICY:-build" in (services[name]["pull_policy"])
+        )
 
 
 def test_load_file_reports_unresolved_names(master, tmp_path):

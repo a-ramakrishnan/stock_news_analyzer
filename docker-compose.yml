@@ -3,6 +3,15 @@
 # Pinned so the data volume keeps its name whatever the folder is called.
 name: stock_news_analyzer
 
+# The app's image, shared by the services below. By default it is built here from the code
+# (SNA_PULL_POLICY=build). To use the prebuilt image published by GitHub Actions instead, set
+# SNA_PULL_POLICY=always in .env (pulls the newest on each start) and, while the repository is
+# private, log in once: docker login ghcr.io. SNA_VERSION picks a release (default: latest).
+x-app-image: &app-image
+  image: ghcr.io/a-ramakrishnan/stock_news_analyzer:${SNA_VERSION:-latest}
+  build: .
+  pull_policy: ${SNA_PULL_POLICY:-build}
+
 services:
   db:
     image: pgvector/pgvector:pg16
@@ -26,7 +35,7 @@ services:
   migrate:
     # Brings the database up to date (`sna db upgrade`), then exits; the dashboard and the
     # scheduler wait for it.
-    build: .
+    <<: *app-image
     env_file:
       - path: .env
         required: false
@@ -40,7 +49,7 @@ services:
   app:
     # One-off checks: `docker compose run --rm app sna health`.
     profiles: ["tools"]
-    build: .
+    <<: *app-image
     env_file:
       - path: .env
         required: false
@@ -57,7 +66,7 @@ services:
 
   scheduler:
     # The orchestrator: runs jobs on config/schedule.yaml.
-    build: .
+    <<: *app-image
     env_file:
       - path: .env
         required: false
@@ -76,7 +85,7 @@ services:
 
   ui:
     # The dashboard, at http://localhost:8501.
-    build: .
+    <<: *app-image
     env_file:
       - path: .env
         required: false

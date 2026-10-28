@@ -11,7 +11,7 @@ Stock News Analyzer follows a list of Indian stocks for you. Every morning it re
 1. **Add your stocks** on **Manage stocks**. Search by name or NSE symbol, choose **Stocks I own** or **Watchlist**, and add a few news aliases (such as "L&T" for Larsen & Toubro).
 2. **Load history** for each new stock on the same page. It fetches filings, news and prices since October 2023, so the system can compare today with the past. It takes a few minutes per stock.
 3. **Start the scheduler** so the work happens every morning without you: `make scheduler` in the project folder.
-4. **Add an Anthropic API key** if you want the AI features (see "How AI is used"). Without one, collecting, prices, shareholding and the dashboard still work.
+4. **Add an Anthropic API key** on **Settings** if you want the AI features (see "How AI is used"), and set a monthly budget. Without a key, collecting, prices, shareholding and the dashboard still work.
 
 ## A daily routine
 
@@ -35,8 +35,21 @@ Stock News Analyzer follows a list of Indian stocks for you. Every morning it re
 - **Ask:** questions in plain English, answered from your own data with the sources listed. Earlier questions are kept.
 - **What moves the stock:** how stocks moved on average, 1, 5 and 20 trading days after each kind of filing.
 - **Manage stocks:** add, edit and remove stocks; load a new stock's history.
-- **System:** the schedule, how much is stored, recent runs and errors, and the AI spend this month.
+- **Settings:** the API key, the monthly AI budget and models, the unusual-day threshold, and which scheduled jobs run.
+- **System:** the schedule, how much is stored, recent runs and errors, and the AI spend this month by task.
 - **Guide:** this page.
+
+## Settings
+
+| Setting | What it does |
+| --- | --- |
+| API key | Turns the AI features on. It is checked with Anthropic before it is saved, which costs nothing |
+| Monthly budget | AI calls stop for the rest of the month once this much is spent; 0 turns them off. The bar shows this month's spend |
+| Models | Haiku for sorting and extracting, Sonnet for explaining and analysing. Opus is stronger and costs about twice Sonnet |
+| Unusual days | How big a move against the Nifty 50 counts as unusual: 2.0 marks about 1 trading day in 20, 2.5 about 1 in 80 |
+| Scheduled jobs | Turn a job off to stop it running on its schedule, for example the AI jobs while you are away |
+
+A setting saved here takes the place of the same one in the `.env` file; "Where each setting comes from" shows which is in use. The scheduler picks up a change within a minute, with no restart.
 
 ## Words used
 
@@ -74,7 +87,7 @@ Some of the work uses Anthropic's Claude models through your own API key, which 
 
 These work without any AI: collecting filings and news, prices and unusual days, bulk and block deals, results from XBRL files, shareholding patterns, overdue-results and shareholding red flags, the digest and this dashboard.
 
-**Cost:** a monthly budget stops all AI calls when reached (`LLM_MONTHLY_BUDGET_USD` in `.env`, $20 by default). Reading a new stock's history costs the most, once. After that a 15-stock watchlist costs a few dollars a month, and an Ask question a few cents. **System** shows this month's spend by task.
+**Cost:** a monthly budget, set on **Settings** ($20 by default), stops all AI calls when reached. Reading a new stock's history costs the most, once. After that a 15-stock watchlist costs a few dollars a month, and an Ask question a few cents. **System** shows this month's spend by task.
 
 ## Where the data comes from
 
@@ -95,6 +108,7 @@ All times are India time. Everything is fetched from public websites by your own
 - **The morning jobs** run from 07:10 to 08:00 and the digest is ready at 08:00. Your computer must be on and Docker Desktop running then, with the scheduler started (`make scheduler`).
 - **If the computer was off,** nothing is lost: the next run picks up whatever was filed in between.
 - **To see what ran,** open **System**, or the job health on **Today**.
+- **To stop a job,** turn it off on **Settings**; it stops running on its schedule within a minute.
 - **To update** to a newer version: `git pull`, then `uv run sna db upgrade`, then restart the scheduler and dashboard.
 
 ## Problems
@@ -104,7 +118,7 @@ All times are India time. Everything is fetched from public websites by your own
 | "Port 8501 is not available" | The dashboard is already running somewhere: `make ui-stop`, or close the other Terminal window running it |
 | "Postgres is not reachable" | Open Docker Desktop, wait for it to start, then `make up` |
 | NSE or BSE returned HTTP 401 or 403 | The exchange refused for a while. The job retries on its next run; wait an hour |
-| "...has reached the $20.00 budget" | AI calls stop until the 1st. Raise `LLM_MONTHLY_BUDGET_USD` in `.env` if you want more |
+| "...has reached the $20.00 budget" | AI calls stop until the 1st. Raise the budget on **Settings** if you want more |
 | A stock isn't found on Manage stocks | Try its NSE symbol, or part of its name. Run `uv run sna securities refresh` if it listed recently |
 | A page says "No ... yet" | That data hasn't been collected: load history on Manage stocks, or wait for the morning run |
 | A wrong number | Check it against the filing, linked from the row. Results, orders and events record the text they came from |
@@ -114,4 +128,4 @@ All times are India time. Everything is fetched from public websites by your own
 - **Where it is:** the database lives in Docker, and filing PDFs and digests in the `data` folder of the project.
 - **Back up the database:** `docker compose exec db pg_dump -U sna sna > backup.sql` saves it to one file.
 - **Start over:** `docker compose down -v` deletes the database (the `data` folder stays). Then `make up` and `make migrate` give you an empty one.
-- **Your API key** is only in the `.env` file on your computer; it is never sent anywhere except to Anthropic.
+- **Your API key** is kept on your computer, in the database (saved on Settings) or the `.env` file. It is never sent anywhere except to Anthropic.

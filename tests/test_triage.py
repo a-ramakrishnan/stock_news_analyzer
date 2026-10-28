@@ -173,7 +173,7 @@ def test_cli_and_scheduled_job_without_an_api_key(news, test_database_url, monke
     runner = CliRunner()
 
     result = runner.invoke(app, ["triage", "run"])
-    assert result.exit_code == 1 and "ANTHROPIC_API_KEY is not set" in result.stdout
+    assert result.exit_code == 1 and "no Anthropic API key" in result.stdout
     run = run_job("triage")
     assert run.status == "ok" and run.summary.startswith("skipped")
 

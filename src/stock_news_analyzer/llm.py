@@ -31,12 +31,25 @@ PRICES = {
 }
 
 
+def check_key(key: str, client=None) -> str | None:
+    """None if Anthropic accepts the key, else why not. Lists the models, which costs nothing."""
+    import anthropic
+
+    try:
+        (client or anthropic.Anthropic(api_key=key, max_retries=0, timeout=20)).models.list(limit=1)
+    except anthropic.AuthenticationError:
+        return "Anthropic did not accept this key"
+    except anthropic.APIError as exc:
+        return f"could not check the key: {type(exc).__name__}: {exc}"[:300]
+    return None
+
+
 class LLMError(Exception):
     """The call failed or gave no usable answer."""
 
 
 class LLMNotConfigured(LLMError):
-    """No API key in .env."""
+    """No API key, in .env or on the Settings page."""
 
 
 class BadAnswer(LLMError):
@@ -78,7 +91,10 @@ class LLM:
     def client(self):
         if self._client is None:
             if not self.settings.anthropic_api_key:
-                raise LLMNotConfigured("ANTHROPIC_API_KEY is not set in .env")
+                raise LLMNotConfigured(
+                    "no Anthropic API key: add one on the dashboard's Settings page "
+                    "(or ANTHROPIC_API_KEY in .env)"
+                )
             import anthropic
 
             self._client = anthropic.Anthropic(api_key=self.settings.anthropic_api_key)

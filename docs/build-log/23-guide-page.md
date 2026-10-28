@@ -8,7 +8,7 @@
 | --- | --- |
 | `src/stock_news_analyzer/ui/guide.md` | The Guide's text, in ten sections; readable on GitHub too, linked from the README |
 | `ui/guide.py` | Splits the file into sections and makes link names for them |
-| **Guide** page (ten pages now) | The sections as a row of choices; `/guide?section=words-used` opens one directly |
+| **Guide** page (ten pages now) | The sections as an accordion: each one opens and closes on its own; `/guide?section=words-used` opens that one, otherwise the first is open |
 | "How to use this page" on every page | Opens that page's part of the Guide, in the same tab |
 | One-line descriptions | Filings, News and System had none |
 | Sidebar link | "New here? Read the Guide" |
@@ -32,6 +32,8 @@ The text describes the system as it is today, with the commands it still needs. 
 
 ## Decisions
 
+- **An accordion:** the first version showed one section at a time from a row of choices; an accordion shows every section's title at once, and several can be open together.
+
 - **Text in a file, not in code:** it can be edited and reviewed like any document, and read before installing.
 - **In `src/`, not `docs/`:** the Docker image copies only `src/`, so the dashboard there could not read a file under `docs/`.
 - **Streamlit page links, not Markdown links:** a Markdown link opened a new tab each time; `st.page_link` stays in the app.
@@ -42,7 +44,7 @@ The text describes the system as it is today, with the commands it still needs. 
 - the Guide page renders, and the page count is now ten
 - the sections are read in order, none empty, with unique link names
 - every page's help link points at a section that exists
-- `?section=words-used` opens that section
+- `?section=words-used` opens that section and leaves the others closed
 
 Checked in a browser: the System page's link opens "Keeping it running" in the same tab.
 

@@ -1378,14 +1378,16 @@ def system_page() -> None:
 
 def guide_page() -> None:
     st.title("Guide")
-    st.caption("How to use Stock News Analyzer: what it does, a daily routine, and each page.")
-    parts = guide.sections()
-    titles = list(parts)
+    st.caption(
+        "How to use Stock News Analyzer: what it does, a daily routine, and each page. "
+        "Open a section to read it."
+    )
     wanted = st.query_params.get("section")
-    start = next((i for i, t in enumerate(titles) if guide.slug(t) == wanted), 0)
-    choice = st.radio("Section", titles, index=start, horizontal=True, label_visibility="collapsed")
-    st.query_params["section"] = guide.slug(choice)
-    st.markdown(parts[choice])
+    for i, (title, body) in enumerate(guide.sections().items()):
+        # A page's help link opens its section; with no link, the first one is open.
+        opened = guide.slug(title) == wanted if wanted else i == 0
+        with st.expander(title, expanded=opened):
+            st.markdown(body)
 
 
 stock_page = st.Page(stock_page_body, title="Stock", icon=":material/show_chart:", url_path="stock")

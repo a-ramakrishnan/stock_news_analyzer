@@ -194,5 +194,7 @@ def test_guide_opens_at_the_linked_section():
     at = AppTest.from_string("from stock_news_analyzer.ui import app\napp.guide_page()")
     at.query_params["section"] = "words-used"
     at.run()
-    assert not at.exception and at.radio[0].value == "Words used"
+    assert not at.exception
+    opened = [e.label for e in at.expander if e.proto.expanded]
+    assert opened == ["Words used"] and len(at.expander) == 10
     assert any("Book-to-bill" in m.value for m in at.markdown)

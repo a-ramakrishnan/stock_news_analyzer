@@ -1,6 +1,6 @@
 # Making it usable by others
 
-Version 1.3 · Oct 28, 2026 · @Ramki · companion to the [system design](design.md) and [agent design](agent-design.md); changes are listed in [README.md](README.md)
+Version 1.4 · Oct 28, 2026 · @Ramki · companion to the [system design](design.md) and [agent design](agent-design.md); changes are listed in [README.md](README.md)
 
 ## Goal
 
@@ -136,7 +136,7 @@ Each step is one PR, tested on the Mac like the agents:
 | 23 | Guide page and its text file; one-line help and a help link on every page (done) | Small |
 | 24 | Settings page and `settings` table; API key, budget and job switches from the app (done) | Medium |
 | 25 | Navigation regrouped; Red flags page; Run now buttons with progress (done) | Medium |
-| 26 | First-run setup | Medium |
+| 26 | First-run setup (done) | Medium |
 | 27 | Packaging: prebuilt image, user compose file, start scripts, migrations on start, example watchlist, licence | Medium |
 | 28 | Try it on a clean Mac and a Windows machine; fix what breaks; write the release notes | Small |
 

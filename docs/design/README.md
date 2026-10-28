@@ -4,12 +4,21 @@
 | --- | --- |
 | [design.md](design.md) | Goal and principles, data sources, architecture, core modules, extended ideas, database, tech stack and roadmap, existing products, risks |
 | [agent-design.md](agent-design.md) | The agent team, LLMs and costs, tools, data requirements, hosting, the agent-by-agent build guide, the build-in-public plan |
+| [sharing.md](sharing.md) | Making it usable by others: a simple install, a fuller dashboard, and an in-app Guide; the order of work |
 
 These files are the reference for the design. Change them in a pull request like code: edit the text, bump the version line at the top of each changed file, and add an entry below.
 
 Versions: a minor bump (1.1) for corrections and decisions that fit the existing plan, a major bump (2.0) when the plan itself changes, such as agents added or dropped, or the architecture changed. Building agents in a different order is a minor change.
 
 ## Changes
+
+### sharing.md 1.1 · Oct 28, 2026
+
+- Step 23 built: the Guide's text lives in `src/stock_news_analyzer/ui/guide.md` (the Docker image copies only `src/`), and help links open the page's section in the same tab
+
+### sharing.md 1.0 · Oct 28, 2026
+
+- New plan for making the system usable by others on their own computers: one Docker package set up from the browser, a dashboard that covers what the command line does, a first-run setup and a Guide page; steps 23–28
 
 ### 1.18 · Oct 28, 2026
 

@@ -7,6 +7,8 @@ A set of small agents that track news, exchange filings and earnings calls for I
 
 Every command block below can be pasted into Terminal as is; explanations are in the tables.
 
+New to the system? The [Guide](src/stock_news_analyzer/ui/guide.md) explains what it does, a daily routine, each page and the words used. The same text is on the dashboard's **Guide** page.
+
 ## Status
 
 | Step | What | Status |
@@ -33,6 +35,7 @@ Every command block below can be pasted into Terminal as is; explanations are in
 | 20 | Theme & Peer Analyst: events, orders and call points tagged with themes (Claude Haiku); theme strength over time; read-across between watchlist stocks | done |
 | 21 | Analyst Q&A (Claude Sonnet): plain-English questions answered from the database with sources; saved reports; an Ask page | done |
 | 22 | Shareholding pattern each quarter from NSE's XBRL files (no LLM): promoters, foreign and domestic institutions, mutual funds, retail, pledges; red flags for promoters selling or pledging | done |
+| 23 | Guide page in the dashboard (and as a file): what it is, getting started, a daily routine, the pages, words used, AI use and cost, data sources, keeping it running, problems, your data; a help link on every page | testing |
 
 ## Run it on a Mac
 
@@ -577,6 +580,7 @@ make ui
 | What moves the stock | Average return vs Nifty 50 after each kind of filing, 1, 5 and 20 trading days later |
 | Manage stocks | Search any listed company and add it to Stocks I own or Watchlist, with news aliases and a sector benchmark; edit or remove stocks; **Load history now** fetches a new stock's filings, news and moves since Oct 2023 |
 | System | Schedule, stored data, recent runs and errors |
+| Guide | How to use the system: getting started, a daily routine, each page, the words used, AI use and cost, problems. Every page links to its part |
 
 ## Other commands
 

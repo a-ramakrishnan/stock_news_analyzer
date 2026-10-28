@@ -39,6 +39,8 @@ The author asked for the prebuilt image anyway, private for now:
   - it can be run by hand from the Actions tab
   - layers are cached between runs
 - **`make release VERSION=0.2.0`** tags a release.
+- **Only builds when the image would change.** A push to main builds only when it touches what the image is made from: `src/`, `pyproject.toml`, `uv.lock`, the `Dockerfile`, `.streamlit/` or the workflow itself. Docs, tests, the README and the start scripts don't trigger a build. Release tags always build.
+- **First run:** the merge of the workflow built and published `main` for both platforms in about 5½ minutes.
 - **The compose file** names that image for every app service:
   - `pull_policy: ${SNA_PULL_POLICY:-build}` keeps building here by default
   - `SNA_PULL_POLICY=always` in `.env` pulls the newest instead; `SNA_VERSION` picks a release

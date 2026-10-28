@@ -2,12 +2,22 @@ name: Image
 
 # Builds the app image for Intel and Apple Silicon and publishes it to GitHub Container
 # Registry (ghcr.io/a-ramakrishnan/stock_news_analyzer), so a copy can pull it instead of
-# building it. A release tag (v0.2.0) publishes that version and `latest`; every push to main
-# publishes `main`; it can also be run by hand from the Actions tab.
+# building it. A release tag (v0.2.0) publishes that version and `latest`; a push to main
+# publishes `main` when it changes what the image is built from (docs, tests and the start
+# scripts are not in it); it can also be run by hand from the Actions tab.
 on:
   push:
     branches: [main]
     tags: ["v*"]
+    # What the Dockerfile copies (but the README, which the app never reads), and this
+    # workflow. Not applied to tag pushes: a release always builds.
+    paths:
+      - "src/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "Dockerfile"
+      - ".streamlit/**"
+      - ".github/workflows/image.yml"
   workflow_dispatch:
 
 permissions:

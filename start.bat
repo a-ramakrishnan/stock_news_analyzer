@@ -11,8 +11,8 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo Starting Stock News Analyzer. The first time, building the app takes a few minutes...
-docker compose up -d --build
+echo Starting Stock News Analyzer. The first time, getting the app ready takes a few minutes...
+docker compose up -d
 if errorlevel 1 (
   echo Something went wrong ^(see above^).
   pause

@@ -12,6 +12,10 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### sharing.md 1.6 · Oct 28, 2026
+
+- A prebuilt image after all: GitHub Actions publishes it (private while the repository is), and `SNA_PULL_POLICY` chooses between pulling it and building locally. The open items before going public are in docs/TODO.md
+
 ### sharing.md 1.5 · Oct 28, 2026
 
 - Step 27 built: start scripts and one compose file. MIT licence and a private repository decided, so no prebuilt image for now, and the author's watchlist stays tracked until the repository goes public

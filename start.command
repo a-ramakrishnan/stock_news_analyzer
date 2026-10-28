@@ -10,8 +10,8 @@ if ! docker info >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "Starting Stock News Analyzer. The first time, building the app takes a few minutes..."
-if ! docker compose up -d --build; then
+echo "Starting Stock News Analyzer. The first time, getting the app ready takes a few minutes..."
+if ! docker compose up -d; then
   echo "Something went wrong (see above)."
   read -r -p "Press Enter to close. " _
   exit 1

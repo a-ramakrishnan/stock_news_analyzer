@@ -1,6 +1,6 @@
 # Making it usable by others
 
-Version 1.5 · Oct 28, 2026 · @Ramki · companion to the [system design](design.md) and [agent design](agent-design.md); changes are listed in [README.md](README.md)
+Version 1.6 · Oct 28, 2026 · @Ramki · companion to the [system design](design.md) and [agent design](agent-design.md); changes are listed in [README.md](README.md)
 
 ## Goal
 
@@ -145,8 +145,8 @@ The Guide comes first because it is quick and shows where the app is hard to fol
 ## Decisions for the author
 
 Decided Oct 28, 2026: **MIT licence; the repository stays private for now.** While it is private:
-- **No prebuilt image.** On a private repository the image would be private too, and every user would need a GitHub token to pull it. The start script builds the image on the user's computer instead, which takes a few minutes the first time.
-- **The author's watchlist stays tracked.** Untracking it now would delete it from the author's Mac on the next `git pull`. Before the repository goes public, it has to be removed from the Git history, with `config/watchlist.example.yaml` in its place.
+- **The prebuilt image is private.** GitHub Actions publishes it to GitHub Container Registry on every push to main and each release tag, but on a private repository the package is private too, so pulling it needs `docker login ghcr.io`. Building on the user's computer stays the default (`SNA_PULL_POLICY=build`); `SNA_PULL_POLICY=always` pulls instead.
+- **The author's watchlist stays tracked.** Untracking it now would delete it from the author's Mac on the next `git pull`. Before the repository goes public, it has to be removed from the Git history, with `config/watchlist.example.yaml` in its place. Both are on [docs/TODO.md](../TODO.md).
 
 The questions as first asked:
 

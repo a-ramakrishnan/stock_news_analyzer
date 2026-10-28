@@ -1,4 +1,4 @@
-.PHONY: start stop setup up down health migrate securities watchlist filings news triage explain concalls promises orders results events flags holdings bullion themes prices digest backfill run-all scheduler scheduler-logs scheduler-stop ui ui-docker ui-stop test lint format docker-health
+.PHONY: release start stop setup up down health migrate securities watchlist filings news triage explain concalls promises orders results events flags holdings bullion themes prices digest backfill run-all scheduler scheduler-logs scheduler-stop ui ui-docker ui-stop test lint format docker-health
 
 setup:          ## Install Python dependencies and create .env
 	uv sync
@@ -113,6 +113,11 @@ start:          ## Start everything in Docker (database, dashboard, scheduler), 
 
 stop:           ## Stop everything in Docker (data is kept)
 	docker compose stop
+
+release:        ## Publish a release image: make release VERSION=0.2.0 (tags v0.2.0; GitHub Actions builds it)
+	@test -n "$(VERSION)" || (echo "usage: make release VERSION=0.2.0" && exit 1)
+	git tag -a v$(VERSION) -m "Release $(VERSION)"
+	git push origin v$(VERSION)
 
 docker-health:  ## Run the same check inside the app container
 	docker compose run --rm --build app

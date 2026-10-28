@@ -348,6 +348,16 @@ def open_flags(
     return rows
 
 
+def restore(session: Session, flag_id: int) -> RedFlag:
+    """Open a dismissed flag again; its note is kept."""
+    flag = session.get(RedFlag, flag_id)
+    if flag is None:
+        raise LookupError(f"no red flag #{flag_id}")
+    flag.dismissed_at = None
+    session.commit()
+    return flag
+
+
 def dismiss(session: Session, flag_id: int, note: str | None = None) -> RedFlag:
     flag = session.get(RedFlag, flag_id)
     if flag is None:

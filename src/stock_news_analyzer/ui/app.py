@@ -6,6 +6,7 @@ the question. Regular collecting is done by the scheduler.
 """
 
 import html
+import logging
 from datetime import date, datetime, timedelta
 
 import pandas as pd
@@ -688,7 +689,11 @@ def red_flag_list(flags: list[dict], title: str) -> None:
         if f["detail"]:
             line += f" ({f['detail']})"
         (st.error if f["severity"] == "high" else st.warning)(line)
-    st.caption("`sna flags list` for all of them; `sna flags dismiss ID` once dealt with.")
+    st.page_link(
+        PAGES["flags"],
+        label="All red flags, and dismiss the ones dealt with",
+        icon=":material/flag:",
+    )
 
 
 def events_tab_body(s: dict) -> None:
@@ -1296,6 +1301,135 @@ def edit_stocks(session: Session) -> None:
         st.rerun()
 
 
+SEVERITY = {"high": "🔴 high", "medium": "🟠 medium", "low": "⚪ low"}
+
+
+def flags_page() -> None:
+    from stock_news_analyzer.agents import redflags
+
+    st.title("Red flags")
+    st.caption(
+        "Warnings about governance and money: an auditor or CFO leaving, a rating cut, a "
+        "pledge, promoters selling, a penalty, results filed late. Dismiss one once you have "
+        "looked into it; it stays on record with your note."
+    )
+    help_link("words-used")
+    c1, c2, c3 = st.columns([2, 1, 1])
+    severities = c1.multiselect(
+        "Severity", list(SEVERITY), default=["high", "medium"], format_func=SEVERITY.get
+    )
+    days = c2.selectbox(
+        "Raised in the last",
+        [30, 90, 365, 3 * 365],
+        index=2,
+        format_func=lambda d: f"{d} days" if d < 365 else f"{d // 365} year{'s' * (d > 365)}",
+    )
+    dismissed = c3.toggle("Show dismissed")
+    flags = load("flag_table", days=days, severities=tuple(severities), include_dismissed=dismissed)
+    symbols = sorted(flags["symbol"].unique())
+    pick = st.multiselect("Stocks", symbols, placeholder="All stocks")
+    if pick:
+        flags = flags[flags["symbol"].isin(pick)]
+    if flags.empty:
+        no_data("No red flags for these choices.")
+        return
+    shown = flags.assign(severity=flags["severity"].map(SEVERITY))
+    selection = st.dataframe(
+        shown.drop(columns=["id"]),
+        hide_index=True,
+        width="stretch",
+        on_select="rerun",
+        selection_mode="single-row",
+        column_config={
+            "date": st.column_config.DateColumn("Raised", format="DD MMM YYYY"),
+            "severity": st.column_config.TextColumn("Severity"),
+            "symbol": st.column_config.TextColumn("Stock"),
+            "kind": st.column_config.TextColumn("Kind"),
+            "title": st.column_config.TextColumn("What happened", width="large"),
+            "status": st.column_config.TextColumn("Status"),
+            "note": st.column_config.TextColumn("Your note"),
+            "link": st.column_config.LinkColumn("Filing", display_text="open"),
+        },
+        key="flags",
+    )
+    rows = selection.selection.rows
+    if not rows:
+        st.caption("Select a flag to dismiss it, or to open a dismissed one again.")
+        return
+    flag = flags.iloc[rows[0]]
+    st.markdown(f"**{flag['symbol']}:** {flag['title']}")
+    with Session(engine()) as session:
+        if flag["status"] == "open":
+            with st.form("dismiss", clear_on_submit=True):
+                note = st.text_input(
+                    "Note (optional)", placeholder="e.g. a planned retirement; successor named"
+                )
+                if st.form_submit_button("Dismiss", icon=":material/done:"):
+                    redflags.dismiss(session, int(flag["id"]), note.strip() or None)
+                    load.clear()
+                    st.rerun()
+        elif st.button("Open it again", icon=":material/undo:"):
+            redflags.restore(session, int(flag["id"]))
+            load.clear()
+            st.rerun()
+
+
+class _StatusLog:
+    """Shows the log lines of a job run by hand inside its status box, as they happen."""
+
+    def __init__(self, box):
+        self.box = box
+        self.handler = logging.Handler(logging.INFO)
+        self.handler.emit = lambda record: box.write(f"`{record.getMessage()[:300]}`")
+        self.logger = logging.getLogger("stock_news_analyzer")
+
+    def __enter__(self):
+        self.level = self.logger.level
+        self.logger.setLevel(logging.INFO)
+        self.logger.addHandler(self.handler)
+        return self
+
+    def __exit__(self, *exc):
+        self.logger.removeHandler(self.handler)
+        self.logger.setLevel(self.level)
+
+
+def run_now_section() -> None:
+    """Run any job now, with its log lines shown as it goes."""
+    from stock_news_analyzer.agents import orchestrator as orch
+
+    st.subheader("Run a job now")
+    notes = orch.job_notes(SCHEDULE_FILE)
+    names = [n for n in orch.RUN_ALL if n in orch.JOBS] + sorted(set(orch.JOBS) - set(orch.RUN_ALL))
+    c1, c2 = st.columns([3, 1], vertical_alignment="bottom")
+    name = c1.selectbox(
+        "Job", names, format_func=lambda n: f"{n}: {notes.get(n, '')}", key="run_job"
+    )
+    with Session(engine()) as session:
+        busy = orch.running(session, name)
+    if busy:
+        st.info(
+            f"{name} is already running (started {busy.started_at.astimezone(IST):%H:%M}); "
+            "wait for it to finish.",
+            icon=":material/hourglass_top:",
+        )
+    if c2.button("Run now", icon=":material/play_arrow:", disabled=bool(busy)):
+        with st.status(f"Running {name}...", expanded=True) as box:
+            st.caption("This can take several minutes; keep this tab open until it finishes.")
+            with _StatusLog(box):
+                run = orch.run_job(name)
+            if run.status == "ok":
+                box.update(label=f"{name}: {run.summary}", state="complete", expanded=False)
+            else:
+                box.update(label=f"{name} failed", state="error", expanded=True)
+                st.error(run.error or run.summary or "failed")
+        load.clear()
+    st.caption(
+        "The same jobs the scheduler runs each day; running one by hand is safe, and also "
+        "works for a job turned off on Settings."
+    )
+
+
 def system_page() -> None:
     st.title("System")
     st.caption(
@@ -1303,19 +1437,24 @@ def system_page() -> None:
         "The schedule is in config/schedule.yaml."
     )
     help_link("keeping-it-running")
+    run_now_section()
     left, right = st.columns(2)
     with left:
         st.subheader("Schedule (India time)")
         try:
+            from stock_news_analyzer.settings_store import paused_jobs
+
             schedule = load_schedule(SCHEDULE_FILE)
             upcoming = next_runs(schedule, datetime.now(IST))
+            off = paused_jobs(get_settings())
             st.dataframe(
                 pd.DataFrame(
                     [
                         {
                             "job": j.name,
-                            "cron": j.cron,
-                            "next run": upcoming[j.name].strftime("%a %d %b %H:%M")
+                            "next run": "off on Settings"
+                            if j.name in off
+                            else upcoming[j.name].strftime("%a %d %b %H:%M")
                             if j.enabled
                             else "paused",
                         }
@@ -1342,7 +1481,7 @@ def system_page() -> None:
     b.metric(
         "Monthly budget",
         f"${usage['budget']:.2f}",
-        help="LLM_MONTHLY_BUDGET_USD in .env; calls stop for the month when reached.",
+        help="Set on Settings; calls stop for the month when reached.",
     )
     c.metric("Articles waiting for triage", usage["pending_triage"])
     st.progress(min(1.0, usage["spent"] / usage["budget"]) if usage["budget"] else 1.0)
@@ -1570,6 +1709,7 @@ def guide_page() -> None:
 stock_page = st.Page(stock_page_body, title="Stock", icon=":material/show_chart:", url_path="stock")
 PAGES = {
     "today": st.Page(today_page, title="Today", icon=":material/today:", default=True),
+    "flags": st.Page(flags_page, title="Red flags", icon=":material/flag:", url_path="flags"),
     "stock": stock_page,
     "filings": st.Page(
         filings_page, title="Filings", icon=":material/description:", url_path="filings"
@@ -1593,13 +1733,23 @@ PAGES = {
 }
 
 
+# The sidebar's groups, in order.
+NAV = {
+    "Today": ["today", "flags"],
+    "Research": ["stock", "ask", "themes", "moves"],
+    "Library": ["filings", "news"],
+    "Set up": ["manage", "settings", "system"],
+    "Help": ["guide"],
+}
+
+
 def main() -> None:
     with st.sidebar:
         if st.button("Refresh data", icon=":material/refresh:"):
             load.clear()
         st.caption("Collecting happens in the scheduler; add stocks on Manage stocks.")
         st.page_link(PAGES["guide"], label="New here? Read the Guide", icon=":material/help:")
-    st.navigation(list(PAGES.values())).run()
+    st.navigation({group: [PAGES[k] for k in keys] for group, keys in NAV.items()}).run()
 
 
 if __name__ == "__main__":  # `streamlit run` runs this file as __main__

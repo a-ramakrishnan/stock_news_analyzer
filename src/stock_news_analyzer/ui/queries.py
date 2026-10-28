@@ -830,6 +830,47 @@ def red_flags(
     ]
 
 
+FLAG_COLUMNS = ["id", "date", "severity", "symbol", "kind", "title", "status", "note", "link"]
+
+
+def flag_table(
+    session: Session,
+    days: int = 365,
+    severities=("high", "medium", "low"),
+    include_dismissed: bool = False,
+) -> pd.DataFrame:
+    """Red flags for the Red flags page, most serious and newest first, with a link to the
+    filing behind each where there is one."""
+    from stock_news_analyzer.agents.redflags import open_flags
+
+    rows = open_flags(
+        session, days=days, severities=tuple(severities), include_dismissed=include_dismissed
+    )
+    docs = {
+        d.id: d.url or d.attachment_url
+        for d in session.scalars(
+            select(Document).where(Document.id.in_({f.document_id for f, _ in rows} - {None}))
+        )
+    }
+    return pd.DataFrame(
+        [
+            (
+                f.id,
+                f.flagged_on,
+                f.severity,
+                c.nse_symbol or c.isin,
+                f.kind.replace("_", " "),
+                f.title + (f" ({f.detail})" if f.detail else ""),
+                "dismissed" if f.dismissed_at else "open",
+                f.note,
+                docs.get(f.document_id),
+            )
+            for f, c in rows
+        ],
+        columns=FLAG_COLUMNS,
+    )
+
+
 BULLION_COLUMNS = ["date", "close", "rupees", "global", "rupee", "other", "z", "driver", "note"]
 
 

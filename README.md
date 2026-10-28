@@ -36,7 +36,8 @@ New to the system? The [Guide](src/stock_news_analyzer/ui/guide.md) explains wha
 | 21 | Analyst Q&A (Claude Sonnet): plain-English questions answered from the database with sources; saved reports; an Ask page | done |
 | 22 | Shareholding pattern each quarter from NSE's XBRL files (no LLM): promoters, foreign and domestic institutions, mutual funds, retail, pledges; red flags for promoters selling or pledging | done |
 | 23 | Guide page in the dashboard (and as a file): what it is, getting started, a daily routine, the pages, words used, AI use and cost, data sources, keeping it running, problems, your data; a help link on every page | done |
-| 24 | Settings page: the API key (checked before saving), monthly budget, models, unusual-day threshold and scheduled jobs, saved in the database in place of `.env` | testing |
+| 24 | Settings page: the API key (checked before saving), monthly budget, models, unusual-day threshold and scheduled jobs, saved in the database in place of `.env` | done |
+| 25 | Sidebar in groups (Today, Research, Library, Set up, Help); a Red flags page with dismiss and re-open; "Run a job now" on System, showing the job's progress | testing |
 
 ## Run it on a Mac
 
@@ -573,6 +574,7 @@ make ui
 | Page | What it shows |
 | --- | --- |
 | Today | Indices, then **Stocks I own** and **Watchlist** as separate groups of cards (move vs Nifty 50 and sector, unusual badge, 3-month sparkline), the latest digest, job health |
+| Red flags | Every flag, filtered by severity, period and stock; dismiss one with a note, or open it again |
 | Stock | Stock vs sector vs Nifty 50 indexed to 100, key filings and unusual days marked; unusual days with their likely cause, results, shareholding, earnings calls and the promise ledger, the order book, filings, news, deals, reactions and corporate actions |
 | Filings | Search by stock, type, words and date; read a filing's extracted text |
 | News | Search headlines; links to the articles |
@@ -581,7 +583,7 @@ make ui
 | What moves the stock | Average return vs Nifty 50 after each kind of filing, 1, 5 and 20 trading days later |
 | Manage stocks | Search any listed company and add it to Stocks I own or Watchlist, with news aliases and a sector benchmark; edit or remove stocks; **Load history now** fetches a new stock's filings, news and moves since Oct 2023 |
 | Settings | The Anthropic API key, the monthly AI budget and this month's spend, the models, the unusual-day threshold, and which scheduled jobs run. Saved values take the place of `.env`; the scheduler picks them up within a minute |
-| System | Schedule, stored data, recent runs and errors |
+| System | Run any job now, with its progress shown; schedule, stored data, recent runs and errors |
 | Guide | How to use the system: getting started, a daily routine, each page, the words used, AI use and cost, problems. Every page links to its part |
 
 ## Other commands

@@ -404,6 +404,22 @@ def run_job(name: str, jobs: dict[str, Callable[[Session], str]] | None = None) 
         return run
 
 
+def running(session: Session, name: str, within: timedelta = timedelta(hours=3)) -> Run | None:
+    """A run of this job started in the last few hours and not finished: started by the
+    scheduler or by hand elsewhere. Older ones were cut off (a restart) and don't count."""
+    from sqlalchemy import select
+
+    return session.scalars(
+        select(Run)
+        .where(
+            Run.job == name,
+            Run.status == "running",
+            Run.started_at >= datetime.now(UTC) - within,
+        )
+        .order_by(Run.started_at.desc())
+    ).first()
+
+
 def scheduled_run(name: str) -> Run | None:
     """A run started by the schedule: skipped while the job is paused on the Settings page
     (a run by hand, `sna run <job>`, always runs)."""

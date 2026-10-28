@@ -12,6 +12,10 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### sharing.md 1.3 · Oct 28, 2026
+
+- Step 25 built: the sidebar in groups, a Red flags page, and "Run a job now" on System; Manage stocks keeps its name for now
+
 ### sharing.md 1.2 · Oct 28, 2026
 
 - Step 24 built: a value saved on the Settings page takes the place of `.env` (the plan had `.env` winning), so the page also works for a developer with a `.env`

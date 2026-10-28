@@ -10,14 +10,14 @@ Stock News Analyzer follows a list of Indian stocks for you. Every morning it re
 
 1. **Add your stocks** on **Manage stocks**. Search by name or NSE symbol, choose **Stocks I own** or **Watchlist**, and add a few news aliases (such as "L&T" for Larsen & Toubro).
 2. **Load history** for each new stock on the same page. It fetches filings, news and prices since October 2023, so the system can compare today with the past. It takes a few minutes per stock.
-3. **Start the scheduler** so the work happens every morning without you: `make scheduler` in the project folder.
+3. **Start the scheduler** so the work happens every morning without you: `make scheduler` in the project folder. To run a job straight away, use **Run a job now** on **System**.
 4. **Add an Anthropic API key** on **Settings** if you want the AI features (see "How AI is used"), and set a monthly budget. Without a key, collecting, prices, shareholding and the dashboard still work.
 
 ## A daily routine
 
 | When | What to look at |
 | --- | --- |
-| Each morning after 08:00 | **Today**: the cards show each stock's move against the Nifty and its sector, and the digest lists what was filed and reported overnight. Then the red flags at the top of the digest |
+| Each morning after 08:00 | **Today**: the cards show each stock's move against the Nifty and its sector, and the digest lists what was filed and reported overnight. Then **Red flags**: look into new ones and dismiss those dealt with |
 | When a stock had an unusual day | Its **Stock** page, **Unusual days** tab: the likely cause, how sure the system is, and the filings or news it is based on |
 | When results come out | **Stock** page: the **Results** tab for revenue, profit and margins, then **Earnings calls** for what management said and promised |
 | Weekly | **Themes** for what is rising across your companies; the **Shareholding** tab of the stocks you own |
@@ -25,7 +25,10 @@ Stock News Analyzer follows a list of Indian stocks for you. Every morning it re
 
 ## The pages
 
+The sidebar groups the pages: **Today** (what changed), **Research** (one stock, questions, themes), **Library** (every filing and article), **Set up** (stocks, settings, system) and **Help**.
+
 - **Today:** index levels, a card for each stock (Stocks I own first), the latest digest, recent red flags, and whether the morning jobs ran.
+- **Red flags:** every flag, filtered by severity, period and stock. Select one to dismiss it with a note once you have looked into it, or to open a dismissed one again.
 - **Stock:** one company in depth.
   - The chart compares the stock with its sector index and the Nifty 50, both set to 100 at the start, with key filings marked.
   - Tabs: Unusual days, Results, Shareholding, Events (with red flags), Earnings calls, Order book, Filings, News, Bulk/block deals, How it reacted, Corporate actions.
@@ -36,7 +39,7 @@ Stock News Analyzer follows a list of Indian stocks for you. Every morning it re
 - **What moves the stock:** how stocks moved on average, 1, 5 and 20 trading days after each kind of filing.
 - **Manage stocks:** add, edit and remove stocks; load a new stock's history.
 - **Settings:** the API key, the monthly AI budget and models, the unusual-day threshold, and which scheduled jobs run.
-- **System:** the schedule, how much is stored, recent runs and errors, and the AI spend this month by task.
+- **System:** run any job now and watch it work; the schedule, how much is stored, recent runs and errors, and the AI spend this month by task.
 - **Guide:** this page.
 
 ## Settings
@@ -109,6 +112,7 @@ All times are India time. Everything is fetched from public websites by your own
 - **If the computer was off,** nothing is lost: the next run picks up whatever was filed in between.
 - **To see what ran,** open **System**, or the job health on **Today**.
 - **To stop a job,** turn it off on **Settings**; it stops running on its schedule within a minute.
+- **To run a job now,** for example after adding a stock or when a morning run failed, use **Run a job now** on **System**. It shows the job's progress; keep the tab open until it finishes.
 - **To update** to a newer version: `git pull`, then `uv run sna db upgrade`, then restart the scheduler and dashboard.
 
 ## Problems

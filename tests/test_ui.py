@@ -118,6 +118,7 @@ def test_charts_build(loaded):  # noqa: F811
     "page",
     [
         "today_page",
+        "flags_page",
         "stock_page_body",
         "filings_page",
         "news_page",
@@ -146,6 +147,7 @@ def test_every_page_renders(loaded, test_database_url, monkeypatch, tmp_path, pa
     assert not at.exception, at.exception
     assert at.title[0].value in {
         "Today",
+        "Red flags",
         "Larsen & Toubro Limited",
         "Filings",
         "News",
@@ -168,10 +170,13 @@ def test_main_registers_every_page():
         "from stock_news_analyzer.ui import app\n"
         "with mock.patch.object(st, 'navigation') as nav:\n"
         "    app.main()\n"
-        "st.markdown(str(len(nav.call_args.args[0])))\n"
+        "groups = nav.call_args.args[0]\n"
+        "st.markdown(','.join(groups))\n"
+        "st.markdown(str(sum(len(p) for p in groups.values())))\n"
     )
     at.run()
-    assert not at.exception and at.markdown[-1].value == "11"
+    assert not at.exception and at.markdown[-1].value == "12"
+    assert at.markdown[-2].value == "Today,Research,Library,Set up,Help"
 
 
 def test_guide_sections():
@@ -201,3 +206,52 @@ def test_guide_opens_at_the_linked_section():
     opened = [e.label for e in at.expander if e.proto.expanded]
     assert opened == ["Words used"] and len(at.expander) == 11
     assert any("Book-to-bill" in m.value for m in at.markdown)
+
+
+@pytest.mark.db
+def test_flag_table_dismiss_and_restore(loaded):  # noqa: F811
+    from datetime import date
+
+    from stock_news_analyzer.agents import redflags
+    from stock_news_analyzer.models import RedFlag
+
+    flag = RedFlag(
+        isin=LT,
+        kind="auditor_exit",
+        severity="high",
+        title="LT: auditor resigned",
+        detail="mid-term",
+        flagged_on=date.today(),
+        ref="test:1",
+    )
+    loaded.add(flag)
+    loaded.commit()
+    table = queries.flag_table(loaded)
+    row = table[table["id"] == flag.id].iloc[0]
+    assert row["title"] == "LT: auditor resigned (mid-term)" and row["status"] == "open"
+    redflags.dismiss(loaded, flag.id, "planned rotation")
+    assert flag.id not in set(queries.flag_table(loaded)["id"])
+    shown = queries.flag_table(loaded, include_dismissed=True)
+    assert shown[shown["id"] == flag.id].iloc[0][["status", "note"]].tolist() == [
+        "dismissed",
+        "planned rotation",
+    ]
+    redflags.restore(loaded, flag.id)
+    assert flag.id in set(queries.flag_table(loaded)["id"])
+
+
+@pytest.mark.db
+def test_a_job_already_running_is_seen(loaded):  # noqa: F811
+    from datetime import UTC, datetime, timedelta
+
+    from stock_news_analyzer.agents import orchestrator as orch
+    from stock_news_analyzer.models import Run
+
+    loaded.add(Run(job="news", started_at=datetime.now(UTC), status="running"))
+    loaded.add(
+        Run(job="prices", started_at=datetime.now(UTC) - timedelta(hours=5), status="running")
+    )
+    loaded.commit()
+    assert orch.running(loaded, "news") is not None
+    assert orch.running(loaded, "prices") is None  # cut off long ago by a restart
+    assert orch.running(loaded, "filings") is None

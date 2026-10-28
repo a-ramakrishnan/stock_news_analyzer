@@ -12,6 +12,10 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### sharing.md 1.4 · Oct 28, 2026
+
+- Step 26 built: the first-run setup, which also downloads the company list and the price history a new copy lacks
+
 ### sharing.md 1.3 · Oct 28, 2026
 
 - Step 25 built: the sidebar in groups, a Red flags page, and "Run a job now" on System; Manage stocks keeps its name for now

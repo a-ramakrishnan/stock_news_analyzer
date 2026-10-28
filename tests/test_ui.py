@@ -168,7 +168,8 @@ def test_main_registers_every_page():
         "from unittest import mock\n"
         "import streamlit as st\n"
         "from stock_news_analyzer.ui import app\n"
-        "with mock.patch.object(st, 'navigation') as nav:\n"
+        "with mock.patch.object(st, 'navigation') as nav, "
+        "mock.patch.object(app, 'setup_needed', return_value=False):\n"
         "    app.main()\n"
         "groups = nav.call_args.args[0]\n"
         "st.markdown(','.join(groups))\n"
@@ -255,3 +256,46 @@ def test_a_job_already_running_is_seen(loaded):  # noqa: F811
     assert orch.running(loaded, "news") is not None
     assert orch.running(loaded, "prices") is None  # cut off long ago by a restart
     assert orch.running(loaded, "filings") is None
+
+
+def test_a_new_copy_opens_on_the_setup():
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_string(
+        "from unittest import mock\n"
+        "import streamlit as st\n"
+        "from stock_news_analyzer.ui import app\n"
+        "with mock.patch.object(st, 'navigation') as nav, "
+        "mock.patch.object(app, 'setup_needed', return_value=True):\n"
+        "    app.main()\n"
+        "st.markdown(','.join(p.title for p in nav.call_args.args[0]))\n"
+    )
+    at.run()
+    assert not at.exception and at.markdown[-1].value == "Setup,Guide"
+
+
+@pytest.mark.db
+@pytest.mark.parametrize("step", [0, 1, 2, 3])
+def test_every_setup_step_renders(loaded, test_database_url, monkeypatch, tmp_path, step):  # noqa: F811
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setenv("DATABASE_URL", test_database_url)
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    from stock_news_analyzer.config import get_settings
+
+    get_settings.cache_clear()
+    at = AppTest.from_string(
+        "from stock_news_analyzer.ui import app\napp.setup_page()", default_timeout=30
+    )
+    at.session_state["setup_step"] = step
+    at.run()
+    assert not at.exception, at.exception
+    assert (
+        at.title[0].value
+        == [
+            "Welcome to Stock News Analyzer",
+            "AI features",
+            "Your stocks",
+            "History",
+        ][step]
+    )

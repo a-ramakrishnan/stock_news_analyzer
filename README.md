@@ -37,7 +37,8 @@ New to the system? The [Guide](src/stock_news_analyzer/ui/guide.md) explains wha
 | 22 | Shareholding pattern each quarter from NSE's XBRL files (no LLM): promoters, foreign and domestic institutions, mutual funds, retail, pledges; red flags for promoters selling or pledging | done |
 | 23 | Guide page in the dashboard (and as a file): what it is, getting started, a daily routine, the pages, words used, AI use and cost, data sources, keeping it running, problems, your data; a help link on every page | done |
 | 24 | Settings page: the API key (checked before saving), monthly budget, models, unusual-day threshold and scheduled jobs, saved in the database in place of `.env` | done |
-| 25 | Sidebar in groups (Today, Research, Library, Set up, Help); a Red flags page with dismiss and re-open; "Run a job now" on System, showing the job's progress | testing |
+| 25 | Sidebar in groups (Today, Research, Library, Set up, Help); a Red flags page with dismiss and re-open; "Run a job now" on System, showing the job's progress | done |
+| 26 | First-run setup: a new copy opens on four screens (welcome, AI key and budget, stocks, history) that download the company list and load prices, filings and news; run again from Settings | testing |
 
 ## Run it on a Mac
 

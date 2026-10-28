@@ -1188,7 +1188,7 @@ def manage_page() -> None:
         edit_stocks(session)
 
 
-def add_stock_form(session: Session) -> None:
+def add_stock_form(session: Session, offer_history: bool = True) -> None:
     st.subheader("Add a stock")
     query = st.text_input(
         "Company name, NSE symbol, BSE code or ISIN", placeholder="e.g. Mrs Bectors, BECTORFOOD"
@@ -1239,7 +1239,7 @@ def add_stock_form(session: Session) -> None:
         st.success(f"{verb} {company.name} in {kind}.", icon=":material/check:")
 
     added = st.session_state.get("just_added")
-    if added == pick["isin"]:
+    if offer_history and added == pick["isin"]:
         st.info(
             "New stocks get filings and news from the last few days on the scheduler's next "
             f"run. To load everything since {actions.HISTORY_SINCE:%d %b %Y} now (a few "
@@ -1676,6 +1676,15 @@ def settings_page() -> None:
             "hand. Times are changed in config/schedule.yaml."
         )
 
+        st.subheader("First-run setup")
+        if st.button("Run the setup again", icon=":material/rocket_launch:"):
+            from stock_news_analyzer.agents import setup
+
+            setup.start(session)
+            st.session_state["setup_step"] = 0
+            st.rerun()
+        st.caption("The welcome screens: AI key, stocks and history. Nothing is removed.")
+
         st.subheader("Where each setting comes from")
         st.dataframe(
             pd.DataFrame(
@@ -1690,6 +1699,222 @@ def settings_page() -> None:
             "Settings page: saved here, in this computer's database. .env: the project's .env "
             "file. default: neither. Removing a saved value goes back to .env or the default."
         )
+
+
+SETUP_STEPS = ["Welcome", "AI features", "Your stocks", "History"]
+
+
+def setup_page() -> None:
+    """First-run setup: four screens, shown to a new copy until finished or skipped."""
+    from stock_news_analyzer.agents import setup
+
+    step = st.session_state.setdefault("setup_step", 0)
+    st.progress((step + 1) / len(SETUP_STEPS), text=f"Step {step + 1} of 4: {SETUP_STEPS[step]}")
+    with Session(engine()) as session:
+        [_setup_welcome, _setup_ai, _setup_stocks, _setup_history][step](session, setup)
+
+
+def _go(step: int) -> None:
+    st.session_state["setup_step"] = step
+    st.rerun()
+
+
+def _finish_setup(session: Session, setup) -> None:
+    setup.finish(session)
+    st.session_state.pop("setup_step", None)
+    load.clear()
+    st.rerun()
+
+
+def _setup_welcome(session: Session, setup) -> None:
+    st.title("Welcome to Stock News Analyzer")
+    st.markdown(
+        "It follows a list of Indian stocks for you. Every morning it reads what each company "
+        "filed with NSE and BSE, the news about it, its price, results and earnings calls, and "
+        "tells you what changed: why a stock moved, new orders, what management promised, and "
+        "red flags. It runs on this computer; your stocks and data stay here.\n\n"
+        "**It needs:**\n"
+        "- this computer on, with Docker running, in the morning (07:10 to 08:00 India time)\n"
+        "- optionally an Anthropic API key for the AI features, which you pay for "
+        "(a few dollars a month for 15 stocks)\n\n"
+        "The next three screens take about five minutes, plus the time to load history."
+    )
+    st.caption("Not advice: everything it shows is information to check.")
+    a, b = st.columns([1, 3])
+    if a.button("Start", type="primary", icon=":material/arrow_forward:"):
+        setup.start(session)
+        _go(1)
+    if b.button("Skip the setup; I'll set it up myself"):
+        _finish_setup(session, setup)
+
+
+def _setup_ai(session: Session, setup) -> None:
+    from stock_news_analyzer import settings_store as store
+    from stock_news_analyzer.llm import check_key
+
+    st.title("AI features")
+    st.markdown(
+        "With an Anthropic API key, Claude explains unusual days, reads earnings calls and "
+        "results, sorts the news, extracts orders and events, and answers questions. Without "
+        "one, collecting, prices, shareholding, some red flags and the dashboard "
+        "still work, and you can add a key later on **Settings**."
+    )
+    cfg = get_settings()
+    if cfg.anthropic_api_key:
+        st.success(
+            f"A key is set (from {store.source(session, 'anthropic_api_key')}).",
+            icon=":material/key:",
+        )
+    else:
+        st.markdown(
+            "Get a key at [console.anthropic.com](https://console.anthropic.com) (API keys), "
+            "and paste it here."
+        )
+        with st.form("setup_key", clear_on_submit=True):
+            key = st.text_input("Anthropic API key", type="password", placeholder="sk-ant-...")
+            if st.form_submit_button("Check and save the key"):
+                problem = check_key(key.strip()) if key.strip() else "enter a key first"
+                if problem:
+                    st.error(problem)
+                else:
+                    store.save(session, "anthropic_api_key", key.strip())
+                    st.rerun()
+    new_budget = st.number_input(
+        "Monthly budget, US$ (AI calls stop when it is reached)",
+        min_value=0.0,
+        step=1.0,
+        value=5.0
+        if store.source(session, "llm_monthly_budget_usd") == "default"
+        else float(cfg.llm_monthly_budget_usd),
+        help="$5 covers the daily work for about 15 stocks once their history has been read. "
+        "Reading a new stock's history the first time costs more.",
+    )
+    a, b, c = st.columns([1, 1, 3])
+    if a.button("Back"):
+        _go(0)
+    label = "Next" if cfg.anthropic_api_key else "Continue without AI"
+    if b.button(label, type="primary"):
+        store.save(session, "llm_monthly_budget_usd", new_budget)
+        _go(2)
+
+
+def _setup_stocks(session: Session, setup) -> None:
+    st.title("Your stocks")
+    if not setup.has_companies(session):
+        st.markdown(
+            "First, the list of companies listed on NSE and BSE, so you can search them. It "
+            "takes about a minute."
+        )
+        if st.button("Download the company list", type="primary", icon=":material/download:"):
+            failed = None
+            with st.status("Downloading the NSE and BSE lists...") as box:
+                try:
+                    warnings = setup.download_companies(session, get_settings().data_dir)
+                except Exception as exc:  # no internet, or NSE refused: say so, let them retry
+                    session.rollback()
+                    failed, warnings = f"{type(exc).__name__}: {str(exc)[:300]}", []
+                for w in warnings:
+                    box.write(f"⚠️ {w}")
+                box.update(
+                    label="The download failed" if failed else "Company list downloaded",
+                    state="error" if failed else "complete",
+                )
+            if failed:
+                st.error(f"{failed}. Check the internet connection and try again in a few minutes.")
+            else:
+                st.rerun()
+        if st.button("Back"):
+            _go(1)
+        return
+    st.markdown(
+        "Add the stocks you own and the ones you follow. **Stocks I own** also get their "
+        "earnings calls read. You can change the list any time on **Manage stocks**."
+    )
+    add_stock_form(session, offer_history=False)
+    stocks = actions.tracked_stocks(session)
+    st.divider()
+    if stocks:
+        st.markdown(
+            f"**{len(stocks)} stock{'s' * (len(stocks) != 1)}:** "
+            + ", ".join(
+                f"{s['symbol'] or s['name']}" + (" (own)" if s["owned"] else "") for s in stocks
+            )
+        )
+    elif st.button(
+        "Or start with five large companies (Reliance, HDFC Bank, Infosys, L&T, ITC)",
+        icon=":material/playlist_add:",
+    ):
+        setup.add_examples(session)
+        load.clear()
+        st.rerun()
+    a, b, c = st.columns([1, 1, 3])
+    if a.button("Back"):
+        _go(1)
+    if b.button("Next", type="primary", disabled=not stocks):
+        _go(3)
+
+
+def _setup_history(session: Session, setup) -> None:
+    st.title("History")
+    stocks = actions.tracked_stocks(session)
+    st.markdown(
+        "To compare today with the past, the system needs history: daily prices for every "
+        f"listed stock, and the filings and news of your {len(stocks)} stock"
+        f"{'s' * (len(stocks) != 1)}. It is safe to "
+        "stop and run again: what is loaded is kept."
+    )
+    choice = st.radio("How far back", list(setup.HISTORY_CHOICES), horizontal=True)
+    start = setup.history_start(choice)
+    days = len(pd.bdate_range(start, datetime.now(IST).date()))
+    st.caption(
+        f"From {start:%d %b %Y}: prices for about {days} trading days (about "
+        f"{max(1, days * 3 // 60)} minutes), then a few minutes per stock. Keep this tab open."
+    )
+    a, b, c = st.columns([1, 2, 2])
+    if a.button("Back"):
+        _go(2)
+    if b.button("Load history", type="primary", icon=":material/download:"):
+        data_dir = get_settings().data_dir
+        errors = []
+        with st.status("Loading history...", expanded=True) as box:
+            try:
+                errors += setup.load_prices(session, data_dir, start, progress=box.write)
+            except Exception as exc:  # NSE unreachable: say so and go on with the stocks
+                session.rollback()
+                errors.append(f"prices: stopped: {type(exc).__name__}: {exc}"[:300])
+            for s in stocks:
+                box.write(f"**{s['symbol'] or s['name']}**")
+                try:
+                    errors += actions.load_history(
+                        session, s["isin"], data_dir, since=start, progress=box.write
+                    )
+                except Exception as exc:  # keep going with the next stock
+                    session.rollback()
+                    errors.append(f"{s['symbol']}: stopped: {type(exc).__name__}: {exc}"[:300])
+            box.update(
+                label="History loaded" + (f" ({len(errors)} problems)" if errors else ""),
+                state="error" if errors else "complete",
+            )
+        for err in errors[:20]:
+            st.warning(err)
+        st.session_state["setup_loaded"] = len(errors)
+    if c.button("Skip; load it later on Manage stocks"):
+        _finish_setup(session, setup)
+    if "setup_loaded" in st.session_state:
+        if st.session_state["setup_loaded"]:
+            st.warning(
+                "Some history could not be loaded (see above). Load history again to fill the "
+                "gaps (what is already loaded is kept), or go on and use Manage stocks later.",
+                icon=":material/warning:",
+            )
+        st.success(
+            "To keep it up to date every morning, start the scheduler: `make scheduler` in the "
+            "project folder. Each new day's filings, news and prices then arrive on their own.",
+            icon=":material/schedule:",
+        )
+        if st.button("Go to Today", type="primary", icon=":material/today:"):
+            st.session_state.pop("setup_loaded", None)
+            _finish_setup(session, setup)
 
 
 def guide_page() -> None:
@@ -1733,6 +1958,20 @@ PAGES = {
 }
 
 
+SETUP_PAGE = st.Page(setup_page, title="Setup", icon=":material/rocket_launch:", url_path="setup")
+
+
+def setup_needed() -> bool:
+    """A new copy (no stocks), or a setup started and not finished (also from Settings)."""
+    from stock_news_analyzer.agents.setup import needs_setup
+
+    try:
+        with Session(engine()) as session:
+            return needs_setup(session)
+    except Exception:  # no database or tables yet: the pages say so themselves
+        return False
+
+
 # The sidebar's groups, in order.
 NAV = {
     "Today": ["today", "flags"],
@@ -1744,6 +1983,9 @@ NAV = {
 
 
 def main() -> None:
+    if setup_needed():
+        st.navigation([SETUP_PAGE, PAGES["guide"]]).run()
+        return
     with st.sidebar:
         if st.button("Refresh data", icon=":material/refresh:"):
             load.clear()

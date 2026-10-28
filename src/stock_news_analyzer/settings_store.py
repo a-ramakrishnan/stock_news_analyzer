@@ -50,3 +50,19 @@ def default(key: str):
 
 def paused_jobs(settings: Settings) -> set[str]:
     return {j.strip() for j in settings.paused_jobs.split(",") if j.strip()}
+
+
+FLAG = "flag:"  # the dashboard's own state (e.g. setup finished), not settings
+
+
+def get_flag(session: Session, name: str) -> bool:
+    return saved(session).get(FLAG + name) == "1"
+
+
+def set_flag(session: Session, name: str, on: bool) -> None:
+    session.execute(
+        insert(SavedSetting)
+        .values(key=FLAG + name, value="1" if on else "")
+        .on_conflict_do_update(index_elements=["key"], set_={"value": "1" if on else ""})
+    )
+    session.commit()

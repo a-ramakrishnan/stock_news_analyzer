@@ -8,6 +8,8 @@ Stock News Analyzer follows a list of Indian stocks for you. Every morning it re
 
 ## Getting started
 
+A new copy opens on a short **setup**: the API key and budget, your stocks, and their history. It does the steps below for you; run it again any time from **Settings**. To do them by hand instead:
+
 1. **Add your stocks** on **Manage stocks**. Search by name or NSE symbol, choose **Stocks I own** or **Watchlist**, and add a few news aliases (such as "L&T" for Larsen & Toubro).
 2. **Load history** for each new stock on the same page. It fetches filings, news and prices since October 2023, so the system can compare today with the past. It takes a few minutes per stock.
 3. **Start the scheduler** so the work happens every morning without you: `make scheduler` in the project folder. To run a job straight away, use **Run a job now** on **System**.

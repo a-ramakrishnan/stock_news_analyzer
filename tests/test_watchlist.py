@@ -123,6 +123,31 @@ def test_repo_watchlist_file_is_well_formed(master):
     assert {"LT", "KARURVYSYA", "MSUMI"} <= {c.nse_symbol for _, c in wl.list_items(master)}
 
 
+def test_example_watchlist_loads(master):
+    """config/watchlist.example.yaml, for new copies: loading it never crashes, and L&T (in the
+    test master list) is added; the others are reported, not loaded."""
+    result = wl.load_file(master, REPO_WATCHLIST.with_name("watchlist.example.yaml"))
+    assert {c.nse_symbol for _, c in wl.list_items(master)} >= {"LT"}
+    assert all(isinstance(p, wl.ResolveError) for p in result.problems)
+
+
+def test_compose_starts_everything_after_the_migrations():
+    """`docker compose up -d` (the start script) runs the dashboard and the scheduler, each
+    after the database has been brought up to date."""
+    import yaml
+
+    compose = yaml.safe_load((REPO_WATCHLIST.parents[1] / "docker-compose.yml").read_text())
+    services = compose["services"]
+    assert compose["name"] == "stock_news_analyzer"  # keeps the existing data volume
+    assert services["migrate"]["command"] == ["sna", "db", "upgrade"]
+    for name in ("ui", "scheduler"):
+        assert "profiles" not in services[name]
+        assert services[name]["depends_on"]["migrate"]["condition"] == (
+            "service_completed_successfully"
+        )
+    assert services["ui"]["ports"] == ["127.0.0.1:8501:8501"]
+
+
 def test_load_file_reports_unresolved_names(master, tmp_path):
     f = tmp_path / "w.yaml"
     f.write_text("stocks:\n  - name: Bank\n  - name: LT\n    owned: true\nbullion: [gold]\n")

@@ -172,7 +172,7 @@ def today_page() -> None:
     st.caption(
         f"Last trading day loaded: {latest:%a %d %b %Y}"
         if latest
-        else "No prices loaded yet: run `make prices`."
+        else "No prices loaded yet: run the **prices** job on System (Run a job now)."
     )
     index_tiles(load("market"))
     red_flag_list(load("red_flags"), "Red flags, last 30 days")
@@ -240,7 +240,7 @@ def stock_page_body() -> None:
     start = date.today() - timedelta(days=RANGES[window])
     perf = load("performance", isin=s["isin"], start=start)
     if perf.empty:
-        no_data("No daily moves yet: run `make prices`.")
+        no_data("No daily moves yet: run the **prices** job on System (Run a job now).")
     else:
         lb = load("labels", isin=s["isin"])
         events = (
@@ -347,8 +347,7 @@ def stock_page_body() -> None:
             if missing:
                 st.caption(
                     f"{missing} days not explained yet: the scheduler explains recent days each "
-                    "morning; `sna explain run --symbol "
-                    f"{s['symbol']}` explains the rest."
+                    "morning; the **explain** job on System explains the rest now."
                 )
     with results_tab:
         results(s)
@@ -389,7 +388,7 @@ def shareholding(s: dict) -> None:
     if df.empty:
         no_data(
             "No shareholding patterns yet. The scheduler reads new ones each morning; "
-            f"`sna holdings run --symbol {s['symbol']}` reads three years now."
+            "the **holdings** job on System reads three years now."
         )
         return
     latest = df.iloc[-1]
@@ -466,7 +465,7 @@ def earnings_calls(s: dict) -> None:
     if not calls:
         how = (
             "The scheduler reads new transcripts each morning; "
-            f"`sna concalls run --symbol {s['symbol']} --since 2023-10-01` reads older ones."
+            "the **concalls** job on System reads any not read yet."
         )
         no_data(f"No earnings calls analysed yet. {how}")
     else:
@@ -594,7 +593,7 @@ def results(s: dict) -> None:
     if periods.empty:
         no_data(
             "No results read for this stock yet. The scheduler reads new results each morning; "
-            f"`sna results run --symbol {s['symbol']}` reads the last two years now."
+            "the **xbrl** and **results** jobs on System read the last two years now."
         )
         return
     latest = periods.iloc[-1]
@@ -654,7 +653,7 @@ def bullion_section() -> None:
         with tab:
             rows = load("bullion", metal=metal, days=30)
             if rows.empty:
-                no_data("No moves yet: run `sna bullion run`.")
+                no_data("No moves yet: run the **bullion** job on System (Run a job now).")
                 continue
             st.dataframe(
                 rows,
@@ -704,7 +703,7 @@ def events_tab_body(s: dict) -> None:
     if rows.empty:
         no_data(
             "No events recorded for this stock yet. The scheduler reads new filings each "
-            f"morning; `sna events run --symbol {s['symbol']}` reads the last 400 days now."
+            "morning; the **events** job on System reads them now."
         )
         return
     st.dataframe(
@@ -733,7 +732,7 @@ def events_tab_body(s: dict) -> None:
     st.caption(
         "Read from the company's filings (Haiku), every quote and amount checked against the "
         "filing; important or doubtful events checked again by Sonnet. Unchecked: a check "
-        "failed and nothing settled it; `sna events review` lists them for your decision."
+        "failed and nothing settled it, so treat it with care."
     )
 
 
@@ -744,7 +743,7 @@ def order_book(s: dict) -> None:
     if quarters.empty:
         no_data(
             "No orders read for this stock yet. The scheduler reads order-win filings each "
-            f"morning; `sna orders run --symbol {s['symbol']}` reads them now."
+            "morning; the **orders** job on System reads them now."
         )
         return
     m1, m2, m3, m4 = st.columns(4)
@@ -915,7 +914,7 @@ def news_table(df: pd.DataFrame) -> None:
 
 def reactions_table(df: pd.DataFrame) -> None:
     if df.empty:
-        no_data("No labels yet: run `make prices`.")
+        no_data("No labels yet: run the **prices** job on System (Run a job now).")
         return
     shown = df.drop(
         columns=["document_id", "isin", "sector_excess_1d", "sector_excess_5d", "sector_excess_20d"]
@@ -1011,7 +1010,7 @@ def news_page() -> None:
     untriaged = int(df["importance"].isna().sum()) if not df.empty else 0
     st.caption(
         f"{len(df)} articles"
-        + (f", {untriaged} not triaged yet (`sna triage run`)" if untriaged else "")
+        + (f", {untriaged} not triaged yet (the **triage** job on System)" if untriaged else "")
     )
     news_table(df)
 
@@ -1025,7 +1024,7 @@ def themes_page() -> None:
     )
     themes = load("themes")
     if themes.empty:
-        no_data("No themes yet: run `sna themes run`.")
+        no_data("No themes yet: run the **themes** job on System (Run a job now).")
         return
     st.dataframe(
         themes.drop(columns=["key"]),
@@ -1146,7 +1145,7 @@ def moves_page() -> None:
     s = stock_picker("moves-stock")
     study = load("event_study", isin=s["isin"] if s else None)
     if study.empty:
-        no_data("No labelled filings yet: run `make prices` (and optionally a filings backfill).")
+        no_data("No labelled filings yet: run the **prices** job on System (Run a job now).")
         return
     st.plotly_chart(charts.event_study_chart(study, dark()), width="stretch", **PLOT)
     st.warning(
@@ -1179,8 +1178,7 @@ def manage_page() -> None:
     help_link("getting-started")
     st.caption(
         "Changes here take effect straight away: the scheduler picks up new stocks on its next "
-        "run. `make watchlist` re-applies config/watchlist.yaml, so a stock listed there comes "
-        "back as written in the file."
+        "run. Load a new stock's history with the button that appears after adding it."
     )
     with Session(engine()) as session:
         add_stock_form(session)
@@ -1197,7 +1195,7 @@ def add_stock_form(session: Session, offer_history: bool = True) -> None:
     if query and not matches:
         st.warning(
             "No listed company matches. If it listed recently, refresh the company list with "
-            "`make securities`.",
+            "the **securities** job on System (Run a job now).",
             icon=":material/search_off:",
         )
     if not matches:
@@ -1497,7 +1495,7 @@ def system_page() -> None:
     st.subheader("Recent runs")
     runs = load("runs", limit=200)
     if runs.empty:
-        no_data("No runs yet. Start the scheduler with `make scheduler`, or run `make run-all`.")
+        no_data("No runs yet. The scheduler runs the jobs each day; or run one above.")
     else:
         only_errors = st.toggle("Only errors")
         if only_errors:
@@ -1908,8 +1906,9 @@ def _setup_history(session: Session, setup) -> None:
                 icon=":material/warning:",
             )
         st.success(
-            "To keep it up to date every morning, start the scheduler: `make scheduler` in the "
-            "project folder. Each new day's filings, news and prices then arrive on their own.",
+            "The scheduler keeps it up to date every morning: it starts with the system when you "
+            "use the start script (or `make scheduler`). Each new day's filings, news and prices "
+            "then arrive on their own.",
             icon=":material/schedule:",
         )
         if st.button("Go to Today", type="primary", icon=":material/today:"):

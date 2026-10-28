@@ -38,9 +38,21 @@ New to the system? The [Guide](src/stock_news_analyzer/ui/guide.md) explains wha
 | 23 | Guide page in the dashboard (and as a file): what it is, getting started, a daily routine, the pages, words used, AI use and cost, data sources, keeping it running, problems, your data; a help link on every page | done |
 | 24 | Settings page: the API key (checked before saving), monthly budget, models, unusual-day threshold and scheduled jobs, saved in the database in place of `.env` | done |
 | 25 | Sidebar in groups (Today, Research, Library, Set up, Help); a Red flags page with dismiss and re-open; "Run a job now" on System, showing the job's progress | done |
-| 26 | First-run setup: a new copy opens on four screens (welcome, AI key and budget, stocks, history) that download the company list and load prices, filings and news; run again from Settings | testing |
+| 26 | First-run setup: a new copy opens on four screens (welcome, AI key and budget, stocks, history) that download the company list and load prices, filings and news; run again from Settings | done |
+| 27 | Packaging: start and stop scripts for Mac and Windows, everything in one `docker compose up` (database changes applied on start), the dashboard reachable from this computer only, an example watchlist, MIT licence, no command hints left on the dashboard | testing |
 
-## Run it on a Mac
+## Quick start (no Python needed)
+
+1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) and open it once.
+2. Download this repository (Code → Download ZIP) and unzip it.
+3. Double-click **start.command** (Mac) or **start.bat** (Windows).
+4. The dashboard opens at http://localhost:8501, on a short setup: an API key (optional), your stocks and their history.
+
+The start script starts the database, applies any database changes, then the dashboard and the scheduler, which runs the daily jobs while Docker Desktop is open. **stop.command** / **stop.bat** stops everything; your data is kept. To update, replace the folder's files with a newer download (keep the `data` folder) and start again.
+
+The rest of this README is for working on the code.
+
+## Run it on a Mac (for development)
 
 You need [Homebrew](https://brew.sh). Install uv (Python package manager) and Docker Desktop, then open Docker Desktop once so it starts:
 
@@ -640,3 +652,7 @@ docs/build-log/            what each step added and how to check it
 ```
 
 Not investment advice. This is a personal research tool.
+
+## Licence and data
+
+MIT licensed: see [LICENSE](LICENSE). The system fetches public data from the NSE, BSE and news websites, from your own computer and at a polite rate, for your personal use; check each site's terms before doing more with it. Nothing it shows is investment advice.

@@ -38,7 +38,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check the compose file, including the scheduler and dashboard services
-        run: docker compose --profile scheduler --profile ui config -q
+      - name: Check the compose file
+        run: docker compose config -q
       - name: Build the app image and run its health check against Postgres
         run: docker compose run --rm --build app
+      - name: Start everything as the start script does, and check the dashboard answers
+        run: |
+          docker compose up -d --build
+          for i in $(seq 60); do
+            curl -fsS http://localhost:8501/_stcore/health && break
+            sleep 2
+          done
+          curl -fsS http://localhost:8501/_stcore/health
+          docker compose ps
+          test "$(docker compose ps -a migrate --format '{{.ExitCode}}')" = "0"
+          docker compose ps scheduler --format '{{.State}}' | grep -q running
+      - name: Show the logs if anything failed
+        if: failure()
+        run: docker compose logs --tail 100

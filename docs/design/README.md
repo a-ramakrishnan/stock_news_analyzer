@@ -12,6 +12,10 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### sharing.md 1.5 · Oct 28, 2026
+
+- Step 27 built: start scripts and one compose file. MIT licence and a private repository decided, so no prebuilt image for now, and the author's watchlist stays tracked until the repository goes public
+
 ### sharing.md 1.4 · Oct 28, 2026
 
 - Step 26 built: the first-run setup, which also downloads the company list and the price history a new copy lacks

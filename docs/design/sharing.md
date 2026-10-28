@@ -1,6 +1,6 @@
 # Making it usable by others
 
-Version 1.4 · Oct 28, 2026 · @Ramki · companion to the [system design](design.md) and [agent design](agent-design.md); changes are listed in [README.md](README.md)
+Version 1.5 · Oct 28, 2026 · @Ramki · companion to the [system design](design.md) and [agent design](agent-design.md); changes are listed in [README.md](README.md)
 
 ## Goal
 
@@ -137,12 +137,18 @@ Each step is one PR, tested on the Mac like the agents:
 | 24 | Settings page and `settings` table; API key, budget and job switches from the app (done) | Medium |
 | 25 | Navigation regrouped; Red flags page; Run now buttons with progress (done) | Medium |
 | 26 | First-run setup (done) | Medium |
-| 27 | Packaging: prebuilt image, user compose file, start scripts, migrations on start, example watchlist, licence | Medium |
+| 27 | Packaging: start scripts, everything in one compose file, migrations on start, example watchlist, MIT licence (done; the prebuilt image waits for a public repository) | Medium |
 | 28 | Try it on a clean Mac and a Windows machine; fix what breaks; write the release notes | Small |
 
 The Guide comes first because it is quick and shows where the app is hard to follow, which shapes steps 24 to 26.
 
 ## Decisions for the author
+
+Decided Oct 28, 2026: **MIT licence; the repository stays private for now.** While it is private:
+- **No prebuilt image.** On a private repository the image would be private too, and every user would need a GitHub token to pull it. The start script builds the image on the user's computer instead, which takes a few minutes the first time.
+- **The author's watchlist stays tracked.** Untracking it now would delete it from the author's Mac on the next `git pull`. Before the repository goes public, it has to be removed from the Git history, with `config/watchlist.example.yaml` in its place.
+
+The questions as first asked:
 
 - **Licence:** MIT, or keep it private and share it with people you choose.
 - **Repository:** public, to download from GitHub Releases. The personal watchlist and `.env` must not be in its history: the watchlist is tracked today.

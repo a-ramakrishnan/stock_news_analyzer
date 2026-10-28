@@ -1,4 +1,4 @@
-.PHONY: setup up down health migrate securities watchlist filings news triage explain concalls promises orders results events flags holdings bullion themes prices digest backfill run-all scheduler scheduler-logs scheduler-stop ui ui-docker ui-stop test lint format docker-health
+.PHONY: start stop setup up down health migrate securities watchlist filings news triage explain concalls promises orders results events flags holdings bullion themes prices digest backfill run-all scheduler scheduler-logs scheduler-stop ui ui-docker ui-stop test lint format docker-health
 
 setup:          ## Install Python dependencies and create .env
 	uv sync
@@ -91,7 +91,7 @@ run-all:        ## Run every job once, now, in order (collect, judge, measure, r
 	uv run sna run all
 
 scheduler:      ## Start the orchestrator in Docker (keeps running while Docker is up)
-	docker compose --profile scheduler up -d --build scheduler
+	docker compose up -d --build scheduler
 
 scheduler-logs: ## Follow the orchestrator's output
 	docker compose logs -f scheduler
@@ -103,10 +103,16 @@ ui:             ## Open the dashboard at http://localhost:8501 (Ctrl+C to stop)
 	uv run sna ui
 
 ui-docker:      ## Run the dashboard in Docker instead, at http://localhost:8501
-	docker compose --profile ui up -d --build ui
+	docker compose up -d --build ui
 
 ui-stop:        ## Stop the Docker dashboard
 	docker compose stop ui
+
+start:          ## Start everything in Docker (database, dashboard, scheduler), as the start script does
+	docker compose up -d --build
+
+stop:           ## Stop everything in Docker (data is kept)
+	docker compose stop
 
 docker-health:  ## Run the same check inside the app container
 	docker compose run --rm --build app

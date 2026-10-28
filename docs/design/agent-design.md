@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.18 · Oct 27, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.19 · Oct 28, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -91,7 +91,7 @@ flowchart LR
 | Built | 0 Orchestrator, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17 |
 | Partly built | 4 Market Signals, 16 Reporter |
 | Not started | none |
-| Recommended next | Email delivery of the digest and high-severity flags (16); Telegram is set aside for now |
+| Recommended next | Step 28 of the [sharing plan](sharing.md): try the packaged system on a clean Mac and a Windows machine. Then email delivery of the digest and high-severity flags (16); Telegram is set aside for now |
 
 | # | Agent | Status | Build step |
 | --- | --- | --- | --- |
@@ -111,7 +111,7 @@ flowchart LR
 | 13 | Bullion Analyst | Built: each day's rupee move split into global price, USD/INR and the rest; notes by Sonnet 5.5 on unusual days, from bullion news | 19 |
 | 14 | Theme & Peer Analyst | Built: events, orders and call points tagged with themes (Haiku 5.5); theme strength and read-across in code; no customer and supplier map yet | 20 |
 | 15 | Red-flag Monitor | Built: rules over the checked events (auditor, CEO/MD/CFO and independent director exits, downgrades, pledges, holders selling, penalties, disruptions) and overdue results; no LLM | 18 |
-| 16 | Reporter | Partly: Markdown digest and Streamlit dashboard; no email or weekly report yet (email later; Telegram set aside for now); no LLM | 6, 7 |
+| 16 | Reporter | Partly: Markdown digest and Streamlit dashboard (12 pages, with a Guide, Settings and a first-run setup); no email or weekly report yet (email later; Telegram set aside for now); no LLM | 6, 7, 23–26 |
 | 17 | Analyst Q&A | Built (Sonnet 5.5): read-only SQL, full-text search and a document reader as tools; cited answers; saved reports, not yet scheduled | 21 |
 
 The build order changed in one place: the Move Explainer came before the Event Extractor and QA Checker, reading filings and triaged news directly. Its explanations were useful without typed events.
@@ -586,7 +586,14 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **LLM:** Opus 5.5 to write; code to format.
 - **As built (steps 6, 7):** the daily digest is put together in code (no LLM yet) and saved as Markdown under `data/digests/`. It has filings, triaged news with stars and topics, unusual moves with their likely cause, and bulk/block deals.
   
-  The Streamlit dashboard (`make ui`) has nine pages: Today, Stock, Filings, News, Themes, Ask, What moves the stock, Manage stocks, System. System shows AI usage.
+  The Streamlit dashboard has twelve pages in five groups: Today (Today, Red flags), Research (Stock, Ask, Themes, What moves the stock), Library (Filings, News), Set up (Manage stocks, Settings, System) and Help (Guide). Steps 23–26 added:
+  - the Guide, with a help link on every page
+  - Settings (API key, budget, models, unusual-day threshold, job switches), which take the place of `.env`
+  - the Red flags page with dismiss
+  - "Run a job now" on System
+  - a first-run setup for a new copy
+  
+  Step 27 packaged it: start scripts for Mac and Windows, and one `docker compose up` that applies database changes first. GitHub Actions publishes a prebuilt image, private while the repository is.
   
   Email and the weekly report are not built yet: email delivery is planned for later, and Telegram is set aside for now (Oct 27, 2026).
 - **Reads / writes:** all output tables → Telegram, email, dashboard.

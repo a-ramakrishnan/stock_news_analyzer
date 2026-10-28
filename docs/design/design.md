@@ -1,6 +1,6 @@
 # Indian Market News Intelligence System — Design
 
-Version 1.18 · Oct 27, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
+Version 1.19 · Oct 28, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
 
 ## Goal and principles
 
@@ -8,9 +8,11 @@ Build a personal system that tracks news and filings for a watchlist of Indian s
 
 The system is built as independent agents under an orchestrator; models, tools, data, hosting and a step-by-step guide per agent are in [Agent design](agent-design.md).
 
-## Status (Oct 27, 2026)
+## Status (Oct 28, 2026)
 
-Phase 1 is done and Phase 2 is under way. Twenty-two build steps have shipped, and all 17 agents are built (the Reporter without email yet), each logged in [`docs/build-log/`](../build-log/). The system runs on a Mac in Docker, and its data goes back to October 2023.
+Phase 1 is done and Phase 2 is under way. Twenty-seven build steps have shipped, and all 17 agents are built (the Reporter without email yet), each logged in [`docs/build-log/`](../build-log/). The system runs on a Mac in Docker, and its data goes back to October 2023.
+
+Steps 23–27 made it usable by others, following [Making it usable by others](sharing.md). It now has an in-app Guide, a Settings page, a Red flags page, "Run a job now", a first-run setup, start scripts and a prebuilt image. The repository stays private for now; what has to happen before it goes public is in [docs/TODO.md](../TODO.md).
 
 A map of what is built and what is pending, agent by agent, is in [Agent design: Build status](agent-design.md#build-status-oct-27-2026).
 
@@ -21,7 +23,7 @@ A map of what is built and what is pending, agent by agent, is in [Agent design:
 | News triage (relevance, topic, sentiment, importance, same-story links) | Built (Claude Haiku 5.5) |
 | Move explainer | Built (Claude Sonnet 5.5) |
 | Event-to-return labels (1, 5, 20 days) | Built, per filing (so for each typed event's filing too) |
-| Daily digest and dashboard | Built: Markdown digest saved locally, Streamlit dashboard with 9 pages |
+| Daily digest and dashboard | Built: Markdown digest saved locally; Streamlit dashboard with 12 pages in five groups, a Guide, a Settings page and a first-run setup |
 | Event extraction and QA check | Built: results figures for every stock, from the exchange's XBRL files where filed, else read from the PDF (Claude Haiku 5.5), in step 16; typed events from the other filings (Haiku 5.5), each checked in code and, when flagged or important, by Sonnet 5.5, with a review queue, in step 17 |
 | Earnings call analysis and promise ledger | Built (Claude Sonnet 5.5): calls in step 12; promises checked against later results, and a credibility score per company, in step 13; every watchlist stock, owned or not, from step 15 |
 | Order and execution tracker | Built, steps 14–16: orders from filings (Claude Haiku 5.5), quarterly order books (Sonnet 5.5), metrics and peer ranks in code; coverage per stock; revenue gaps filled from results |
@@ -31,6 +33,7 @@ A map of what is built and what is pending, agent by agent, is in [Agent design:
 | Red flags | Built, step 18: rules over the checked events and results deadlines, no LLM; in the digest and dashboard |
 | Themes and read-across | Built, step 20: events, orders and call points tagged with themes (Claude Haiku 5.5); theme strength and read-across between watchlist companies in code |
 | Analyst Q&A | Built, step 21: plain-English questions answered by Claude Sonnet 5.5 with read-only SQL and full-text search, citing sources; saved reports |
+| Use by others | Built, steps 23–27: Guide, Settings (key, budget, models, jobs), Red flags page, Run a job now, first-run setup, start scripts for Mac and Windows, one compose file, a prebuilt image (private), MIT licence. Step 28, trying it on a clean Mac and Windows, is next |
 | Email delivery (later; Telegram set aside for now) | Not started |
 
 - **Filings first, news second.** Under SEBI LODR Regulation 30, listed companies must report material events (order wins, capacity additions, fundraises, rating changes, management exits) to NSE/BSE, generally within 24 hours. These filings are the factual record. News adds context, sentiment and rumour.

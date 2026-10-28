@@ -4,15 +4,16 @@ Stock News Analyzer follows a list of Indian stocks for you. Every morning it re
 
 - **What it does:** explains unusual price moves, keeps track of order wins and of what managements promised, reads results and shareholding, and raises red flags.
 - **What it is not:** a trading tool. It doesn't look at charts and doesn't say what to buy or sell. Everything it shows is information to check, not advice.
-- **Where it runs:** on your own computer. Your list of stocks, your data and your API key stay there.
+- **Where it runs:** on your own computer. Your list of stocks, your data and your API key stay there. The data comes from the public NSE, BSE and news websites, fetched by your computer for your personal use.
+- **Licence:** MIT; the code is free to use and change.
 
 ## Getting started
 
-A new copy opens on a short **setup**: the API key and budget, your stocks, and their history. It does the steps below for you; run it again any time from **Settings**. To do them by hand instead:
+Start the system with **start.command** (Mac) or **start.bat** (Windows) in its folder, with Docker Desktop open; the dashboard opens at http://localhost:8501. A new copy opens on a short **setup**: the API key and budget, your stocks, and their history. It does the steps below for you; run it again any time from **Settings**. To do them by hand instead:
 
 1. **Add your stocks** on **Manage stocks**. Search by name or NSE symbol, choose **Stocks I own** or **Watchlist**, and add a few news aliases (such as "L&T" for Larsen & Toubro).
 2. **Load history** for each new stock on the same page. It fetches filings, news and prices since October 2023, so the system can compare today with the past. It takes a few minutes per stock.
-3. **Start the scheduler** so the work happens every morning without you: `make scheduler` in the project folder. To run a job straight away, use **Run a job now** on **System**.
+3. **The scheduler** does the work every morning without you. The start script starts it; to run a job straight away, use **Run a job now** on **System**.
 4. **Add an Anthropic API key** on **Settings** if you want the AI features (see "How AI is used"), and set a monthly budget. Without a key, collecting, prices, shareholding and the dashboard still work.
 
 ## A daily routine
@@ -110,22 +111,23 @@ All times are India time. Everything is fetched from public websites by your own
 
 ## Keeping it running
 
-- **The morning jobs** run from 07:10 to 08:00 and the digest is ready at 08:00. Your computer must be on and Docker Desktop running then, with the scheduler started (`make scheduler`).
+- **The morning jobs** run from 07:10 to 08:00 and the digest is ready at 08:00. Your computer must be on and Docker Desktop running then; the start script starts the scheduler.
 - **If the computer was off,** nothing is lost: the next run picks up whatever was filed in between.
 - **To see what ran,** open **System**, or the job health on **Today**.
 - **To stop a job,** turn it off on **Settings**; it stops running on its schedule within a minute.
 - **To run a job now,** for example after adding a stock or when a morning run failed, use **Run a job now** on **System**. It shows the job's progress; keep the tab open until it finishes.
-- **To update** to a newer version: `git pull`, then `uv run sna db upgrade`, then restart the scheduler and dashboard.
+- **To update** to a newer version: replace the folder's files with the new download (keep the `data` folder) and run the start script again. Database changes are applied as it starts.
+- **To stop it,** run **stop.command** or **stop.bat**. Your data is kept.
 
 ## Problems
 
 | What you see | What to do |
 | --- | --- |
-| "Port 8501 is not available" | The dashboard is already running somewhere: `make ui-stop`, or close the other Terminal window running it |
-| "Postgres is not reachable" | Open Docker Desktop, wait for it to start, then `make up` |
+| "Port 8501 is not available" | The dashboard is already running: open http://localhost:8501. If that fails, run the stop script, then the start script |
+| "Docker is not running" or "Postgres is not reachable" | Open Docker Desktop, wait for it to start, then run the start script again |
 | NSE or BSE returned HTTP 401 or 403 | The exchange refused for a while. The job retries on its next run; wait an hour |
 | "...has reached the $20.00 budget" | AI calls stop until the 1st. Raise the budget on **Settings** if you want more |
-| A stock isn't found on Manage stocks | Try its NSE symbol, or part of its name. Run `uv run sna securities refresh` if it listed recently |
+| A stock isn't found on Manage stocks | Try its NSE symbol, or part of its name. If it listed recently, run the **securities** job on **System** |
 | A page says "No ... yet" | That data hasn't been collected: load history on Manage stocks, or wait for the morning run |
 | A wrong number | Check it against the filing, linked from the row. Results, orders and events record the text they came from |
 
@@ -133,5 +135,5 @@ All times are India time. Everything is fetched from public websites by your own
 
 - **Where it is:** the database lives in Docker, and filing PDFs and digests in the `data` folder of the project.
 - **Back up the database:** `docker compose exec db pg_dump -U sna sna > backup.sql` saves it to one file.
-- **Start over:** `docker compose down -v` deletes the database (the `data` folder stays). Then `make up` and `make migrate` give you an empty one.
+- **Start over:** `docker compose down -v` in the folder deletes the database (the `data` folder stays). The start script then gives you an empty one, with the setup.
 - **Your API key** is kept on your computer, in the database (saved on Settings) or the `.env` file. It is never sent anywhere except to Anthropic.

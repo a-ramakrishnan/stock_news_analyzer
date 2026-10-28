@@ -1,3 +1,8 @@
+# The whole system: `docker compose up -d` (or the start script) starts the database,
+# applies database changes, then the dashboard and the scheduler.
+# Pinned so the data volume keeps its name whatever the folder is called.
+name: stock_news_analyzer
+
 services:
   db:
     image: pgvector/pgvector:pg16
@@ -18,7 +23,23 @@ services:
       timeout: 3s
       retries: 10
 
+  migrate:
+    # Brings the database up to date (`sna db upgrade`), then exits; the dashboard and the
+    # scheduler wait for it.
+    build: .
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://sna:sna@db:5432/sna
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["sna", "db", "upgrade"]
+
   app:
+    # One-off checks: `docker compose run --rm app sna health`.
+    profiles: ["tools"]
     build: .
     env_file:
       - path: .env
@@ -35,9 +56,8 @@ services:
     command: ["sna", "health"]
 
   scheduler:
-    # The orchestrator: runs jobs on config/schedule.yaml. Start with `make scheduler`.
+    # The orchestrator: runs jobs on config/schedule.yaml.
     build: .
-    profiles: ["scheduler"]
     env_file:
       - path: .env
         required: false
@@ -49,15 +69,14 @@ services:
       - ./data:/app/data
       - ./config:/app/config:ro
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
     command: ["sna", "orchestrator", "start"]
 
   ui:
-    # The dashboard. Start with `make ui-docker`, open http://localhost:8501.
+    # The dashboard, at http://localhost:8501.
     build: .
-    profiles: ["ui"]
     env_file:
       - path: .env
         required: false
@@ -66,14 +85,15 @@ services:
       DATA_DIR: /app/data
       TZ: Asia/Kolkata
     ports:
-      - "8501:8501"
+      # This computer only: not reachable from other machines on the network.
+      - "127.0.0.1:8501:8501"
     volumes:
       # Writable: "Load history" on Manage stocks saves filing PDFs here.
       - ./data:/app/data
       - ./config:/app/config:ro
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
     command: ["streamlit", "run", "src/stock_news_analyzer/ui/app.py",
               "--server.address", "0.0.0.0", "--server.headless", "true"]

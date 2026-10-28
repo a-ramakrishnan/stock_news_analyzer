@@ -1,0 +1,24 @@
+# An example watchlist: five large companies. The dashboard's setup and Manage stocks page are
+# the easy way to choose stocks; this file is for loading a list in one go:
+#   uv run sna watchlist load config/watchlist.example.yaml
+# Copy it to config/watchlist.yaml and edit it for your own list. The fields are explained at
+# the top of config/watchlist.yaml.
+stocks:
+  - name: Reliance Industries
+    symbol: RELIANCE
+    aliases: ["RIL", "Reliance"]
+    sector_index: Nifty Energy
+  - name: HDFC Bank
+    symbol: HDFCBANK
+    sector_index: Nifty Bank
+  - name: Infosys
+    symbol: INFY
+    sector_index: Nifty IT
+  - name: Larsen & Toubro
+    symbol: LT
+    aliases: ["L&T"]
+    exclude: ["L&T Technology", "L&T Finance", "LTIMindtree", "LTTS"]
+    sector_index: Nifty Infrastructure
+  - name: ITC
+    symbol: ITC
+    sector_index: Nifty FMCG

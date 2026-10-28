@@ -577,7 +577,14 @@ Scheduled digests are saved as Markdown under `data/digests/`. While the Mac sle
 
 ## Dashboard
 
-A local web page over everything collected. Every page only reads, except **Manage stocks**, where you add, edit and remove stocks, and **Ask**, which asks the Analyst Q&A (an LLM call).
+A local web page over everything collected, in five groups in the sidebar (Today, Research, Library, Set up, Help). A new copy opens on a first-run setup. Pages that change things:
+- **Manage stocks:** add, edit and remove stocks
+- **Settings:** the API key, budget, models, threshold and jobs
+- **Red flags:** dismiss a flag
+- **System:** run a job now
+- **Ask:** an LLM call
+
+The others only read.
 
 ```bash
 make ui

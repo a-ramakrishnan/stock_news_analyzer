@@ -12,6 +12,10 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.19 · Oct 28, 2026
+
+- design.md and agent-design.md catch up with steps 23–27 (making the system usable by others): twelve dashboard pages in groups, Guide, Settings, Red flags, Run a job now, first-run setup, start scripts and a prebuilt image; step 28 (a clean Mac and Windows) is next, then email
+
 ### sharing.md 1.6 · Oct 28, 2026
 
 - A prebuilt image after all: GitHub Actions publishes it (private while the repository is), and `SNA_PULL_POLICY` chooses between pulling it and building locally. The open items before going public are in docs/TODO.md

@@ -1,6 +1,6 @@
 # Making it usable by others
 
-Version 1.0 · Oct 28, 2026 · @Ramki · companion to the [system design](design.md) and [agent design](agent-design.md); changes are listed in [README.md](README.md)
+Version 1.1 · Oct 28, 2026 · @Ramki · companion to the [system design](design.md) and [agent design](agent-design.md); changes are listed in [README.md](README.md)
 
 ## Goal
 
@@ -111,7 +111,7 @@ Every action people need, with a button, so the command line is only for develop
 
 ## 3. The Guide screen
 
-A Guide page in the app, and the same text as `docs/guide.md`, so it can be read before installing.
+A Guide page in the app. Its text is one file, `src/stock_news_analyzer/ui/guide.md`, readable on GitHub before installing and linked from the README. It lives with the code because the Docker image copies only `src/`. Built in step 23.
 
 | Section | Content |
 | --- | --- |
@@ -125,7 +125,7 @@ A Guide page in the app, and the same text as `docs/guide.md`, so it can be read
 | Problems | "Port in use", "Docker not running", an NSE block (wait and retry), the budget reached, a stock not found |
 | Your data | Where it is stored, how to back it up (one command or button), how to start over |
 
-The Guide is reached from the sidebar and from a "?" link on each page, which opens that page's section.
+The Guide is reached from the sidebar and from a "How to use this page" link on each page, which opens that page's section in the same tab (`/guide?section=...`).
 
 ## Order of work
 
@@ -133,7 +133,7 @@ Each step is one PR, tested on the Mac like the agents:
 
 | Step | What | Size |
 | --- | --- | --- |
-| 23 | Guide page and `docs/guide.md`; one-line help and empty states on every page | Small |
+| 23 | Guide page and its text file; one-line help and a help link on every page (done) | Small |
 | 24 | Settings page and `settings` table; API key, budget and job switches from the app | Medium |
 | 25 | Navigation regrouped; Red flags page; Run now buttons with progress | Medium |
 | 26 | First-run setup | Medium |

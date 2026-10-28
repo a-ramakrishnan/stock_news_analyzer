@@ -12,6 +12,10 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### sharing.md 1.1 · Oct 28, 2026
+
+- Step 23 built: the Guide's text lives in `src/stock_news_analyzer/ui/guide.md` (the Docker image copies only `src/`), and help links open the page's section in the same tab
+
 ### sharing.md 1.0 · Oct 28, 2026
 
 - New plan for making the system usable by others on their own computers: one Docker package set up from the browser, a dashboard that covers what the command line does, a first-run setup and a Guide page; steps 23–28

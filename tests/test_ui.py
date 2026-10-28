@@ -126,6 +126,7 @@ def test_charts_build(loaded):  # noqa: F811
         "moves_page",
         "manage_page",
         "system_page",
+        "guide_page",
     ],
 )
 def test_every_page_renders(loaded, test_database_url, monkeypatch, tmp_path, page):  # noqa: F811
@@ -152,6 +153,7 @@ def test_every_page_renders(loaded, test_database_url, monkeypatch, tmp_path, pa
         "What moves the stock",
         "Manage stocks",
         "System",
+        "Guide",
     }
 
 
@@ -167,4 +169,30 @@ def test_main_registers_every_page():
         "st.markdown(str(len(nav.call_args.args[0])))\n"
     )
     at.run()
-    assert not at.exception and at.markdown[-1].value == "9"
+    assert not at.exception and at.markdown[-1].value == "10"
+
+
+def test_guide_sections():
+    from stock_news_analyzer.ui import guide
+
+    parts = guide.sections()
+    assert list(parts)[:3] == ["What it is", "Getting started", "A daily routine"]
+    assert all(body for body in parts.values())
+    slugs = [guide.slug(t) for t in parts]
+    assert len(set(slugs)) == len(slugs) and "keeping-it-running" in slugs
+    # Every page's help link points at a section that exists.
+    app = (guide.GUIDE_FILE.parent / "app.py").read_text()
+    import re
+
+    linked = set(re.findall(r'help_link\("([a-z-]+)"\)', app)) | {"the-pages"}
+    assert linked <= set(slugs), linked - set(slugs)
+
+
+def test_guide_opens_at_the_linked_section():
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_string("from stock_news_analyzer.ui import app\napp.guide_page()")
+    at.query_params["section"] = "words-used"
+    at.run()
+    assert not at.exception and at.radio[0].value == "Words used"
+    assert any("Book-to-bill" in m.value for m in at.markdown)

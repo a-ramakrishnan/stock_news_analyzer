@@ -17,7 +17,7 @@ from stock_news_analyzer.agents.triage import TOPICS
 from stock_news_analyzer.config import get_settings
 from stock_news_analyzer.db import get_engine
 from stock_news_analyzer.sources.announcements import IST
-from stock_news_analyzer.ui import actions, charts, queries
+from stock_news_analyzer.ui import actions, charts, guide, queries
 
 st.set_page_config(
     page_title="Stock News Analyzer", page_icon=":material/newspaper:", layout="wide"
@@ -26,6 +26,16 @@ st.set_page_config(
 # Our own chart colours (charts.py), not Streamlit's Plotly theme; no Plotly toolbar.
 PLOT = {"theme": None, "config": {"displayModeBar": False}}
 RANGES = {"1M": 30, "3M": 91, "6M": 182, "1Y": 365, "3Y": 3 * 365}
+
+
+def help_link(section: str = "the-pages") -> None:
+    """A link to this page's part of the Guide."""
+    st.page_link(
+        PAGES["guide"],
+        label="How to use this page",
+        icon=":material/help:",
+        query_params={"section": section},
+    )
 
 
 @st.cache_resource
@@ -157,6 +167,7 @@ def today_page() -> None:
         return
     latest = max((s["date"] for s in watch if s["date"]), default=None)
     st.title("Today")
+    help_link("a-daily-routine")
     st.caption(
         f"Last trading day loaded: {latest:%a %d %b %Y}"
         if latest
@@ -171,6 +182,7 @@ def today_page() -> None:
         st.subheader(f"{title} ({len(group)})")
         if not group:
             st.caption("None yet. Add stocks on the Manage stocks page.")
+            help_link("getting-started")
             continue
         cols = st.columns(3)
         for i, s in enumerate(group):
@@ -218,6 +230,7 @@ def stock_page_body() -> None:
     st.query_params["symbol"] = s["symbol"]
 
     st.title(s["name"])
+    help_link()
     sector = s["sector_index"] or "no sector index"
     st.caption(
         f"NSE {s['symbol']} · benchmark Nifty 50 and {sector}" + (" · owned" if s["owned"] else "")
@@ -927,6 +940,11 @@ def reactions_table(df: pd.DataFrame) -> None:
 
 def filings_page() -> None:
     st.title("Filings")
+    st.caption(
+        "Every filing your stocks made with NSE and BSE. Search by stock, type, words or date, "
+        "and select a row to read the filing's text."
+    )
+    help_link()
     a, b, c, d = st.columns([1.2, 1.5, 1.5, 1], vertical_alignment="bottom")
     with a:
         s = stock_picker("filings-stock")
@@ -951,6 +969,11 @@ def filings_page() -> None:
 
 def news_page() -> None:
     st.title("News")
+    st.caption(
+        "Articles about your stocks from news feeds and Google News, with the AI's relevance "
+        "and importance where it has read them."
+    )
+    help_link()
     a, b, c = st.columns([1.2, 2, 1], vertical_alignment="bottom")
     with a:
         s = stock_picker("news-stock")
@@ -990,6 +1013,7 @@ def news_page() -> None:
 
 def themes_page() -> None:
     st.title("Themes")
+    help_link()
     st.caption(
         "Events, orders and earnings-call points of your stocks, tagged with themes (Haiku). "
         "Items: the last 90 days; before: the 90 days before that."
@@ -1053,6 +1077,7 @@ def ask_page() -> None:
     from stock_news_analyzer.llm import LLM, LLMError
 
     st.title("Ask")
+    help_link("how-ai-is-used")
     st.caption(
         "Ask about your companies in plain English. The Analyst Q&A looks things up in the "
         "database (read-only) and answers with sources; each question costs a few cents."
@@ -1108,6 +1133,7 @@ def ask_page() -> None:
 
 def moves_page() -> None:
     st.title("What moves the stock")
+    help_link()
     st.caption(
         "Average return vs Nifty 50 after each kind of filing, 1, 5 and 20 trading days "
         "later. A BSE and an NSE copy of the same announcement count once."
@@ -1145,6 +1171,7 @@ def moves_page() -> None:
 
 def manage_page() -> None:
     st.title("Manage stocks")
+    help_link("getting-started")
     st.caption(
         "Changes here take effect straight away: the scheduler picks up new stocks on its next "
         "run. `make watchlist` re-applies config/watchlist.yaml, so a stock listed there comes "
@@ -1271,6 +1298,11 @@ def edit_stocks(session: Session) -> None:
 
 def system_page() -> None:
     st.title("System")
+    st.caption(
+        "Whether the scheduled jobs ran, what is stored, and this month's AI spend. "
+        "The schedule is in config/schedule.yaml."
+    )
+    help_link("keeping-it-running")
     left, right = st.columns(2)
     with left:
         st.subheader("Schedule (India time)")
@@ -1344,6 +1376,18 @@ def system_page() -> None:
         )
 
 
+def guide_page() -> None:
+    st.title("Guide")
+    st.caption("How to use Stock News Analyzer: what it does, a daily routine, and each page.")
+    parts = guide.sections()
+    titles = list(parts)
+    wanted = st.query_params.get("section")
+    start = next((i for i, t in enumerate(titles) if guide.slug(t) == wanted), 0)
+    choice = st.radio("Section", titles, index=start, horizontal=True, label_visibility="collapsed")
+    st.query_params["section"] = guide.slug(choice)
+    st.markdown(parts[choice])
+
+
 stock_page = st.Page(stock_page_body, title="Stock", icon=":material/show_chart:", url_path="stock")
 PAGES = {
     "today": st.Page(today_page, title="Today", icon=":material/today:", default=True),
@@ -1361,6 +1405,7 @@ PAGES = {
         manage_page, title="Manage stocks", icon=":material/playlist_add:", url_path="manage"
     ),
     "system": st.Page(system_page, title="System", icon=":material/settings:", url_path="system"),
+    "guide": st.Page(guide_page, title="Guide", icon=":material/help:", url_path="guide"),
 }
 
 
@@ -1369,6 +1414,7 @@ def main() -> None:
         if st.button("Refresh data", icon=":material/refresh:"):
             load.clear()
         st.caption("Collecting happens in the scheduler; add stocks on Manage stocks.")
+        st.page_link(PAGES["guide"], label="New here? Read the Guide", icon=":material/help:")
     st.navigation(list(PAGES.values())).run()
 
 

@@ -108,8 +108,8 @@ ui-docker:      ## Run the dashboard in Docker instead, at http://localhost:8501
 ui-stop:        ## Stop the Docker dashboard
 	docker compose stop ui
 
-start:          ## Start everything in Docker (database, dashboard, scheduler), as the start script does
-	docker compose up -d --build
+start:          ## Start everything (opens Docker Desktop if needed, waits for the database and dashboard)
+	./start.command
 
 stop:           ## Stop everything in Docker (data is kept)
 	docker compose stop

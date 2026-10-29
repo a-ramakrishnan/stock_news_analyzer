@@ -9,7 +9,7 @@ Stock News Analyzer follows a list of Indian stocks for you. Every morning it re
 
 ## Getting started
 
-Start the system with **start.command** (Mac) or **start.bat** (Windows) in its folder, with Docker Desktop open; the dashboard opens at http://localhost:8501. A new copy opens on a short **setup**: the API key and budget, your stocks, and their history. It does the steps below for you; run it again any time from **Settings**. To do them by hand instead:
+Start the system with **start.command** (Mac) or **start.bat** (Windows) in its folder. It opens Docker Desktop if needed, waits for the database, and opens the dashboard at http://localhost:8501. A new copy opens on a short **setup**: the API key and budget, your stocks, and their history. It does the steps below for you; run it again any time from **Settings**. To do them by hand instead:
 
 1. **Add your stocks** on **Manage stocks**. Search by name or NSE symbol, choose **Stocks I own** or **Watchlist**, and add a few news aliases (such as "L&T" for Larsen & Toubro).
 2. **Load history** for each new stock on the same page. It fetches filings, news and prices since October 2023, so the system can compare today with the past. It takes a few minutes per stock.
@@ -124,7 +124,7 @@ All times are India time. Everything is fetched from public websites by your own
 | What you see | What to do |
 | --- | --- |
 | "Port 8501 is not available" | The dashboard is already running: open http://localhost:8501. If that fails, run the stop script, then the start script |
-| "Docker is not running" or "Postgres is not reachable" | Open Docker Desktop, wait for it to start, then run the start script again |
+| "Docker didn't start" or "Postgres is not reachable" | Open Docker Desktop, wait until it says it is running, then run the start script again |
 | NSE or BSE returned HTTP 401 or 403 | The exchange refused for a while. The job retries on its next run; wait an hour |
 | "...has reached the $20.00 budget" | AI calls stop until the 1st. Raise the budget on **Settings** if you want more |
 | A stock isn't found on Manage stocks | Try its NSE symbol, or part of its name. If it listed recently, run the **securities** job on **System** |

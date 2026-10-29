@@ -1,6 +1,7 @@
 # Your watchlist. Load or re-load it with: sna watchlist load
 # Each stock needs a name; add `symbol:` (NSE symbol) if the name matches more than one company.
-# `owned: true` turns on earnings-call tracking for that stock. `quantity` is optional.
+# `owned: true` marks a stock you hold: it comes first on Today and in the digest. `quantity`
+# is optional.
 # `aliases`: other names the news uses. Short or all-capital aliases match case-sensitively.
 # The company name (without "Limited") is always matched, so it needn't be listed.
 # `exclude`: phrases that look like this company but are a different one; text matching them
@@ -59,6 +60,57 @@ stocks:
     owned: false
     aliases: ["Mrs Bectors", "Bectors"]
     sector_index: Nifty FMCG
+  # The ten largest Nifty 50 stocks by index weight (Oct 2026), L&T included above.
+  - name: HDFC Bank
+    symbol: HDFCBANK
+    owned: false
+    sector_index: Nifty Bank
+  - name: ICICI Bank
+    symbol: ICICIBANK
+    owned: false
+    exclude: ["ICICI Prudential", "ICICI Lombard", "ICICI Securities", "ICICI Pru"]
+    sector_index: Nifty Bank
+  - name: Reliance Industries
+    symbol: RELIANCE
+    owned: false
+    aliases: ["RIL", "Reliance", "Reliance Jio", "Jio Platforms", "Reliance Retail"]
+    exclude: ["Reliance Power", "Reliance Infrastructure", "Reliance Infra", "Reliance Capital",
+              "Reliance Home Finance", "Reliance Communications", "Reliance General Insurance",
+              "Reliance Nippon", "Reliance Securities", "Reliance Big"]
+    sector_index: Nifty Energy
+  - name: Bharti Airtel
+    symbol: BHARTIARTL
+    owned: false
+    aliases: ["Airtel"]
+    exclude: ["Airtel Africa", "Bharti Hexacom"]
+    sector_index: Nifty Services Sector
+  - name: State Bank of India
+    symbol: SBIN
+    owned: false
+    aliases: ["SBI"]
+    exclude: ["SBI Life", "SBI Cards", "SBI Card", "SBI Mutual Fund", "SBI MF", "SBI Funds",
+              "SBI General", "SBI Securities"]
+    sector_index: Nifty Bank
+  - name: Infosys
+    symbol: INFY
+    owned: false
+    sector_index: Nifty IT
+  - name: Axis Bank
+    symbol: AXISBANK
+    owned: false
+    exclude: ["Axis Mutual Fund", "Axis MF", "Axis AMC", "Axis Securities", "Axis Max Life"]
+    sector_index: Nifty Bank
+  - name: Kotak Mahindra Bank
+    symbol: KOTAKBANK
+    owned: false
+    aliases: ["Kotak Bank"]
+    sector_index: Nifty Bank
+  - name: Mahindra & Mahindra
+    symbol: M&M
+    owned: false
+    aliases: ["M&M"]
+    exclude: ["Mahindra & Mahindra Financial", "M&M Financial", "M&M Finance"]
+    sector_index: Nifty Auto
 
 # Bullion to track: gold and/or silver, e.g.
 # bullion:

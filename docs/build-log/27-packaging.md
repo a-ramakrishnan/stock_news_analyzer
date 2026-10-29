@@ -12,7 +12,7 @@ The author chose the **MIT licence** and to **keep the repository private** for 
 
 | Piece | Why |
 | --- | --- |
-| `start.command`, `start.bat` | Check Docker is running, `docker compose up -d --build`, wait for the dashboard, open it |
+| `start.command`, `start.bat` | Open Docker Desktop if it isn't running and wait for it, `docker compose up -d`, wait for the database and the dashboard, open it |
 | `stop.command`, `stop.bat` | `docker compose stop`; the data is kept |
 | `docker-compose.yml` | See below |
 | `make start`, `make stop` | The same, for developers |
@@ -67,3 +67,13 @@ make scheduler-stop
 ```
 
 Stop `make ui` too (Ctrl+C in its Terminal window), so port 8501 is free. Then double-click **start.command** in the project folder. If Finder blocks it the first time, right-click it and choose Open.
+
+## Later: one command to start
+
+The start scripts first only checked that Docker was running, and stopped if it wasn't. Now:
+- **Docker Desktop:** opened if it isn't running (`open -a Docker` on a Mac; Docker Desktop's program on Windows), then up to 3 minutes' wait for it
+- **The database:** waited for with `pg_isready`, so `uv run sna` commands work as soon as the script finishes
+- **The dashboard:** a clear message, with the `docker compose logs` command to run, if the database or dashboard doesn't come up; the first version opened the browser anyway
+- **`make start`:** runs `./start.command`, so Terminal and the double-click do the same thing
+
+Checked in the sandbox: with Docker stopped and started 10 seconds later, the script waited, then went on to `docker compose up`; the database wait returned on its second try.

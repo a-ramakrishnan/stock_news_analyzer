@@ -48,7 +48,7 @@ New to the system? The [Guide](src/stock_news_analyzer/ui/guide.md) explains wha
 3. Double-click **start.command** (Mac) or **start.bat** (Windows).
 4. The dashboard opens at http://localhost:8501, on a short setup: an API key (optional), your stocks and their history.
 
-The start script starts the database, applies any database changes, then the dashboard and the scheduler, which runs the daily jobs while Docker Desktop is open. **stop.command** / **stop.bat** stops everything; your data is kept. To update, replace the folder's files with a newer download (keep the `data` folder) and start again.
+The start script opens Docker Desktop if it isn't running, starts the database and waits until it is ready, applies any database changes, then starts the dashboard and the scheduler, which runs the daily jobs while Docker Desktop is open. From Terminal, `make start` (or `./start.command`) does the same. **stop.command** / **stop.bat** stops everything; your data is kept. To update, replace the folder's files with a newer download (keep the `data` folder) and start again.
 
 **Prebuilt image (optional):** GitHub Actions publishes the app image to `ghcr.io/a-ramakrishnan/stock_news_analyzer` for Intel and Apple Silicon, so a copy can pull it instead of building it. Add `SNA_PULL_POLICY=always` to `.env` (it pulls the newest each start; `SNA_VERSION=0.2.0` picks a release). While the repository is private, log in once with a GitHub token that can read packages: `docker login ghcr.io -u <your GitHub username>`. Without that line the start script builds the image here, as before.
 

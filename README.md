@@ -102,6 +102,7 @@ make watchlist
 | `make watchlist` | Load `config/watchlist.yaml` and show the watchlist |
 | `uv run sna watchlist add "Karur Vysya Bank" --owned --alias KVB` | Add or update a stock by name, NSE symbol, BSE code or ISIN |
 | `uv run sna watchlist add gold` | Track bullion (gold or silver) |
+| `uv run sna watchlist history HDFCBANK SBIN` | Load new stocks' filings, news, corporate actions, moves and labels since Oct 2023 (`--since` to change); the CLI form of "Load history now" |
 | `uv run sna watchlist list` | Show the watchlist with NSE/BSE codes and industry |
 | `uv run sna watchlist remove LT` | Stop tracking |
 | `uv run sna watchlist peers LT` | Suggest same-industry peers; save with `--approve SYMBOL` |

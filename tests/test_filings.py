@@ -234,6 +234,39 @@ def test_cli_list_and_show(watchlist, tmp_path, test_database_url, monkeypatch):
     assert result.exit_code == 1 and "not on the watchlist" in result.stdout
 
 
+def test_cli_watchlist_history_loads_each_stock(watchlist, test_database_url, monkeypatch):
+    from typer.testing import CliRunner
+
+    from stock_news_analyzer.cli import app
+    from stock_news_analyzer.ui import actions
+
+    loaded = []
+
+    def fake_load(session, isin, data_dir, since, progress):
+        loaded.append((isin, since))
+        if len(loaded) == 1:
+            raise RuntimeError("NSE said no")
+        return []
+
+    monkeypatch.setattr(actions, "load_history", fake_load)
+    monkeypatch.setenv("DATABASE_URL", test_database_url)
+    runner = CliRunner()
+
+    # An unknown symbol stops it before anything is loaded.
+    result = runner.invoke(app, ["watchlist", "history", "LT", "MSUMI"])
+    assert result.exit_code == 1 and "MSUMI is not on the watchlist" in result.stdout
+    assert loaded == []
+
+    # One stock failing doesn't stop the next.
+    result = runner.invoke(
+        app, ["watchlist", "history", "lt", "KARURVYSYA", "--since", "2025-10-01"]
+    )
+    assert result.exit_code == 1
+    assert [since for _, since in loaded] == [date(2025, 10, 1)] * 2
+    assert "error: LT: stopped: RuntimeError: NSE said no" in result.stdout
+    assert "== KARURVYSYA" in result.stdout
+
+
 def test_reclassify_updates_stale_types_and_titles(watchlist, tmp_path):
     fl.FilingsCollector(watchlist, FakeClient(), tmp_path, pdf_policy="none").collect(
         fl.watchlist_companies(watchlist, "LT"), start=date(2026, 10, 1), end=date(2026, 10, 21)

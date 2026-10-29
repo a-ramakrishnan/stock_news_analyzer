@@ -344,6 +344,39 @@ def watchlist_list() -> None:
         )
 
 
+@watchlist_app.command("history")
+def watchlist_history(
+    symbols: list[str] = typer.Argument(..., help="NSE symbols of watchlist stocks."),
+    since: str = typer.Option("2023-10-01", help="Start date, YYYY-MM-DD."),
+) -> None:
+    """Load new stocks' history: filings, news, corporate actions, daily moves and labels.
+
+    The same as "Load history now" on Manage stocks, for several stocks in one go. Safe to run
+    again; what is stored is skipped.
+    """
+    from stock_news_analyzer.ui.actions import load_history
+
+    start = datetime.strptime(since, "%Y-%m-%d").date()
+    problems = []
+    with get_session() as session:
+        companies = [_companies_or_exit(session, symbol)[0] for symbol in symbols]  # all, first
+        for company in companies:
+            typer.echo(f"== {company.nse_symbol}: {company.name}")
+            try:
+                errors = load_history(
+                    session, company.isin, get_settings().data_dir, since=start, progress=typer.echo
+                )
+            except Exception as exc:  # keep going with the next stock; what was stored is kept
+                session.rollback()
+                errors = [f"stopped: {type(exc).__name__}: {exc}"[:300]]
+            problems += [f"{company.nse_symbol}: {e}" for e in errors]
+    for problem in problems:
+        typer.echo(f"error: {problem}")
+    if problems:
+        typer.echo("Run the same command again to fill the gaps.")
+        raise typer.Exit(1)
+
+
 @watchlist_app.command("remove")
 def watchlist_remove(
     key: str = typer.Argument(..., help="NSE symbol, ISIN, or gold/silver."),

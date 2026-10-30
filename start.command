@@ -27,15 +27,19 @@ if ! docker info >/dev/null 2>&1; then
   echo "Docker is running."
 fi
 
-echo "Starting Stock News Analyzer. The first time, getting the app ready takes a few minutes..."
-docker compose up -d || fail "Something went wrong (see above)."
-
-echo "Waiting for the database..."
+# The database first and on its own: `docker compose up` builds the app image before it
+# starts any container, so a slow or failed build would otherwise leave Postgres stopped.
+echo "Starting the database..."
+docker compose up -d db || fail "The database didn't start (see above)."
 for _ in $(seq 30); do
   docker compose exec -T db pg_isready -U sna -q 2>/dev/null && break
   sleep 2
 done
 docker compose exec -T db pg_isready -U sna -q 2>/dev/null || fail "The database didn't start. See: docker compose logs db"
+echo "The database is ready."
+
+echo "Starting the dashboard and the scheduler. The first time, getting the app ready takes a few minutes..."
+docker compose up -d || fail "The dashboard and scheduler didn't start (see above). The database is running, so uv run sna commands still work."
 
 echo "Waiting for the dashboard..."
 for _ in $(seq 90); do

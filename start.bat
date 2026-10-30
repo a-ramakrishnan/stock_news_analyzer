@@ -25,15 +25,15 @@ pause
 exit /b 1
 :docker_ready
 
-echo Starting Stock News Analyzer. The first time, getting the app ready takes a few minutes...
-docker compose up -d
+rem The database first and on its own: "docker compose up" builds the app image before it
+rem starts any container, so a slow or failed build would otherwise leave Postgres stopped.
+echo Starting the database...
+docker compose up -d db
 if errorlevel 1 (
-  echo Something went wrong ^(see above^).
+  echo The database didn't start ^(see above^).
   pause
   exit /b 1
 )
-
-echo Waiting for the database...
 for /l %%i in (1,1,30) do (
   docker compose exec -T db pg_isready -U sna -q >nul 2>&1 && goto db_ready
   timeout /t 2 /nobreak >nul
@@ -42,6 +42,15 @@ echo The database didn't start. See: docker compose logs db
 pause
 exit /b 1
 :db_ready
+echo The database is ready.
+
+echo Starting the dashboard and the scheduler. The first time, getting the app ready takes a few minutes...
+docker compose up -d
+if errorlevel 1 (
+  echo The dashboard and scheduler didn't start ^(see above^). The database is running.
+  pause
+  exit /b 1
+)
 
 echo Waiting for the dashboard...
 for /l %%i in (1,1,90) do (

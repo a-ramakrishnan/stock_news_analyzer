@@ -77,3 +77,5 @@ The start scripts first only checked that Docker was running, and stopped if it 
 - **`make start`:** runs `./start.command`, so Terminal and the double-click do the same thing
 
 Checked in the sandbox: with Docker stopped and started 10 seconds later, the script waited, then went on to `docker compose up`; the database wait returned on its second try.
+
+On the Mac, the first run opened Docker Desktop but left Postgres stopped. `docker compose up` builds the app image before it starts any container, so while the build was slow or failing, nothing ran. The scripts now start the database on its own first and wait for it, then start the dashboard and the scheduler. If that second part fails, the database stays up and `uv run sna` commands still work. Checked in the sandbox, where the image can't be built: the build failed, and the database was running.

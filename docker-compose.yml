@@ -3,14 +3,15 @@
 # Pinned so the data volume keeps its name whatever the folder is called.
 name: stock_news_analyzer
 
-# The app's image, shared by the services below. By default it is built here from the code
-# (SNA_PULL_POLICY=build). To use the prebuilt image published by GitHub Actions instead, set
-# SNA_PULL_POLICY=always in .env (pulls the newest on each start) and, while the repository is
-# private, log in once: docker login ghcr.io. SNA_VERSION picks a release (default: latest).
+# The app's image, shared by the services below. By default the prebuilt image published by
+# GitHub Actions is pulled, the newest on each start (SNA_PULL_POLICY=always); SNA_VERSION picks
+# a release (default: latest). To build it here from the code instead, as a developer does, set
+# SNA_PULL_POLICY=build in .env. The start script falls back to the image already here, then to
+# building, when the pull fails (no internet, say).
 x-app-image: &app-image
   image: ghcr.io/a-ramakrishnan/stock_news_analyzer:${SNA_VERSION:-latest}
   build: .
-  pull_policy: ${SNA_PULL_POLICY:-build}
+  pull_policy: ${SNA_PULL_POLICY:-always}
 
 services:
   db:

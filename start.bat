@@ -44,13 +44,23 @@ exit /b 1
 :db_ready
 echo The database is ready.
 
-echo Starting the dashboard and the scheduler. The first time, getting the app ready takes a few minutes...
+echo Starting the dashboard and the scheduler. The first time, downloading the app takes a few minutes...
+rem The newest prebuilt image; if that fails, the image already here; if none, a build.
+docker compose up -d
+if not errorlevel 1 goto app_started
+echo Couldn't download the newest version; trying the one already on this computer...
+set SNA_PULL_POLICY=missing
+docker compose up -d
+if not errorlevel 1 goto app_started
+echo Building the app from this folder instead ^(a few minutes^)...
+set SNA_PULL_POLICY=build
 docker compose up -d
 if errorlevel 1 (
   echo The dashboard and scheduler didn't start ^(see above^). The database is running.
   pause
   exit /b 1
 )
+:app_started
 
 echo Waiting for the dashboard...
 for /l %%i in (1,1,90) do (

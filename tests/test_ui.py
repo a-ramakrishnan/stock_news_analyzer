@@ -14,7 +14,7 @@ def test_watchlist_cards(loaded):  # noqa: F811
     cards = {c["symbol"]: c for c in queries.watchlist(loaded)}
     assert set(cards) == {"LT", "KARURVYSYA", "MSUMI"}
     lt = cards["LT"]
-    assert lt["owned"] and lt["sector_index"] == "Nifty Infrastructure"
+    assert not lt["owned"] and lt["sector_index"] == "Nifty Infrastructure"
     assert lt["date"] == date(2026, 10, 21)
     assert lt["stock_return"] == pytest.approx(-0.0071, abs=1e-4)
     assert lt["excess_return"] == pytest.approx(-0.0037, abs=1e-4)

@@ -12,6 +12,14 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.20 · Nov 2, 2026
+
+- Step 28, ready for others: the author's watchlist is no longer tracked and is removed from the Git history; the start script pulls the prebuilt image by default; release 0.1.0. Trying it on a clean Mac and Windows becomes step 29
+
+### sharing.md 1.7 · Nov 2, 2026
+
+- Step 28 added and built (ready for others); the clean-machine test moves to step 29. The decisions section records going public
+
 ### 1.19 · Oct 28, 2026
 
 - design.md and agent-design.md catch up with steps 23–27 (making the system usable by others): twelve dashboard pages in groups, Guide, Settings, Red flags, Run a job now, first-run setup, start scripts and a prebuilt image; step 28 (a clean Mac and Windows) is next, then email

@@ -315,7 +315,7 @@ class FileLoadResult:
 
 
 def load_file(session: Session, path: Path) -> FileLoadResult:
-    """Load a watchlist YAML file (see config/watchlist.yaml). Safe to run repeatedly."""
+    """Load a watchlist YAML file (see config/watchlist.example.yaml). Safe to run repeatedly."""
     data = yaml.safe_load(path.read_text()) or {}
     added, problems = [], []
 

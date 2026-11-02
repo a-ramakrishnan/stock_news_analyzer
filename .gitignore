@@ -221,3 +221,6 @@ __marimo__/
 
 # Local data: raw filings, transcripts, reports
 data/
+
+# Your own watchlist (start from config/watchlist.example.yaml)
+config/watchlist.yaml

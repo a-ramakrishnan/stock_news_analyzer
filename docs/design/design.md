@@ -1,6 +1,6 @@
 # Indian Market News Intelligence System — Design
 
-Version 1.19 · Oct 28, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
+Version 1.20 · Nov 2, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
 
 ## Goal and principles
 
@@ -33,7 +33,7 @@ A map of what is built and what is pending, agent by agent, is in [Agent design:
 | Red flags | Built, step 18: rules over the checked events and results deadlines, no LLM; in the digest and dashboard |
 | Themes and read-across | Built, step 20: events, orders and call points tagged with themes (Claude Haiku 5.5); theme strength and read-across between watchlist companies in code |
 | Analyst Q&A | Built, step 21: plain-English questions answered by Claude Sonnet 5.5 with read-only SQL and full-text search, citing sources; saved reports |
-| Use by others | Built, steps 23–27: Guide, Settings (key, budget, models, jobs), Red flags page, Run a job now, first-run setup, start scripts for Mac and Windows, one compose file, a prebuilt image (private), MIT licence. Step 28, trying it on a clean Mac and Windows, is next |
+| Use by others | Built, steps 23–27: Guide, Settings (key, budget, models, jobs), Red flags page, Run a job now, first-run setup, start scripts for Mac and Windows, one compose file, a prebuilt image, MIT licence. Step 28 made it ready for others (the author's watchlist out of the repository, the prebuilt image by default, release 0.1.0). Step 29, trying it on a clean Mac and Windows, is next |
 | Email delivery (later; Telegram set aside for now) | Not started |
 
 - **Filings first, news second.** Under SEBI LODR Regulation 30, listed companies must report material events (order wins, capacity additions, fundraises, rating changes, management exits) to NSE/BSE, generally within 24 hours. These filings are the factual record. News adds context, sentiment and rumour.
@@ -360,7 +360,7 @@ The product descriptions above come from search results; the source pages could 
 
 - [x] Run on a laptop, or on a small cloud server so it works when the laptop is off? **A Mac for now**, Docker Compose; a server later.
 - [x] Monthly LLM budget? **$20**, enforced in code (`LLM_MONTHLY_BUDGET_USD`).
-- [x] Watchlist size, and how many of those stocks you own? **About 15 stocks, most of them owned**; added and edited from the dashboard.
+- [x] Watchlist size, and how many of those stocks you own? **About 15 stocks**; added and edited from the dashboard.
 - [x] Dashboard, or a daily email/Telegram digest first? **Both**: a Markdown digest and the dashboard; email later. Telegram was set aside on Oct 27, 2026.
 - [x] Pay for a data vendor or consensus estimates now, or stay free until Phase 4? **Stay free.**
 - [x] Which agent next: Earnings Call Analyst or Order Book Tracker? **Earnings Call Analyst** (step 12).

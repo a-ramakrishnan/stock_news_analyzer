@@ -102,25 +102,27 @@ def test_load_watchlist_file(master):
     assert not result.problems
     tracked = {c.nse_symbol: (i.owned, c.bse_code) for i, c in wl.list_items(master)}
     assert tracked == {
-        "LT": (True, "500510"),
-        "KARURVYSYA": (True, "590003"),
-        "MSUMI": (True, "543498"),
+        "LT": (False, "500510"),
+        "KARURVYSYA": (False, "590003"),
+        "MSUMI": (False, "543498"),
     }
 
 
 def test_repo_watchlist_file_is_well_formed(master):
-    """Your own config/watchlist.yaml: every entry has a name, and loading it never crashes.
+    """Your own config/watchlist.yaml, if you have one (Git ignores it): every entry has a
+    name, and loading it never crashes.
 
     The test master list holds only a few companies, so names outside it are reported, not
-    loaded; on your Mac the full NSE/BSE list resolves them.
+    loaded; on your computer the full NSE/BSE list resolves them.
     """
     import yaml
 
+    if not REPO_WATCHLIST.exists():
+        pytest.skip("no config/watchlist.yaml in this copy")
     data = yaml.safe_load(REPO_WATCHLIST.read_text())
     assert all(str(entry.get("name") or "").strip() for entry in data["stocks"])
     result = wl.load_file(master, REPO_WATCHLIST)
     assert all(isinstance(p, wl.ResolveError) for p in result.problems)
-    assert {"LT", "KARURVYSYA", "MSUMI"} <= {c.nse_symbol for _, c in wl.list_items(master)}
 
 
 def test_example_watchlist_loads(master):
@@ -146,12 +148,12 @@ def test_compose_starts_everything_after_the_migrations():
             "service_completed_successfully"
         )
     assert services["ui"]["ports"] == ["127.0.0.1:8501:8501"]
-    # The prebuilt image is named, and built here unless SNA_PULL_POLICY says to pull it.
+    # The prebuilt image is named and pulled, unless SNA_PULL_POLICY says to build it here.
     for name in ("migrate", "ui", "scheduler", "app"):
         assert services[name]["image"].startswith("ghcr.io/a-ramakrishnan/stock_news_analyzer:")
         assert (
             services[name]["build"] == "."
-            and "SNA_PULL_POLICY:-build" in (services[name]["pull_policy"])
+            and "SNA_PULL_POLICY:-always" in (services[name]["pull_policy"])
         )
 
 

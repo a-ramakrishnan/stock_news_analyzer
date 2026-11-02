@@ -33,7 +33,7 @@
 
 ## Cost
 
-About $0.10 a call with Sonnet: a 60-page transcript is roughly 25,000 tokens in, plus a few thousand out. A year of calls for 12 owned stocks is about 50 calls, about $5. `sna concalls run` prints the number of calls and a rough cost first, and asks before spending more than $2. The monthly budget still stops it at $20.
+About $0.10 a call with Sonnet: a 60-page transcript is roughly 25,000 tokens in, plus a few thousand out. A year of calls for 12 stocks is about 50 calls, about $5. `sna concalls run` prints the number of calls and a rough cost first, and asks before spending more than $2. The monthly budget still stops it at $20.
 
 ## How to check it
 

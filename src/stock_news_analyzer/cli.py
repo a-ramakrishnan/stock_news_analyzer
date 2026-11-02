@@ -310,6 +310,11 @@ def watchlist_load(
     path: Path = typer.Argument(Path("config/watchlist.yaml"), help="Watchlist YAML file."),
 ) -> None:
     """Add everything in a watchlist file. Safe to run again after editing the file."""
+    if not path.exists():
+        typer.echo(
+            f"{path} not found. Start from the example: cp config/watchlist.example.yaml {path}"
+        )
+        raise typer.Exit(1)
     with get_session() as session:
         result = wl.load_file(session, path)
         for item in result.added:

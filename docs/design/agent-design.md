@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.19 · Oct 28, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.20 · Nov 2, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -91,7 +91,7 @@ flowchart LR
 | Built | 0 Orchestrator, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17 |
 | Partly built | 4 Market Signals, 16 Reporter |
 | Not started | none |
-| Recommended next | Step 28 of the [sharing plan](sharing.md): try the packaged system on a clean Mac and a Windows machine. Then email delivery of the digest and high-severity flags (16); Telegram is set aside for now |
+| Recommended next | Step 29 of the [sharing plan](sharing.md): try the packaged system on a clean Mac and a Windows machine. Then email delivery of the digest and high-severity flags (16); Telegram is set aside for now |
 
 | # | Agent | Status | Build step |
 | --- | --- | --- | --- |

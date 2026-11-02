@@ -134,6 +134,7 @@ def loaded(session, tmp_path):
 
 @pytest.mark.db
 def test_digest_covers_each_company(loaded):
+    wl.add_equity(loaded, wl.resolve(loaded, "LT"), owned=True)
     since = datetime(2026, 10, 15, tzinfo=IST)
     until = datetime(2026, 10, 22, 8, 0, tzinfo=IST)
     d = dg.build_digest(loaded, since, until)
@@ -143,6 +144,7 @@ def test_digest_covers_each_company(loaded):
     assert "| Nifty 50 | 21 Oct | 22,811.35 | -0.34% |" in md
     assert "| Nifty Bank |" in md and "| Nifty Infrastructure |" in md
     assert "## LT: Larsen & Toubro Limited (owned)" in md
+    assert "## MSUMI: Motherson Sumi Wiring India Limited\n" in md  # not owned
     assert "Last close (21 Oct): -0.71%; vs Nifty 50 -0.37%" in md
 
     # The same order win was filed on BSE (09:45) and NSE (09:46): listed once, BSE first.

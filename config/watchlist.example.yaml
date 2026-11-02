@@ -1,8 +1,18 @@
 # An example watchlist: five large companies. The dashboard's setup and Manage stocks page are
 # the easy way to choose stocks; this file is for loading a list in one go:
 #   uv run sna watchlist load config/watchlist.example.yaml
-# Copy it to config/watchlist.yaml and edit it for your own list. The fields are explained at
-# the top of config/watchlist.yaml.
+# For your own list, copy it to config/watchlist.yaml (which Git ignores, so your list stays on
+# your computer), edit it, and load it with: uv run sna watchlist load
+#
+# Each stock needs a name; add `symbol:` (NSE symbol) if the name matches more than one company.
+# `owned: true` marks a stock you hold: it comes first on Today and in the digest. `quantity`
+# is optional.
+# `aliases`: other names the news uses. Short or all-capital aliases match case-sensitively.
+# The company name (without "Limited") is always matched, so it needn't be listed.
+# `exclude`: phrases that look like this company but are a different one; text matching them
+# is ignored when deciding whether an article is about this company.
+# `sector_index`: NSE index used as a second benchmark (Nifty 50 is always used). Use the name
+# exactly as NSE's index file spells it; `sna prices indices` lists them.
 stocks:
   - name: Reliance Industries
     symbol: RELIANCE

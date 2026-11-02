@@ -36,6 +36,8 @@ jobs:
 
   docker:
     runs-on: ubuntu-latest
+    env:
+      SNA_PULL_POLICY: build  # test this commit's code, not the published image
     steps:
       - uses: actions/checkout@v4
       - name: Check the compose file

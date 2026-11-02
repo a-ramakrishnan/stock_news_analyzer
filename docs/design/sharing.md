@@ -1,6 +1,6 @@
 # Making it usable by others
 
-Version 1.6 · Oct 28, 2026 · @Ramki · companion to the [system design](design.md) and [agent design](agent-design.md); changes are listed in [README.md](README.md)
+Version 1.7 · Nov 2, 2026 · @Ramki · companion to the [system design](design.md) and [agent design](agent-design.md); changes are listed in [README.md](README.md)
 
 ## Goal
 
@@ -28,7 +28,7 @@ Setting it up now takes what only a developer has:
 | Most actions (`sna flags dismiss`, `sna ask`, `sna holdings run`...) | The command line is the only way to run many of them |
 
 Other things tie it to one person:
-- `config/watchlist.yaml` in the repository is the author's own list, with `owned: true` on their holdings.
+- `config/watchlist.yaml` in the repository was the author's own list, with `owned: true` on their holdings. (Step 28: no longer tracked, and removed from the history.)
 - There is no licence file, so others have no clear right to use or change the code.
 - The README assumes a Mac.
 
@@ -58,7 +58,7 @@ Updating is the same `start` script: it pulls the newest image and applies datab
 - **Database changes on start:** the container runs `sna db upgrade` before starting, so there is no `make migrate` step.
 - **Settings in the database, not `.env`:** the API key, budget, models and threshold are saved from the Settings page in a `settings` table. A saved value takes the place of `.env`, so the page works for someone who also has a `.env`; removing it goes back to `.env`. Built in step 24.
 - **The scheduler reads the job switches from the database:** turning a job off in Settings takes effect within a minute, without editing `config/schedule.yaml` or restarting. Built in step 24.
-- **Example watchlist:** `config/watchlist.example.yaml` with a few large companies. The personal `config/watchlist.yaml` stops being tracked in Git.
+- **Example watchlist:** `config/watchlist.example.yaml` with a few large companies, and the fields explained. Each person's own `config/watchlist.yaml` is ignored by Git. Built in steps 27 and 28.
 - **Licence:** MIT is the simplest, if the author agrees. A notice in the README and the Guide says:
   - the data comes from the public NSE, BSE and news websites, for personal use
   - each copy fetches it from the user's own connection, at a polite rate
@@ -137,16 +137,18 @@ Each step is one PR, tested on the Mac like the agents:
 | 24 | Settings page and `settings` table; API key, budget and job switches from the app (done) | Medium |
 | 25 | Navigation regrouped; Red flags page; Run now buttons with progress (done) | Medium |
 | 26 | First-run setup (done) | Medium |
-| 27 | Packaging: start scripts, everything in one compose file, migrations on start, example watchlist, MIT licence (done; the prebuilt image waits for a public repository) | Medium |
-| 28 | Try it on a clean Mac and a Windows machine; fix what breaks; write the release notes | Small |
+| 27 | Packaging: start scripts, everything in one compose file, migrations on start, example watchlist, MIT licence, prebuilt image (done) | Medium |
+| 28 | Ready for others: the author's watchlist out of the repository and its history, the prebuilt image pulled by default, release notes for 0.1.0 (done) | Small |
+| 29 | Try it on a clean Mac and a Windows machine; fix what breaks | Small |
 
 The Guide comes first because it is quick and shows where the app is hard to follow, which shapes steps 24 to 26.
 
 ## Decisions for the author
 
-Decided Oct 28, 2026: **MIT licence; the repository stays private for now.** While it is private:
-- **The prebuilt image is private.** GitHub Actions publishes it to GitHub Container Registry on every push to main and each release tag, but on a private repository the package is private too, so pulling it needs `docker login ghcr.io`. Building on the user's computer stays the default (`SNA_PULL_POLICY=build`); `SNA_PULL_POLICY=always` pulls instead.
-- **The author's watchlist stays tracked.** Untracking it now would delete it from the author's Mac on the next `git pull`. Before the repository goes public, it has to be removed from the Git history, with `config/watchlist.example.yaml` in its place. Both are on [docs/TODO.md](../TODO.md).
+Decided Oct 28, 2026: **MIT licence; the repository stays private for now.** Then, on Nov 2, 2026: **get it ready to go public** (step 28):
+- **The author's watchlist** is no longer tracked, and is removed from every commit. Company names stay in the build logs as worked examples, without saying which are owned; the test watchlist marks none as owned.
+- **The prebuilt image is the default:** the start script pulls the newest release (`SNA_PULL_POLICY=always`), falls back to the image already downloaded, then to building. Developers set `SNA_PULL_POLICY=build`.
+- **Going public** is the author's switch: the repository and the image package made public, then `make release VERSION=0.1.0`.
 
 The questions as first asked:
 

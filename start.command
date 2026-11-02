@@ -38,8 +38,16 @@ done
 docker compose exec -T db pg_isready -U sna -q 2>/dev/null || fail "The database didn't start. See: docker compose logs db"
 echo "The database is ready."
 
-echo "Starting the dashboard and the scheduler. The first time, getting the app ready takes a few minutes..."
-docker compose up -d || fail "The dashboard and scheduler didn't start (see above). The database is running, so uv run sna commands still work."
+echo "Starting the dashboard and the scheduler. The first time, downloading the app takes a few minutes..."
+# The newest prebuilt image (or a build, if .env says SNA_PULL_POLICY=build); if that fails,
+# the image already here; if there is none, a build from this folder's code.
+if ! docker compose up -d; then
+  echo "Couldn't download the newest version; trying the one already on this computer..."
+  if ! SNA_PULL_POLICY=missing docker compose up -d; then
+    echo "Building the app from this folder instead (a few minutes)..."
+    SNA_PULL_POLICY=build docker compose up -d || fail "The dashboard and scheduler didn't start (see above). The database is running, so uv run sna commands still work."
+  fi
+fi
 
 echo "Waiting for the dashboard..."
 for _ in $(seq 90); do

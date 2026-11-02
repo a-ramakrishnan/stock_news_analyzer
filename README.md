@@ -40,19 +40,22 @@ New to the system? The [Guide](src/stock_news_analyzer/ui/guide.md) explains wha
 | 25 | Sidebar in groups (Today, Research, Library, Set up, Help); a Red flags page with dismiss and re-open; "Run a job now" on System, showing the job's progress | done |
 | 26 | First-run setup: a new copy opens on four screens (welcome, AI key and budget, stocks, history) that download the company list and load prices, filings and news; run again from Settings | done |
 | 27 | Packaging: start and stop scripts for Mac and Windows, everything in one `docker compose up` (database changes applied on start), the dashboard reachable from this computer only, an example watchlist, MIT licence, no command hints left on the dashboard; a prebuilt image published by GitHub Actions | done |
+| 28 | Ready for others: the author's watchlist out of the repository, the prebuilt image pulled by default, release 0.1.0 ([release notes](docs/releases/0.1.0.md)) | done |
 
 ## Quick start (no Python needed)
 
-1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) and open it once.
-2. Download this repository (Code → Download ZIP) and unzip it.
-3. Double-click **start.command** (Mac) or **start.bat** (Windows).
+1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+2. Download the latest release from the [Releases page](https://github.com/a-ramakrishnan/stock_news_analyzer/releases) (**Source code (zip)**) and unzip it.
+3. Double-click **start.command** (Mac) or **start.bat** (Windows). On a Mac, if it is blocked the first time, right-click it and choose **Open**.
 4. The dashboard opens at http://localhost:8501, on a short setup: an API key (optional), your stocks and their history.
 
 The start script opens Docker Desktop if it isn't running, starts the database and waits until it is ready, applies any database changes, then starts the dashboard and the scheduler, which runs the daily jobs while Docker Desktop is open. From Terminal, `make start` (or `./start.command`) does the same. **stop.command** / **stop.bat** stops everything; your data is kept. To update, replace the folder's files with a newer download (keep the `data` folder) and start again.
 
-**Prebuilt image (optional):** GitHub Actions publishes the app image to `ghcr.io/a-ramakrishnan/stock_news_analyzer` for Intel and Apple Silicon, so a copy can pull it instead of building it. Add `SNA_PULL_POLICY=always` to `.env` (it pulls the newest each start; `SNA_VERSION=0.2.0` picks a release). While the repository is private, log in once with a GitHub token that can read packages: `docker login ghcr.io -u <your GitHub username>`. Without that line the start script builds the image here, as before.
+**The app image:** GitHub Actions publishes it to `ghcr.io/a-ramakrishnan/stock_news_analyzer` for Intel and Apple Silicon, and the start script downloads the newest release each time it starts (`SNA_VERSION=0.1.0` in `.env` keeps one release). Without internet it uses the copy already downloaded, and with none it builds the image from the folder's code. A developer changing the code sets `SNA_PULL_POLICY=build` in `.env` (as `.env.example` does), so the image is built from their copy.
 
-Releases: `make release VERSION=0.2.0` tags the code, and GitHub Actions publishes that version and `latest`. Every push to main also publishes `main`. Open items, such as what has to happen before the repository goes public, are in [docs/TODO.md](docs/TODO.md).
+**Your data and privacy:** everything stays on your computer: the database in Docker, filing PDFs and digests in the `data` folder, and your API key in the database or `.env`. Your own `config/watchlist.yaml`, if you make one, is ignored by Git.
+
+Releases: `make release VERSION=0.2.0` tags the code, and GitHub Actions publishes that version and `latest`. Every push to main that changes the app also publishes `main`. Open items are in [docs/TODO.md](docs/TODO.md).
 
 The rest of this README is for working on the code.
 
@@ -87,7 +90,7 @@ pgvector     ok  0.8.x
 
 ## Watchlist
 
-Add stocks on the dashboard's **Manage stocks** page, or edit [`config/watchlist.yaml`](config/watchlist.yaml) and load it. Running `make watchlist` re-applies the file, so a stock listed there comes back as the file says.
+Add stocks on the dashboard's **Manage stocks** page, or keep them in a file: copy [`config/watchlist.example.yaml`](config/watchlist.example.yaml) to `config/watchlist.yaml` (Git ignores it, so your list stays on your computer), edit it and load it. Running `make watchlist` re-applies the file, so a stock listed there comes back as the file says.
 
 ```bash
 make migrate
@@ -100,7 +103,7 @@ make watchlist
 | `make migrate` | Create or update the database tables |
 | `make securities` | Download the NSE + BSE lists of listed companies |
 | `make watchlist` | Load `config/watchlist.yaml` and show the watchlist |
-| `uv run sna watchlist add "Karur Vysya Bank" --owned --alias KVB` | Add or update a stock by name, NSE symbol, BSE code or ISIN |
+| `uv run sna watchlist add "State Bank of India" --owned --alias SBI` | Add or update a stock by name, NSE symbol, BSE code or ISIN |
 | `uv run sna watchlist add gold` | Track bullion (gold or silver) |
 | `uv run sna watchlist history HDFCBANK SBIN` | Load new stocks' filings, news, corporate actions, moves and labels since Oct 2023 (`--since` to change); the CLI form of "Load history now" |
 | `uv run sna watchlist list` | Show the watchlist with NSE/BSE codes and industry |
@@ -654,7 +657,8 @@ src/stock_news_analyzer/   Python package
   ui/charts.py             dashboard: charts
   ui/app.py                dashboard: the Streamlit pages
   cli.py                   `sna` command-line tool
-config/watchlist.yaml      your stocks, bullion and their news aliases
+config/watchlist.example.yaml  an example watchlist: stocks, bullion and their news aliases
+                           (your own copy, config/watchlist.yaml, is ignored by Git)
 config/news_feeds.yaml     news feeds to read
 config/schedule.yaml       when each job runs
 tests/                     pytest tests

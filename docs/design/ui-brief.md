@@ -1,6 +1,6 @@
 # Dashboard design brief (for Lovable)
 
-Paste everything below the line into Lovable as the first prompt. It asks for clickable mock-ups with sample data, not a working app: the real dashboard stays in Python (Streamlit), and the chosen designs are rebuilt there.
+It asks for clickable mock-ups with sample data, not a working app: the real dashboard stays in Python (Streamlit), and the chosen designs are rebuilt there. To feed it to Lovable, use [lovable-prompts.md](lovable-prompts.md): the same brief split into prompts to paste one at a time.
 
 ---
 

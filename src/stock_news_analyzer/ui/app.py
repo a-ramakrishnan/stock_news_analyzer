@@ -1825,8 +1825,8 @@ def _setup_stocks(session: Session, setup) -> None:
             _go(1)
         return
     st.markdown(
-        "Add the stocks you own and the ones you follow. **Stocks I own** also get their "
-        "earnings calls read. You can change the list any time on **Manage stocks**."
+        "Add the stocks you own and the ones you follow. **Stocks I own** come first on "
+        "**Today** and in the digest. You can change the list any time on **Manage stocks**."
     )
     add_stock_form(session, offer_history=False)
     stocks = actions.tracked_stocks(session)

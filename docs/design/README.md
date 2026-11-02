@@ -5,6 +5,7 @@
 | [design.md](design.md) | Goal and principles, data sources, architecture, core modules, extended ideas, database, tech stack and roadmap, existing products, risks |
 | [agent-design.md](agent-design.md) | The agent team, LLMs and costs, tools, data requirements, hosting, the agent-by-agent build guide, the build-in-public plan |
 | [sharing.md](sharing.md) | Making it usable by others: a simple install, a fuller dashboard, and an in-app Guide; the order of work |
+| [ui-brief.md](ui-brief.md) | A brief for designing the dashboard in Lovable: each page, what it shows, with sample data; the designs are then rebuilt in Streamlit |
 
 These files are the reference for the design. Change them in a pull request like code: edit the text, bump the version line at the top of each changed file, and add an entry below.
 

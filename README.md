@@ -613,7 +613,7 @@ make ui
 | Manage stocks | Search any listed company and add it to Stocks I own or Watchlist, with news aliases and a sector benchmark; edit or remove stocks; **Load history now** fetches a new stock's filings, news and moves since Oct 2023 |
 | Settings | The Anthropic API key, the monthly AI budget and this month's spend, the models, the unusual-day threshold, and which scheduled jobs run. Saved values take the place of `.env`; the scheduler picks them up within a minute |
 | System | Run any job now, with its progress shown; schedule, stored data, recent runs and errors |
-| Agent map | The system laid out as an agent's anatomy (perceive, plan, think, remember, act, guardrails, observe), live: each job running, ok or failed, its next run, AI calls and cost today; refreshed every 30 seconds |
+| Agent map | How an agentic system works, on this one: perceive, plan, think, remember, act, guardrails, observe. **Today, live**: each job running, ok or failed, its next run, AI calls and cost, a narrated feed of today's runs; **Replay**: play the last 7 days (or today) back, with moving dots, play, speed and a time slider |
 | Guide | How to use the system: getting started, a daily routine, each page, the words used, AI use and cost, problems. Every page links to its part |
 
 ## Other commands
@@ -657,7 +657,7 @@ src/stock_news_analyzer/   Python package
   agents/results.py        Results Reader: revenue, profit, margins from results filings
   ui/queries.py            dashboard: read-only queries
   ui/charts.py             dashboard: charts
-  ui/agent_map.py          dashboard: the live Agent map (and agent_map.css)
+  ui/agent_map.py          dashboard: the Agent map, live and replay (agent_map.css, agent_map.js)
   ui/static/fonts/         IBM Plex fonts, served with the dashboard (SIL Open Font License)
   ui/app.py                dashboard: the Streamlit pages
   cli.py                   `sna` command-line tool

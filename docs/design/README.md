@@ -14,6 +14,14 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.22 · Nov 4, 2026
+
+- The Agent map: the system as an agent's anatomy, in the Today group; live (each job's state, a narrated feed of today's runs) or replayed over the last 7 days. design.md's dashboard row, agent-design.md's Reporter and Observability rows
+
+### sharing.md 1.9 · Nov 4, 2026
+
+- The Agent map added to the navigation (Today group) and described under "A better interface"
+
 ### 1.21 · Nov 4, 2026
 
 - Step 29, the dashboard redesigned: a design made in Lovable from ui-brief.md and rebuilt in Streamlit (themes, IBM Plex fonts, cards, tiles, tables whose text wraps, AI tags); the sector index's chart colour is ochre, not the design's teal, so the lines can be told apart. Trying it on a clean Mac and Windows becomes step 30

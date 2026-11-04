@@ -65,6 +65,19 @@ Each box shows its job's state: running (pulsing), last run ok, failed, turned o
 
 The sidebar now always shows every page: with thirteen, Streamlit had started folding the last ones under "View 3 more".
 
+### Live and replay
+
+The map moved to the Today group, under Red flags, and became a way to learn how an agentic system is built. A switch at the top chooses:
+- **Today, live:** the map's state now, refreshed every 30 seconds. Dots loop along the path of each job running now, and a feed explains each of today's runs in plain words, e.g. "Think · the News triage agent took its working set from memory, asked Claude (Haiku) 3 times for $0.006, and wrote its answer back to memory. Result: 10 articles triaged."
+- **Replay the last 7 days:** today's or the week's runs (`queries.agent_events`: each run with the AI calls made during it, and each question asked) played back on the map.
+  - Play and pause, a speed (10 minutes, an hour or six hours a second), "skip quiet hours", and a time slider that jumps to any moment.
+  - As each run starts, the scheduler pulses, its box lights up and shows what that run did, and a dot carries the information along its path: source → collector → memory for a collector; memory → agent → Claude → agent → memory for an AI agent; you → Ask → database → Claude → dashboard for a question.
+  - The budget pulses before AI calls and the QA checker with the events agent; a failed run flashes Observe.
+  - A tally counts the replayed runs, errors, AI calls and cost.
+- **Teaching:** every layer carries one line on what it does in any agentic system, e.g. "Guardrails: limits on what agents may do, checked at every step, not only at the start."
+
+The script is `ui/agent_map.js`, inlined into the page with the run data as JSON.
+
 ## On the Mac
 
 ```

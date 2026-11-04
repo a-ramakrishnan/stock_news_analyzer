@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.21 · Nov 4, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.22 · Nov 4, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -111,7 +111,7 @@ flowchart LR
 | 13 | Bullion Analyst | Built: each day's rupee move split into global price, USD/INR and the rest; notes by Sonnet 5.5 on unusual days, from bullion news | 19 |
 | 14 | Theme & Peer Analyst | Built: events, orders and call points tagged with themes (Haiku 5.5); theme strength and read-across in code; no customer and supplier map yet | 20 |
 | 15 | Red-flag Monitor | Built: rules over the checked events (auditor, CEO/MD/CFO and independent director exits, downgrades, pledges, holders selling, penalties, disruptions) and overdue results; no LLM | 18 |
-| 16 | Reporter | Partly: Markdown digest and Streamlit dashboard (12 pages, with a Guide, Settings and a first-run setup); no email or weekly report yet (email later; Telegram set aside for now); no LLM | 6, 7, 23–26 |
+| 16 | Reporter | Partly: Markdown digest and Streamlit dashboard (13 pages, with a Guide, Settings, a first-run setup and an Agent map, live or replayed); no email or weekly report yet (email later; Telegram set aside for now); no LLM | 6, 7, 23–26 |
 | 17 | Analyst Q&A | Built (Sonnet 5.5): read-only SQL, full-text search and a document reader as tools; cited answers; saved reports, not yet scheduled | 21 |
 
 The build order changed in one place: the Move Explainer came before the Event Extractor and QA Checker, reading filings and triaged news directly. Its explanations were useful without typed events.
@@ -179,7 +179,7 @@ Run the daily pipeline from a code orchestrator that calls each agent in a fixed
 | Prices | NSE bhavcopy download; yfinance as fallback | jugaad-data, paid feeds |
 | Delivery | Telegram bot (python-telegram-bot) and email (SMTP or Resend) | Slack, WhatsApp Business API |
 | Dashboard | Streamlit | Metabase on top of Postgres, a Next.js app later |
-| Observability | Log every LLM call (prompt version, tokens, cost, output) to a table; Langfuse for traces | OpenTelemetry |
+| Observability | Log every LLM call (prompt version, tokens, cost, output) to a table; Langfuse for traces. As built: the `runs` and `llm_calls` tables, shown on System and on the Agent map, which replays the last 7 days of runs with the AI calls in each | OpenTelemetry |
 | Secrets | `.env` file locally; the cloud provider's secret store on a server | Doppler, 1Password CLI |
 | Code and deployment | GitHub repo, Docker Compose (app + Postgres) | Kubernetes is unnecessary at this scale |
 

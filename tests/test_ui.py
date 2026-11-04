@@ -330,7 +330,7 @@ def test_agent_map_shows_each_part_live(loaded):  # noqa: F811
                 summary="12 articles triaged",
             ),
             LlmCall(
-                at=now,
+                at=now - timedelta(minutes=29, seconds=30),  # during the triage run
                 task="triage",
                 model="claude-haiku-5-5",
                 input_tokens=100,
@@ -349,9 +349,24 @@ def test_agent_map_shows_each_part_live(loaded):  # noqa: F811
     assert status["ai_today"]["triage"]["calls"] == 1
     assert status["runs_24h"] == 3 and status["errors_24h"] == 1
 
-    page = agent_map.render(status, app_palette(), dark=False)
+    events = queries.agent_events(loaded, days=7)
+    assert [e["job"] for e in events] == ["news", "triage", "filings"]
+    triage = events[1]
+    assert triage["status"] == "ok" and triage["summary"] == "12 articles triaged"
+    assert triage["calls"] == 1 and triage["cost"] == pytest.approx(0.002)
+    assert events[0]["error"] == "HTTP 403 from a feed"
+
+    replay = agent_map.render(status, app_palette(), False, events, mode="replay")
+    assert 'id="play"' in replay and 'id="scrub"' in replay and '"mode": "replay"' in replay
+    assert "12 articles triaged" in replay  # the runs travel with the page
+    assert "</script>" not in replay.split('id="data"')[1].split("</script>")[0]
+    assert 'id="job-triage"' in replay and 'id="tool-anthropic"' in replay
+    assert "Turns the outside world into data" in replay  # each layer explains itself
+
+    page = agent_map.render(status, app_palette(), False, events, mode="live")
+    assert 'id="play"' not in page and "Today's action" in page
     assert 'class="chip running"' in page and "running for 2 min" in page
-    assert 'class="chip error" title="HTTP 403 from a feed"' in page
+    assert 'class="chip error" id="job-news" data-job="news" title="HTTP 403 from a feed"' in page
     assert "1 AI call today · $0.00" in page
     for layer in ("Perceive", "Plan", "Think", "Remember", "Act", "Guardrails", "Observe"):
         assert layer in page

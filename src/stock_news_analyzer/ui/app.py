@@ -12,7 +12,6 @@ from datetime import date, datetime, timedelta
 
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 from sqlalchemy.orm import Session
 
 from stock_news_analyzer.agents.orchestrator import SCHEDULE_FILE, load_schedule, next_runs
@@ -1927,10 +1926,9 @@ def agents_page() -> None:
         with Session(engine()) as session:
             status = queries.agent_status(session)
             events = queries.agent_events(session, days=7)
-        components.html(
+        st.iframe(
             agent_map.render(status, theme_palette(), dark(), events, mode="replay"),
-            height=1760,
-            scrolling=True,
+            height="content",
         )
         st.caption(
             f"{len(events)} runs and questions from the run log and the AI call log. Play "
@@ -1949,10 +1947,8 @@ def live_agent_map() -> None:
     with Session(engine()) as session:
         status = queries.agent_status(session)
         events = queries.agent_events(session, days=1)
-    components.html(
-        agent_map.render(status, theme_palette(), dark(), events, mode="live"),
-        height=1760,
-        scrolling=True,
+    st.iframe(
+        agent_map.render(status, theme_palette(), dark(), events, mode="live"), height="content"
     )
     st.caption(f"As of {status['now']:%d %b %Y, %H:%M:%S} IST; refreshed every 30 seconds.")
 

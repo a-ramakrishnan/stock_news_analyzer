@@ -1,6 +1,6 @@
 # Making it usable by others
 
-Version 1.8 · Nov 4, 2026 · @Ramki · companion to the [system design](design.md) and [agent design](agent-design.md); changes are listed in [README.md](README.md)
+Version 1.9 · Nov 4, 2026 · @Ramki · companion to the [system design](design.md) and [agent design](agent-design.md); changes are listed in [README.md](README.md)
 
 ## Goal
 
@@ -85,7 +85,7 @@ Pages grouped in the sidebar, in plain words:
 
 | Group | Pages |
 | --- | --- |
-| Today | Home (what changed since yesterday), Red flags |
+| Today | Home (what changed since yesterday), Red flags, Agent map |
 | Research | Stock, Ask, Themes, What moves the stock |
 | Library | Filings, News |
 | Set up | My stocks, Settings, System |
@@ -100,6 +100,10 @@ Every action people need, with a button, so the command line is only for develop
 - **Earnings calls:** read and re-read a call; see promises and their status.
 - **AI spend:** this month's cost by agent, against the budget, on Settings.
 - **Digest archive:** read any day's digest; download it as a file.
+
+### The Agent map
+
+Built after step 29: the whole system laid out as an agent's anatomy (input, perceive, plan, think, remember, act, output, with guardrails down the side and observe across the bottom), so the dashboard also teaches how an agentic system is built. **Today, live** shows each job's state and a narrated feed of today's runs; **Replay** plays the last 7 days back with moving dots, play, speed and a time slider. It reads only the run log and the AI call log.
 
 ### Look and feel
 

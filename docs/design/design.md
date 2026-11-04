@@ -1,6 +1,6 @@
 # Indian Market News Intelligence System — Design
 
-Version 1.21 · Nov 4, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
+Version 1.22 · Nov 4, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
 
 ## Goal and principles
 
@@ -23,7 +23,7 @@ A map of what is built and what is pending, agent by agent, is in [Agent design:
 | News triage (relevance, topic, sentiment, importance, same-story links) | Built (Claude Haiku 5.5) |
 | Move explainer | Built (Claude Sonnet 5.5) |
 | Event-to-return labels (1, 5, 20 days) | Built, per filing (so for each typed event's filing too) |
-| Daily digest and dashboard | Built: Markdown digest saved locally; Streamlit dashboard with 12 pages in five groups, a Guide, a Settings page and a first-run setup; redesigned in step 29 (light and dark themes, IBM Plex fonts bundled with the app, cards, number tiles, tables whose text wraps) |
+| Daily digest and dashboard | Built: Markdown digest saved locally; Streamlit dashboard with 13 pages in five groups, a Guide, a Settings page and a first-run setup; redesigned in step 29 (light and dark themes, IBM Plex fonts bundled with the app, cards, number tiles, tables whose text wraps). An Agent map shows the system as an agent's anatomy, live or replayed over the last 7 days, to teach how an agentic system works |
 | Event extraction and QA check | Built: results figures for every stock, from the exchange's XBRL files where filed, else read from the PDF (Claude Haiku 5.5), in step 16; typed events from the other filings (Haiku 5.5), each checked in code and, when flagged or important, by Sonnet 5.5, with a review queue, in step 17 |
 | Earnings call analysis and promise ledger | Built (Claude Sonnet 5.5): calls in step 12; promises checked against later results, and a credibility score per company, in step 13; every watchlist stock, owned or not, from step 15 |
 | Order and execution tracker | Built, steps 14–16: orders from filings (Claude Haiku 5.5), quarterly order books (Sonnet 5.5), metrics and peer ranks in code; coverage per stock; revenue gaps filled from results |

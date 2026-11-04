@@ -1109,7 +1109,12 @@ def agent_status(session: Session) -> dict:
     """What each part of the system is doing now, for the Agent map: every job's latest run
     (or that it is running), today's AI calls and cost per task, the month's spend, the last
     24 hours of runs, and the checks that keep the agents in bounds."""
-    from stock_news_analyzer.agents.orchestrator import SCHEDULE_FILE, load_schedule, next_runs
+    from stock_news_analyzer.agents.orchestrator import (
+        SCHEDULE_FILE,
+        load_schedule,
+        missed_runs,
+        next_runs,
+    )
     from stock_news_analyzer.config import get_settings
     from stock_news_analyzer.llm import month_spend
     from stock_news_analyzer.models import Question, RedFlag
@@ -1168,6 +1173,7 @@ def agent_status(session: Session) -> dict:
         "jobs": jobs,
         "scheduled": {j.name: j.enabled for j in schedule},
         "next": upcoming,
+        "missed": missed_runs(session, schedule, now) if schedule else {},
         "paused": paused_jobs(settings),
         "has_key": bool(settings.anthropic_api_key),
         "ai_today": ai_today,

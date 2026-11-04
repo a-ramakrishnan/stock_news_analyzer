@@ -78,6 +78,15 @@ The map moved to the Today group, under Red flags, and became a way to learn how
 
 The script is `ui/agent_map.js`, inlined into the page with the run data as JSON.
 
+### Missed runs and Catch up
+
+Prices and deals looked stale on the Mac: they ran only in the evening, when the Mac was often asleep, and APScheduler drops a run more than three hours late.
+- **Morning catch-up runs:** in `config/schedule.yaml`, `cron` can now be a list. Prices also run at 07:05 and deals at 07:06, Tuesday to Saturday. Both resume from their last stored day, so a second run on the same day costs nothing.
+- **Missed state:** `orchestrator.missed_runs` finds each enabled job whose scheduled run, since its last run (looking back at most 7 days), passed more than three hours ago without running. The Agent map shows those boxes in amber, "missed its Wed 28 Oct 21:30 run".
+- **Catch up:** a button on the Agent map and on System lists the missed jobs and runs them in the usual order (collect, judge, measure, report), with progress. `sna run missed` does the same from the command line. News looks back as many days as it missed, up to 30.
+
+Two tests check a job with several times and the missed and catch-up logic; 358 tests pass.
+
 ## On the Mac
 
 ```

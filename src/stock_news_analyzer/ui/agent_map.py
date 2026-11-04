@@ -90,6 +90,8 @@ def _state(status: dict, job: str) -> tuple[str, str]:
         return "off", "turned off" + (f" · last {run['started']:%d %b %H:%M}" if run else "")
     if run and run["status"] == "running":
         return "running", f"running for {int(run['seconds'] // 60)} min"
+    if job in status.get("missed", {}):
+        return "missed", f"missed its {status['missed'][job]:%a %d %b %H:%M} run"
     if run:
         line = f"{run['started']:%d %b %H:%M} · {run['seconds']:.0f}s"
         return ("error" if run["status"] == "error" else "ok"), line
@@ -311,6 +313,7 @@ def render(
                 (f"background:{p['accent_text']}", "running"),
                 (f"background:{p['up']}", "last run ok"),
                 (f"background:{p['down']}", "last run failed"),
+                (f"background:{p['medium']}", "missed a run"),
                 (f"border:1.5px solid {p['muted']}", "turned off"),
                 (f"background:{p['muted']}", "not run yet"),
             )

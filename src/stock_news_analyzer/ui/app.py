@@ -1921,6 +1921,8 @@ def agents_page() -> None:
         label_visibility="collapsed",
         key="agent-map-mode",
     )
+    if mode != "Replay the last 7 days":
+        catch_up_section("catch-up-map")
     if mode == "Replay the last 7 days":
         with Session(engine()) as session:
             status = queries.agent_status(session)
@@ -1953,6 +1955,41 @@ def live_agent_map() -> None:
         scrolling=True,
     )
     st.caption(f"As of {status['now']:%d %b %Y, %H:%M:%S} IST; refreshed every 30 seconds.")
+
+
+def catch_up_section(key: str) -> None:
+    """Jobs that missed a scheduled run (the computer asleep, Docker stopped), and a button
+    that runs them all now, in the scheduler's order, each from where it last stopped."""
+    from stock_news_analyzer.agents import orchestrator as orch
+
+    with Session(engine()) as session:
+        try:
+            missed = orch.missed_runs(session)
+        except (OSError, ValueError):
+            return
+    if not missed:
+        st.caption("Every scheduled job ran on time; nothing to catch up.")
+        return
+    names = ", ".join(f"{job} ({when:%a %d %b %H:%M})" for job, when in missed.items())
+    left, right = st.columns([4, 1], vertical_alignment="center")
+    left.warning(
+        f"{len(missed)} job{'s' * (len(missed) != 1)} missed a scheduled run: {names}. "
+        "Catch up runs them now; each picks up from where it last stopped.",
+        icon=":material/schedule:",
+    )
+    if right.button("Catch up", type="primary", icon=":material/fast_forward:", key=key):
+        with st.status("Catching up...", expanded=True) as box:
+            st.caption("This can take several minutes; keep this tab open until it finishes.")
+            with Session(engine()) as session, _StatusLog(box):
+                done = orch.catch_up(session, progress=box.write)
+            failed = [name for name, run in done if run.status != "ok"]
+            box.update(
+                label=f"Caught up {len(done)} job{'s' * (len(done) != 1)}"
+                + (f"; {', '.join(failed)} failed" if failed else ""),
+                state="error" if failed else "complete",
+                expanded=bool(failed),
+            )
+        load.clear()
 
 
 def run_now_section() -> None:
@@ -1999,6 +2036,8 @@ def system_page() -> None:
         "keeping-it-running",
     )
     run_now_section()
+    section_title("Catch up missed runs")
+    catch_up_section("catch-up-system")
     left, right = st.columns(2)
     with left:
         section_title("Schedule (India time)")

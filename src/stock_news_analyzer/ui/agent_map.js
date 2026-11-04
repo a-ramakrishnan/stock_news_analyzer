@@ -93,7 +93,7 @@
   function setState(job, state) {
     const el = byId("job-" + job);
     if (!el) return;
-    el.classList.remove("ok", "error", "waiting", "running", "off", "idle");
+    el.classList.remove("ok", "error", "waiting", "running", "off", "idle", "missed");
     el.classList.add(state);
   }
 

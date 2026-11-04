@@ -898,13 +898,22 @@ def run(
     job: str = typer.Argument(
         ...,
         help="filings, news, triage, deals, prices, xbrl, results, explain, concalls, promises, "
-        "orders, securities, digest, or all.",
+        "orders, securities, digest, all, or missed (every job that missed a scheduled run).",
     ),
 ) -> None:
     """Run a job now (as the orchestrator would) and record it in the run log."""
-    from stock_news_analyzer.agents.orchestrator import JOBS, RUN_ALL, run_job
+    from stock_news_analyzer.agents.orchestrator import JOBS, RUN_ALL, missed_runs, run_job
 
-    names = list(RUN_ALL) if job == "all" else [job]
+    if job == "missed":
+        with get_session() as session:
+            missed = missed_runs(session)
+        names = [n for n in RUN_ALL if n in missed] + sorted(set(missed) - set(RUN_ALL))
+        if not names:
+            typer.echo("every scheduled job ran on time; nothing to catch up")
+            return
+        typer.echo("missed: " + ", ".join(f"{n} ({missed[n]:%a %d %b %H:%M})" for n in names))
+    else:
+        names = list(RUN_ALL) if job == "all" else [job]
     unknown = [n for n in names if n not in JOBS]
     if unknown:
         typer.echo(f"unknown job '{unknown[0]}'; choose from: {', '.join(JOBS)}, all")

@@ -115,7 +115,8 @@ All times are India time. Everything is fetched from public websites by your own
 ## Keeping it running
 
 - **The morning jobs** run from 07:10 to 08:00 and the digest is ready at 08:00. Your computer must be on and Docker Desktop running then; the start script starts the scheduler.
-- **If the computer was off,** nothing is lost: the next run picks up whatever was filed in between.
+- **If the computer was off,** nothing is lost: the next run picks up whatever was filed in between. Prices and deals also run at 07:05 and 07:06 the next morning, in case the computer was asleep in the evening.
+- **To catch up,** press **Catch up** on **System** or the **Agent map**. It appears when a job missed its scheduled run (shown in amber on the map), and runs each missed job in order, each from where it last stopped.
 - **To see what ran,** open **System**, or the job health on **Today**.
 - **To stop a job,** turn it off on **Settings**; it stops running on its schedule within a minute.
 - **To run a job now,** for example after adding a stock or when a morning run failed, use **Run a job now** on **System**. It shows the job's progress; keep the tab open until it finishes.

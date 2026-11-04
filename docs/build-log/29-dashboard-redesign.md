@@ -61,7 +61,7 @@ A new page under Set up shows the whole system as an agent's anatomy, after a co
 | Guardrails | The monthly budget, the API key, job switches, the QA checker, Ask's read-only SQL, your decisions on flags and doubtful events, polite fetching |
 | Observe | Runs and errors in the last 24 hours, the average run time, AI calls and failures, the month's spend |
 
-Each box shows its job's state: running (pulsing), last run ok, failed, turned off or not run yet, plus its last run, its next run, and its AI calls and cost today. Hovering shows the last result or error. The page refreshes every 30 seconds (`st.fragment`). It is one HTML page in an iframe (`ui/agent_map.py`, styles in `agent_map.css`), fed by `queries.agent_status`. A test checks a running job, a failed one and today's AI calls on it.
+Each box shows its job's state: running (pulsing), last run ok, failed, turned off or not run yet, plus its last run, its next run, and its AI calls and cost today. Hovering shows the last result or error. The page refreshes every 30 seconds (`st.fragment`). It is one HTML page in an iframe (`st.iframe`; `ui/agent_map.py`, styles in `agent_map.css`), fed by `queries.agent_status`. A test checks a running job, a failed one and today's AI calls on it.
 
 The sidebar now always shows every page: with thirteen, Streamlit had started folding the last ones under "View 3 more".
 
@@ -90,6 +90,11 @@ Two tests check a job with several times and the missed and catch-up logic; 358 
 ### Lines, not dots
 
 Moving dots looked busy, so each run's path is now a thin line drawn over the map (an SVG layer), from box to box, that fades once drawn. At most three lines show at a time in a replay; in the live view a job running now gets one faint line that stays, with nothing looping. With the system's "reduce motion" setting, lines appear without being drawn.
+
+### Streamlit warnings
+
+- The map is shown with `st.iframe` instead of `components.html`, which Streamlit has deprecated. The frame now takes its content's height, so the map no longer scrolls inside a fixed 1760-pixel box.
+- `.streamlit/config.toml` no longer sets `base` under `[theme.light]` and `[theme.dark]`, which Streamlit warned is not a valid option there; the sections are light and dark by their names.
 
 ## On the Mac
 

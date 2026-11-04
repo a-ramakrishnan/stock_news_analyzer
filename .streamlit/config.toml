@@ -47,7 +47,6 @@ url = "app/static/fonts/ibm-plex-mono-latin-500-normal.woff2"
 weight = "500"
 
 [theme.light]
-base = "light"
 primaryColor = "#005477"
 backgroundColor = "#fbfaf7"
 secondaryBackgroundColor = "#f3f0ea"
@@ -68,7 +67,6 @@ secondaryBackgroundColor = "#dce6ed"
 borderColor = "#e1ded7"
 
 [theme.dark]
-base = "dark"
 primaryColor = "#65bae1"
 backgroundColor = "#0b1015"
 secondaryBackgroundColor = "#1f252b"

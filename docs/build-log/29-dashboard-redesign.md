@@ -96,6 +96,10 @@ Moving dots looked busy, so each run's path is now a thin line drawn over the ma
 - The map is shown with `st.iframe` instead of `components.html`, which Streamlit has deprecated. The frame now takes its content's height, so the map no longer scrolls inside a fixed 1760-pixel box.
 - `.streamlit/config.toml` no longer sets `base` under `[theme.light]` and `[theme.dark]`, which Streamlit warned is not a valid option there; the sections are light and dark by their names.
 
+### The start script builds a git checkout from its code
+
+On the Mac, `make start` showed the dashboard from before the redesign. The start script pulled the published image, `latest`, which only changes with a release, and the `.env` there predated `SNA_PULL_POLICY=build` in `.env.example`. Now, in a git checkout (a `.git` folder) and with no `SNA_PULL_POLICY` in `.env` or the environment, `start.command` and `start.bat` build the image from the folder's code. A downloaded copy still pulls the published image.
+
 ## On the Mac
 
 ```

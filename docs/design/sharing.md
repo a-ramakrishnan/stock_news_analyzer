@@ -155,7 +155,7 @@ The Guide comes first because it is quick and shows where the app is hard to fol
 
 Decided Oct 28, 2026: **MIT licence; the repository stays private for now.** Then, on Nov 2, 2026: **get it ready to go public** (step 28):
 - **The author's watchlist** is no longer tracked, and is removed from every commit. Company names stay in the build logs as worked examples, without saying which are owned; the test watchlist marks none as owned.
-- **The prebuilt image is the default:** the start script pulls the newest release (`SNA_PULL_POLICY=always`), falls back to the image already downloaded, then to building. Developers set `SNA_PULL_POLICY=build`.
+- **The prebuilt image is the default:** the start script pulls the newest release (`SNA_PULL_POLICY=always`), falls back to the image already downloaded, then to building. In a git checkout the start script builds from the code instead (`SNA_PULL_POLICY=build`), unless `.env` sets the policy.
 - **Going public** is the author's switch: the repository and the image package made public, then `make release VERSION=0.1.0`.
 
 The questions as first asked:

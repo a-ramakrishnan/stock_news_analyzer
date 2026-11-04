@@ -44,11 +44,26 @@ exit /b 1
 :db_ready
 echo The database is ready.
 
-echo Starting the dashboard and the scheduler. The first time, downloading the app takes a few minutes...
-rem The newest prebuilt image; if that fails, the image already here; if none, a build.
+rem A git checkout (a developer's copy, kept up to date with git pull) runs its own code: the
+rem app is built from this folder, not downloaded, unless .env chooses with SNA_PULL_POLICY.
+rem The published image only changes with a release, so it can be older than the code here.
+if not defined SNA_PULL_POLICY if exist .git (
+  findstr /b "SNA_PULL_POLICY=" .env >nul 2>&1 || set SNA_PULL_POLICY=build
+)
+if "%SNA_PULL_POLICY%"=="build" (
+  echo Starting the dashboard and the scheduler, built from this folder's code ^(a few minutes the first time^)...
+) else (
+  echo Starting the dashboard and the scheduler. The first time, downloading the app takes a few minutes...
+)
+rem The newest prebuilt image (or a build, as above); if that fails, the image already here;
+rem if none, a build.
 docker compose up -d
 if not errorlevel 1 goto app_started
-echo Couldn't download the newest version; trying the one already on this computer...
+if "%SNA_PULL_POLICY%"=="build" (
+  echo The build didn't work; trying the version already on this computer...
+) else (
+  echo Couldn't download the newest version; trying the one already on this computer...
+)
 set SNA_PULL_POLICY=missing
 docker compose up -d
 if not errorlevel 1 goto app_started

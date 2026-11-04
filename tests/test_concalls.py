@@ -412,6 +412,10 @@ def test_stock_page_shows_calls(loaded, tmp_path, test_database_url, monkeypatch
     at.query_params["symbol"] = "LT"
     at.run()
     assert not at.exception, at.exception
-    text = " ".join(m.value for m in at.markdown)
-    assert "Q2 FY27: cautious tone" in text and "Watch Middle East collections" in text
+    text = " ".join(
+        [m.value for m in at.markdown]
+        + [h.value for h in at.subheader]
+        + [h.proto.body for h in at.get("html")]
+    )
+    assert "Tone: <b>cautious</b>" in text and "Watch Middle East collections" in text
     assert "Promise ledger" in text

@@ -507,7 +507,8 @@ def test_results_reach_digest_dashboard_cli_and_scheduler(
     at.query_params["symbol"] = "LT"
     at.run()
     assert not at.exception, at.exception
-    assert any(m.label == "Revenue, Q2 FY27" and m.value == "Rs 67,000 cr" for m in at.metric)
+    tiles = " ".join(h.proto.body for h in at.get("html"))
+    assert '<div class="l">Revenue, Q2 FY27</div><div class="v">Rs 67,000 cr</div>' in tiles
 
 
 @pytest.mark.db

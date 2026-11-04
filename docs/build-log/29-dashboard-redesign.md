@@ -45,6 +45,26 @@ Each step was run on a demo database built from the test data, with sample resul
 - `sna watchlist history SYMBOL...` loads several new stocks' history in one go, like "Load history now" on Manage stocks. It was used to bring the ten largest Nifty 50 stocks up to date.
 - `make start` opens Docker Desktop if needed, starts the database first and waits for it, then the dashboard and the scheduler (build log 27).
 
+## Then: the Agent map
+
+A new page under Set up shows the whole system as an agent's anatomy, after a common diagram of how AI agents work, and live:
+
+| Part | In this system |
+| --- | --- |
+| Input | NSE and BSE websites, news feeds and Google News, Yahoo Finance, the schedule, your questions |
+| Perceive | The collectors (filings, news, prices, deals, XBRL results, shareholding, bullion, company lists): no AI |
+| Plan | The scheduler: what is running now, what runs next, in a fixed order (collect, judge, measure, report) |
+| Think | The AI agents, each with its model: triage, results, events and the QA checker, the move explainer, earnings calls, promises, order books, themes, Ask; and the red-flag rules (no AI) |
+| Remember | Short-term: each run's working set. Long-term: the Postgres archive, with counts |
+| Act | Tools: the Anthropic API (calls and cost today), exchange downloads, the database (Ask reads only), the data folder |
+| Output | The morning digest, the dashboard, open red flags |
+| Guardrails | The monthly budget, the API key, job switches, the QA checker, Ask's read-only SQL, your decisions on flags and doubtful events, polite fetching |
+| Observe | Runs and errors in the last 24 hours, the average run time, AI calls and failures, the month's spend |
+
+Each box shows its job's state: running (pulsing), last run ok, failed, turned off or not run yet, plus its last run, its next run, and its AI calls and cost today. Hovering shows the last result or error. The page refreshes every 30 seconds (`st.fragment`). It is one HTML page in an iframe (`ui/agent_map.py`, styles in `agent_map.css`), fed by `queries.agent_status`. A test checks a running job, a failed one and today's AI calls on it.
+
+The sidebar now always shows every page: with thirteen, Streamlit had started folding the last ones under "View 3 more".
+
 ## On the Mac
 
 ```

@@ -1103,3 +1103,89 @@ def latest_digest(data_dir: Path) -> tuple[str, str] | None:
     if not files:
         return None
     return files[-1].name, files[-1].read_text(encoding="utf-8")
+
+
+def agent_status(session: Session) -> dict:
+    """What each part of the system is doing now, for the Agent map: every job's latest run
+    (or that it is running), today's AI calls and cost per task, the month's spend, the last
+    24 hours of runs, and the checks that keep the agents in bounds."""
+    from stock_news_analyzer.agents.orchestrator import SCHEDULE_FILE, load_schedule, next_runs
+    from stock_news_analyzer.config import get_settings
+    from stock_news_analyzer.llm import month_spend
+    from stock_news_analyzer.models import Question, RedFlag
+    from stock_news_analyzer.settings_store import paused_jobs
+
+    now = datetime.now(IST)
+    jobs: dict[str, dict] = {}
+    latest = select(Run.job, func.max(Run.started_at).label("started")).group_by(Run.job).subquery()
+    for run in session.scalars(
+        select(Run).join(latest, (Run.job == latest.c.job) & (Run.started_at == latest.c.started))
+    ):
+        status = run.status
+        if status == "running" and run.started_at < now - timedelta(hours=3):
+            status = "error"  # cut off by a restart
+        jobs[run.job] = {
+            "status": status,
+            "started": run.started_at.astimezone(IST),
+            "seconds": (run.finished_at - run.started_at).total_seconds()
+            if run.finished_at
+            else (now - run.started_at).total_seconds(),
+            "summary": run.summary,
+            "error": run.error,
+        }
+    try:
+        schedule = load_schedule(SCHEDULE_FILE)
+        upcoming = next_runs(schedule, now)
+    except (OSError, ValueError):
+        schedule, upcoming = [], {}
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    ai_today = {
+        task: {"calls": calls, "cost": float(cost or 0)}
+        for task, calls, cost in session.execute(
+            select(LlmCall.task, func.count(), func.sum(LlmCall.cost_usd))
+            .where(LlmCall.at >= day_start)
+            .group_by(LlmCall.task)
+        )
+    }
+    since = now - timedelta(hours=24)
+    runs_24h = session.execute(
+        select(
+            func.count(),
+            func.count().filter(Run.status == "error"),
+            func.avg(func.extract("epoch", Run.finished_at - Run.started_at)),
+        ).where(Run.started_at >= since)
+    ).one()
+    calls_24h = session.execute(
+        select(func.count(), func.count().filter(~LlmCall.ok)).where(LlmCall.at >= since)
+    ).one()
+    settings = get_settings()
+
+    def count(model, *where) -> int:
+        return session.scalar(select(func.count()).select_from(model).where(*where)) or 0
+
+    return {
+        "now": now,
+        "jobs": jobs,
+        "scheduled": {j.name: j.enabled for j in schedule},
+        "next": upcoming,
+        "paused": paused_jobs(settings),
+        "has_key": bool(settings.anthropic_api_key),
+        "ai_today": ai_today,
+        "spent": float(month_spend(session)),
+        "budget": settings.llm_monthly_budget_usd,
+        "runs_24h": runs_24h[0],
+        "errors_24h": runs_24h[1],
+        "avg_seconds": float(runs_24h[2] or 0),
+        "ai_calls_24h": calls_24h[0],
+        "ai_failed_24h": calls_24h[1],
+        "stored": {
+            "filings": count(Document, Document.doc_type.not_in(("news", "bullion_news"))),
+            "news": count(Document, Document.doc_type == "news"),
+            "events": count(Event),
+            "calls": count(Concall, Concall.status == "analysed"),
+            "promises": count(Promise),
+            "questions": count(Question),
+        },
+        "unchecked_events": count(Event, Event.qa_status == "flagged", Event.review.is_(None)),
+        "open_flags": count(RedFlag, RedFlag.dismissed_at.is_(None)),
+    }

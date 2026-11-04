@@ -28,7 +28,7 @@ Start the system with **start.command** (Mac) or **start.bat** (Windows) in its 
 
 ## The pages
 
-The sidebar groups the pages: **Today** (what changed), **Research** (one stock, questions, themes), **Library** (every filing and article), **Set up** (stocks, settings, system) and **Help**.
+The sidebar groups the pages: **Today** (what changed), **Research** (one stock, questions, themes), **Library** (every filing and article), **Set up** (stocks, settings, system, the agent map) and **Help**.
 
 - **Today:** index levels, a card for each stock (Stocks I own first), the latest digest, recent red flags, and whether the morning jobs ran.
 - **Red flags:** every flag, filtered by severity, period and stock. Select one to dismiss it with a note once you have looked into it, or to open a dismissed one again.
@@ -43,6 +43,7 @@ The sidebar groups the pages: **Today** (what changed), **Research** (one stock,
 - **Manage stocks:** add, edit and remove stocks; load a new stock's history.
 - **Settings:** the API key, the monthly AI budget and models, the unusual-day threshold, and which scheduled jobs run.
 - **System:** run any job now and watch it work; the schedule, how much is stored, recent runs and errors, and the AI spend this month by task.
+- **Agent map:** the whole system on one page, live: the collectors, the scheduler, the AI agents, memory, tools, the guardrails around them and the run log. Each box shows whether its job is running, worked or failed last time, its next run, and its AI calls and cost today. Hover over a box for its last result.
 - **Guide:** this page.
 
 ## Settings

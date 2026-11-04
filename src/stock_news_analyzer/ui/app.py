@@ -5,6 +5,7 @@ and can load a new stock's history, and Ask, which asks the Analyst Q&A (an LLM 
 the question. Regular collecting is done by the scheduler.
 """
 
+import base64
 import html
 import logging
 from datetime import date, datetime, timedelta
@@ -128,6 +129,8 @@ STYLE = """
 [data-testid="stMetricValue"]{font-size:1.5rem;font-variant-numeric:tabular-nums}
 [data-testid="stMetricLabel"]{color:var(--sna-muted)}
 h1{letter-spacing:-.01em}
+/* Section headings are small, as in the design; the page title carries the weight. */
+[data-testid="stMainBlockContainer"] h3{font-size:1.1rem;padding-top:.6rem}
 /* The index strip: many indices fit on a row and wrap on narrow screens. */
 .sna-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:8px;
   margin:4px 0 12px}
@@ -149,6 +152,28 @@ h1{letter-spacing:-.01em}
 .sna-dot.medium{background:var(--sna-medium)}
 .sna-high{color:var(--sna-high)}
 .sna-medium{color:var(--sna-medium)}
+.sna-low{color:var(--sna-low)}
+.sna-small{font-size:.8rem;line-height:1.45}
+.sna-badge{display:inline-block;font-size:.72rem;font-weight:600;padding:2px 8px;
+  border-radius:.35rem;background:var(--sna-high);color:#fff;white-space:nowrap}
+/* Stock cards on Today. */
+.sna-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.sna-card-head .sna-muted{font-size:.85rem}
+.sna-symbol{font-size:.9rem;font-weight:700}
+.sna-price-row{display:flex;justify-content:space-between;align-items:flex-end;gap:8px;
+  margin:10px 0 6px}
+.sna-price{font-size:1.3rem;font-weight:600;font-variant-numeric:tabular-nums}
+.sna-change{font-size:.9rem;font-weight:500;font-variant-numeric:tabular-nums}
+.sna-rule{border-top:1px solid var(--sna-border);margin:2px 0 -6px}
+/* Red flags as rows: dot, date, kind, then the stock and what happened. */
+.sna-flags{margin:-6px -4px}
+.sna-flag{display:flex;align-items:baseline;gap:12px;padding:9px 4px;font-size:.9rem;
+  border-top:1px solid var(--sna-border)}
+.sna-flag:first-child{border-top:0}
+.sna-flag .sna-dot{flex:none;margin-right:0}
+.sna-flag-date{flex:none;width:3.6rem;font-variant-numeric:tabular-nums}
+.sna-flag-kind{flex:none;font-weight:500}
+@media (max-width:640px){.sna-flag{flex-wrap:wrap;gap:4px 10px}}
 </style>
 """
 
@@ -178,42 +203,121 @@ def index_tiles(rows: list[dict]) -> None:
     st.markdown(f'<div class="sna-tiles">{"".join(tiles)}</div>', unsafe_allow_html=True)
 
 
+def signed(x, digits: int = 2) -> str:
+    """A percentage with its sign and a true minus (−1.24%), or a dash."""
+    return "–" if x is None or pd.isna(x) else f"{x:+.{digits}%}".replace("-", "−")
+
+
+def trend(x) -> str:
+    """The class that colours a change: up, down or neither."""
+    if x is None or pd.isna(x) or x == 0:
+        return ""
+    return "sna-up" if x > 0 else "sna-down"
+
+
+def change_html(x) -> str:
+    """A day's change with an arrow, coloured: ▲ +1.24%."""
+    if x is None or pd.isna(x):
+        return '<span class="sna-muted">–</span>'
+    return f'<span class="{trend(x)}">{"▲" if x >= 0 else "▼"} {signed(x)}</span>'
+
+
+def sparkline(values: list[float], width: int = 96, height: int = 32) -> str:
+    """A small line of the last three months, green if it ended higher, red if lower. An image,
+    since st.html leaves out inline SVG."""
+    if len(values) < 2:
+        return ""
+    low, high = min(values), max(values)
+    points = " ".join(
+        f"{i / (len(values) - 1) * width:.1f},"
+        f"{height - (v - low) / ((high - low) or 1) * (height - 2) - 1:.1f}"
+        for i, v in enumerate(values)
+    )
+    colours = PALETTE["dark" if dark() else "light"]
+    colour = colours["up"] if values[-1] >= values[0] else colours["down"]
+    svg = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
+        f'viewBox="0 0 {width} {height}"><polyline points="{points}" fill="none" '
+        f'stroke="{colour}" stroke-width="1.5"/></svg>'
+    )
+    data = base64.b64encode(svg.encode()).decode()
+    return (
+        f'<img src="data:image/svg+xml;base64,{data}" width="{width}" height="{height}" '
+        'alt="Last three months">'
+    )
+
+
+def section_title(title: str, link_page=None, link_label: str = "") -> None:
+    """A section heading, with an optional link on the right."""
+    if link_page is None:
+        st.subheader(title)
+        return
+    left, right = st.columns([4, 1], vertical_alignment="bottom")
+    left.subheader(title)
+    with right:
+        st.page_link(link_page, label=link_label, icon=":material/arrow_forward:")
+
+
 def stock_card(s: dict) -> None:
+    """A card per stock: the close and the day's change with a 3-month line, the move against
+    the Nifty 50 and the sector, an Unusual badge with the likely cause, and a link to it."""
     threshold = get_settings().unusual_threshold
-    with st.container(border=True, key=f"card-{s['isin']}"):
-        head, badge = st.columns([3, 1])
-        head.markdown(f"**{s['symbol']}**  \n:gray[{s['name']}]")
-        if s["unusual"]:
-            badge.badge(
-                "Unusual",
-                icon=":material/warning:",
-                color="red",
-                help=f"Move vs Nifty 50 beyond {threshold}σ of the last 60 days",
+    spark = load("performance", isin=s["isin"], start=date.today() - timedelta(days=91))
+    badge = (
+        f'<span class="sna-badge" title="Move vs Nifty 50 beyond {threshold}σ of the last '
+        '60 days">Unusual</span>'
+        if s["unusual"]
+        else ""
+    )
+    compare = (
+        f'vs Nifty 50 <span class="{trend(s["excess_return"])}">{signed(s["excess_return"])}</span>'
+    )
+    if s["sector_index"]:
+        compare += (
+            f" · vs {html.escape(s['sector_index'])} "
+            f'<span class="{trend(s["sector_excess_return"])}">'
+            f"{signed(s['sector_excess_return'])}</span>"
+        )
+    if s["zscore"] is not None:
+        compare += f" · z {s['zscore']:.1f}".replace("-", "−")
+    cause = (
+        f'<div class="sna-small"><span class="sna-muted">Likely cause:</span> '
+        f"<b>{html.escape(s['cause'].replace('_', ' '))}</b></div>"
+        if s["unusual"] and s.get("cause")
+        else ""
+    )
+    close = f"₹{s['close']:,.2f}" if s["close"] else "–"
+    with st.container(border=True, key=f"card-{s['isin']}", gap="small"):
+        st.html(
+            f'<div class="sna-card-head"><div><div class="sna-mono sna-symbol">'
+            f"{html.escape(s['symbol'] or '')}</div>"
+            f'<div class="sna-muted">{html.escape(s["name"])}</div></div>{badge}</div>'
+            f'<div class="sna-price-row"><div><div class="sna-price">{close}</div>'
+            f'<div class="sna-change">{change_html(s["stock_return"])}</div></div>'
+            f"{sparkline(list(spark['stock'].dropna())) if not spark.empty else ''}</div>"
+            f'<div class="sna-small sna-muted">{compare}</div>{cause}'
+        )
+        st.html('<div class="sna-rule"></div>')
+        left, right = st.columns([2, 1], vertical_alignment="center")
+        left.caption(f"Last 7 days: {s['filings_7d']} filings, {s['news_7d']} news articles")
+        with right:
+            st.page_link(
+                stock_page,
+                label="Open",
+                icon=":material/arrow_forward:",
+                query_params={"symbol": s["symbol"]},
             )
-            if s.get("cause"):
-                st.caption(f"Likely cause: {s['cause'].replace('_', ' ')}")
-        spark = load("performance", isin=s["isin"], start=date.today() - timedelta(days=91))
-        st.metric(
-            f"Close {s['date']:%d %b}" if s["date"] else "Close",
-            f"₹{s['close']:,.2f}" if s["close"] else "–",
-            pct(s["stock_return"]) if s["stock_return"] is not None else None,
-            chart_data=list(spark["stock"]) if not spark.empty else None,
-            chart_type="line",
-        )
-        st.markdown(
-            f"vs Nifty 50 **{pct(s['excess_return'])}** · "
-            f"vs {s['sector_index'] or 'sector'} **{pct(s['sector_excess_return'])}** · "
-            f"z **{s['zscore']:.1f}**"
-            if s["zscore"] is not None
-            else f"vs Nifty 50 **{pct(s['excess_return'])}**"
-        )
-        st.caption(f"Last 7 days: {s['filings_7d']} filings, {s['news_7d']} news articles")
-        st.page_link(
-            stock_page,
-            label="Open",
-            icon=":material/arrow_forward:",
-            query_params={"symbol": s["symbol"]},
-        )
+
+
+def page_header(title: str, description: str, section: str, *notes: str) -> None:
+    """A page's title with its "How to use this page" link, then a line on what it shows."""
+    left, right = st.columns([4, 1], vertical_alignment="bottom")
+    left.title(title)
+    with right:
+        help_link(section)
+    for note in notes:
+        st.caption(note)
+    st.caption(description)
 
 
 def today_page() -> None:
@@ -222,12 +326,13 @@ def today_page() -> None:
         no_data("No stocks yet. Add them on the Manage stocks page.")
         return
     latest = max((s["date"] for s in watch if s["date"]), default=None)
-    st.title("Today")
-    help_link("a-daily-routine")
-    st.caption(
+    page_header(
+        "Today",
+        "What changed since yesterday across your stocks.",
+        "a-daily-routine",
         f"Last trading day loaded: {latest:%a %d %b %Y}"
         if latest
-        else "No prices loaded yet: run the **prices** job on System (Run a job now)."
+        else "No prices loaded yet: run the **prices** job on System (Run a job now).",
     )
     index_tiles(load("market"))
     red_flag_list(load("red_flags"), "Red flags, last 30 days")
@@ -235,7 +340,7 @@ def today_page() -> None:
     owned = [s for s in watch if s["owned"]]
     watching = [s for s in watch if not s["owned"]]
     for title, group in (("Stocks I own", owned), ("Watchlist", watching)):
-        st.subheader(f"{title} ({len(group)})")
+        section_title(f"{title} ({len(group)})")
         if not group:
             st.caption("None yet. Add stocks on the Manage stocks page.")
             help_link("getting-started")
@@ -249,26 +354,46 @@ def today_page() -> None:
 
     left, right = st.columns([2, 1])
     with left:
-        st.subheader("Latest digest")
+        section_title("Latest digest")
         digest = queries.latest_digest(get_settings().data_dir)
         if digest:
             name, text = digest
-            with st.expander(name, expanded=False):
+            try:
+                label = f"{datetime.strptime(name[:15], '%Y-%m-%d_%H%M'):%d %b %Y, %H:%M} IST"
+            except ValueError:
+                label = name.removesuffix(".md")
+            with st.expander(f"Morning report · {label}", expanded=False):
                 st.markdown(text)
         else:
             no_data("No digest saved yet. The scheduler writes one every morning.")
     with right:
-        st.subheader("Data collection")
+        section_title("Data collection")
         last = load("last_runs")
-        rows = [
-            {
-                "job": job,
-                "last run": r["started"].strftime("%d %b %H:%M") if r else "never",
-                "status": ("✅ ok" if r["status"] == "ok" else f"⚠️ {r['status']}") if r else "–",
-            }
-            for job, r in last.items()
-        ]
-        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+        rows = pd.DataFrame(
+            [
+                {
+                    "Job": job,
+                    "Last run": r["started"].strftime("%d %b %H:%M") if r else "never",
+                    "Status": ("✅ ok" if r["status"] == "ok" else f"⚠️ {r['status']}")
+                    if r
+                    else "–",
+                }
+                for job, r in last.items()
+            ]
+        )
+        colours = PALETTE["dark" if dark() else "light"]
+        st.dataframe(
+            rows.style.map(
+                lambda v: (
+                    f"color:{colours['up'] if v.startswith('✅') else colours['high']}"
+                    if v[:1] in "✅⚠"
+                    else ""
+                ),
+                subset=["Status"],
+            ),
+            hide_index=True,
+            width="stretch",
+        )
 
 
 def stock_page_body() -> None:
@@ -699,55 +824,84 @@ def results(s: dict) -> None:
 
 def bullion_section() -> None:
     """Each watched metal's last 30 days: the rupee move split into global price, rupee and
-    the rest, with notes on unusual days."""
+    the rest, with notes on unusual days (shaded)."""
     metals = load("bullion_metals")
     if not metals:
         return
-    st.subheader("Bullion")
-    for metal, tab in zip(metals, st.tabs([m.title() for m in metals]), strict=True):
-        with tab:
-            rows = load("bullion", metal=metal, days=30)
-            if rows.empty:
-                no_data("No moves yet: run the **bullion** job on System (Run a job now).")
-                continue
-            st.dataframe(
-                rows,
-                hide_index=True,
-                width="stretch",
-                column_config={
-                    "date": st.column_config.DateColumn("Day", format="DD MMM YYYY"),
-                    "close": st.column_config.NumberColumn("ETF close", format="₹%.2f"),
-                    "rupees": st.column_config.NumberColumn("In rupees", format="percent"),
-                    "global": st.column_config.NumberColumn("Global price", format="percent"),
-                    "rupee": st.column_config.NumberColumn("USD/INR", format="percent"),
-                    "other": st.column_config.NumberColumn("Other", format="percent"),
-                    "z": st.column_config.NumberColumn("z", format="%+.1f"),
-                    "driver": st.column_config.TextColumn("Driver"),
-                    "note": st.column_config.TextColumn("Note", width="large"),
-                },
-            )
-    st.caption(
-        "The Indian price is the close of an NSE ETF holding the metal (GOLDBEES, SILVERBEES). "
-        "Other: duty, the local premium, and the gap between the Indian and New York closes. "
-        "Notes are written for unusual days (2σ)."
-    )
+    section_title("Bullion")
+    colours = PALETTE["dark" if dark() else "light"]
+
+    def colour(v) -> str:
+        if v is None or pd.isna(v) or v == 0:
+            return ""
+        return f"color:{colours['up'] if v > 0 else colours['down']}"
+
+    def shade(row) -> list[str]:
+        unusual = row["z"] is not None and pd.notna(row["z"]) and abs(row["z"]) >= 2
+        return [f"background-color:{colours['soft']}" if unusual else ""] * len(row)
+
+    with st.container(border=True, key="card-bullion"):
+        st.caption(
+            "Each day's move of an NSE ETF holding the metal (GOLDBEES, SILVERBEES), split into "
+            "the global price, the rupee–dollar rate and the rest (duty, the local premium, the "
+            "gap between the Indian and New York closes). Shaded rows are unusual days (2σ), "
+            "with a note on what drove them."
+        )
+        for metal, tab in zip(metals, st.tabs([m.title() for m in metals]), strict=True):
+            with tab:
+                rows = load("bullion", metal=metal, days=30)
+                if rows.empty:
+                    no_data("No moves yet: run the **bullion** job on System (Run a job now).")
+                    continue
+                moves = ["rupees", "global", "rupee", "other"]
+                rows = rows.assign(driver=rows["driver"].fillna(""), note=rows["note"].fillna(""))
+                styled = (
+                    rows.style.apply(shade, axis=1)
+                    .map(colour, subset=moves)
+                    .format(signed, subset=moves)
+                    .format("{:,.2f}", subset=["close"])
+                    .format(
+                        lambda z: "–" if pd.isna(z) else f"{z:+.1f}".replace("-", "−"), subset=["z"]
+                    )
+                    .format(lambda d: f"{d:%d %b %Y}", subset=["date"])
+                )
+                st.dataframe(
+                    styled,
+                    hide_index=True,
+                    width="stretch",
+                    column_config={
+                        "date": st.column_config.TextColumn("Day"),
+                        "close": st.column_config.TextColumn(f"{metal.title()} ETF close (₹)"),
+                        "rupees": st.column_config.TextColumn("Move (₹)"),
+                        "global": st.column_config.TextColumn("Global price"),
+                        "rupee": st.column_config.TextColumn("USD/INR"),
+                        "other": st.column_config.TextColumn("Other"),
+                        "z": st.column_config.TextColumn("z"),
+                        "driver": st.column_config.TextColumn("Driver"),
+                        "note": st.column_config.TextColumn("Note", width="large"),
+                    },
+                )
 
 
 def red_flag_list(flags: list[dict], title: str) -> None:
-    """High flags in red, medium in amber; nothing when there are none."""
+    """One row per flag: a dot coloured by severity, the date, the kind, the stock and what
+    happened. Nothing when there are none."""
     if not flags:
         return
-    st.subheader(title)
-    for f in flags:
-        line = f"**{f['date']:%d %b}** · {f['kind']} · {f['title']}"
-        if f["detail"]:
-            line += f" ({f['detail']})"
-        (st.error if f["severity"] == "high" else st.warning)(line)
-    st.page_link(
-        PAGES["flags"],
-        label="All red flags, and dismiss the ones dealt with",
-        icon=":material/flag:",
+    section_title(title, PAGES["flags"], "All red flags")
+    rows = "".join(
+        f'<div class="sna-flag"><span class="sna-dot {f["severity"]}" '
+        f'title="{f["severity"]}"></span><span class="sna-muted sna-flag-date">'
+        f'{f["date"]:%d %b}</span><span class="sna-{f["severity"]} sna-flag-kind">'
+        f'{html.escape(f["kind"])}</span><span><b class="sna-mono">{html.escape(f["symbol"])}</b>: '
+        f"{html.escape(f['title'])}"
+        + (f' <span class="sna-muted">({html.escape(f["detail"])})</span>' if f["detail"] else "")
+        + "</span></div>"
+        for f in flags
     )
+    key = "".join(c if c.isalnum() else "-" for c in title.lower())
+    with st.container(border=True, key=f"card-flags-{key}"):
+        st.html(f'<div class="sna-flags">{rows}</div>')
 
 
 def events_tab_body(s: dict) -> None:

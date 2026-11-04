@@ -217,6 +217,8 @@ h1{letter-spacing:-.01em}
 .sna-tone{font-size:.95rem;display:flex;align-items:center;gap:6px}
 .sna-tone .sna-dot{margin-right:0}
 .sna-summary{margin:.5rem 0 0;line-height:1.55}
+.sna-h3{font-size:1.1rem;font-weight:600;margin:1.2rem 0 .2rem;display:flex;align-items:center;
+  gap:8px}
 .sna-sources{font-size:.82rem;color:var(--sna-muted);border-top:1px solid var(--sna-border);
   padding-top:8px;margin-top:4px}
 .sna-sources ol{margin:4px 0 0 1.2rem;padding:0}
@@ -1370,12 +1372,12 @@ def reactions_table(df: pd.DataFrame) -> None:
 
 
 def filings_page() -> None:
-    st.title("Filings")
-    st.caption(
+    page_header(
+        "Filings",
         "Every filing your stocks made with NSE and BSE. Search by stock, type, words or date, "
-        "and select a row to read the filing's text."
+        "and select a row to read the filing's text.",
+        "the-pages",
     )
-    help_link()
     a, b, c, d = st.columns([1.2, 1.5, 1.5, 1], vertical_alignment="bottom")
     with a:
         s = stock_picker("filings-stock")
@@ -1399,12 +1401,12 @@ def filings_page() -> None:
 
 
 def news_page() -> None:
-    st.title("News")
-    st.caption(
+    page_header(
+        "News",
         "Articles about your stocks from news feeds and Google News, with the AI's relevance "
-        "and importance where it has read them."
+        "and importance where it has read them.",
+        "the-pages",
     )
-    help_link()
     a, b, c = st.columns([1.2, 2, 1], vertical_alignment="bottom")
     with a:
         s = stock_picker("news-stock")
@@ -1443,63 +1445,81 @@ def news_page() -> None:
 
 
 def themes_page() -> None:
-    st.title("Themes")
-    help_link()
-    st.caption(
-        "Events, orders and earnings-call points of your stocks, tagged with themes (Haiku). "
-        "Items: the last 90 days; before: the 90 days before that."
+    page_header(
+        "Themes",
+        "Themes across your companies, whether they are getting stronger, and news at one "
+        "company that may matter to another. Events, orders and earnings-call points are "
+        "tagged with themes by AI; items count the last 90 days, before the 90 days before.",
+        "the-pages",
     )
     themes = load("themes")
     if themes.empty:
         no_data("No themes yet: run the **themes** job on System (Run a job now).")
         return
-    st.dataframe(
-        themes.drop(columns=["key"]),
-        hide_index=True,
-        width="stretch",
-        column_config={
-            "theme": st.column_config.TextColumn("Theme"),
-            "items": st.column_config.NumberColumn("Items, 90 days"),
-            "before": st.column_config.NumberColumn("90 days before"),
-            "positive": st.column_config.NumberColumn("Positive"),
-            "negative": st.column_config.NumberColumn("Negative"),
-            "orders_cr": st.column_config.NumberColumn("Orders, Rs crore", format="localized"),
-            "companies": st.column_config.TextColumn("Companies", width="large"),
-        },
+
+    def trend_arrow(value, row) -> str:
+        arrow = ""
+        if row["items"] > row["before"]:
+            arrow = ' <span class="sna-up" title="More than the 90 days before">↑</span>'
+        elif row["items"] < row["before"]:
+            arrow = ' <span class="sna-down" title="Fewer than the 90 days before">↓</span>'
+        return f"<b>{esc(value)}</b>{arrow}"
+
+    def count(cls):
+        return lambda v, r: (
+            f'<span class="{cls}">{v}</span>' if v else '<span class="sna-muted">0</span>'
+        )
+
+    html_table(
+        themes,
+        [
+            ("Theme", "theme", trend_arrow),
+            ("Items, 90 days>", "items", None),
+            ("90 days before>", "before", None),
+            ("Positive>", "positive", count("sna-up")),
+            ("Negative>", "negative", count("sna-down")),
+            ("Orders, Rs crore>", "orders_cr", lambda v, r: _fmt(v, "{:,.0f}")),
+            (
+                "Companies",
+                "companies",
+                lambda v, r: f'<span class="sna-mono sna-small">{esc(v)}</span>',
+            ),
+        ],
     )
     names = dict(zip(themes["theme"], themes["key"], strict=True))
     choice = st.selectbox("Theme", list(names))
     months, items = load("theme_detail", theme=names[choice])
     if not months.empty:
-        st.bar_chart(months, x="month", y="items", height=220)
-    st.dataframe(
+        with chart_card(f"{choice}: items each month", "theme-months"):
+            by_month = months.assign(month=pd.to_datetime(months["month"]).dt.strftime("%b %Y"))
+            st.bar_chart(by_month, x="month", y="items", height=220, sort=False)
+    html_table(
         items,
-        hide_index=True,
-        width="stretch",
-        column_config={
-            "date": st.column_config.DateColumn("Date", format="DD MMM YYYY"),
-            "item": st.column_config.TextColumn("Item", width="large"),
-            "value_cr": st.column_config.NumberColumn("Rs crore", format="localized"),
-        },
+        [
+            ("Date", "date", lambda v, r: f"{v:%d %b %Y}"),
+            ("Stock", "stock", lambda v, r: f'<b class="sna-mono">{esc(v)}</b>'),
+            ("Kind", "kind", lambda v, r: esc(v and v.replace("_", " "))),
+            ("Item", "item", None),
+            ("For shareholders", "sentiment", sentiment_html),
+            ("Rs crore>", "value_cr", lambda v, r: _fmt(v, "{:,.0f}")),
+        ],
+        empty="No items for this theme in the period.",
     )
-    st.subheader("Read-across")
-    signals = load("read_across")
-    if signals.empty:
-        st.caption("None in the last 90 days.")
-    else:
-        st.dataframe(
-            signals,
-            hide_index=True,
-            width="stretch",
-            column_config={
-                "date": st.column_config.DateColumn("Date", format="DD MMM YYYY"),
-                "item": st.column_config.TextColumn("Item", width="large"),
-            },
-        )
+    st.html(f'<h3 class="sna-h3">Read-across {AI_TAG}</h3>')
     st.caption(
-        "An important order or event (importance 4-5, or an order of 1% or more of a year's "
-        "revenue) is listed for the watchlist stocks that are its approved peers or share its "
-        "theme."
+        "Possible connections, not confirmed contracts. An important order or event "
+        "(importance 4-5, or an order of 1% or more of a year's revenue) is listed for the "
+        "watchlist stocks that are its approved peers or share its theme."
+    )
+    html_table(
+        load("read_across"),
+        [
+            ("Date", "date", lambda v, r: f"{v:%d %b %Y}"),
+            ("Item", "item", None),
+            ("May matter to", "for", lambda v, r: f'<b class="sna-mono">{esc(v)}</b>'),
+            ("Why", "why", None),
+        ],
+        empty="None in the last 90 days.",
     )
 
 
@@ -1588,37 +1608,40 @@ def ask_page() -> None:
 
 
 def moves_page() -> None:
-    st.title("What moves the stock")
-    help_link()
-    st.caption(
+    page_header(
+        "What moves the stock",
         "Average return vs Nifty 50 after each kind of filing, 1, 5 and 20 trading days "
-        "later. A BSE and an NSE copy of the same announcement count once."
+        "later. A BSE and an NSE copy of the same announcement count once.",
+        "the-pages",
     )
     s = stock_picker("moves-stock")
     study = load("event_study", isin=s["isin"] if s else None)
     if study.empty:
         no_data("No labelled filings yet: run the **prices** job on System (Run a job now).")
         return
-    st.plotly_chart(charts.event_study_chart(study, dark()), width="stretch", **PLOT)
     st.warning(
-        "Averages of a handful of events are mostly noise. The number in brackets is how "
-        "many events each row is based on; the 20-day average uses only events at least "
-        "20 trading days old.",
+        "Averages of a handful of events are mostly noise. The number of events behind each "
+        "type is shown; the 20-day average uses only events at least 20 trading days old.",
         icon=":material/info:",
     )
-    table = study.copy()
-    for col in ("avg_1d", "avg_5d", "avg_20d"):
-        table[col] = table[col] * 100
-    st.dataframe(
-        table,
-        hide_index=True,
-        width="stretch",
-        column_config={
-            "avg_1d": st.column_config.NumberColumn("Avg 1d", format="%+.2f%%"),
-            "avg_5d": st.column_config.NumberColumn("Avg 5d", format="%+.2f%%"),
-            "avg_20d": st.column_config.NumberColumn("Avg 20d", format="%+.2f%%"),
-            "n_20d": st.column_config.NumberColumn("Events with 20d"),
-        },
+    with chart_card("Average return vs Nifty 50 after each kind of filing", "moves"):
+        st.plotly_chart(charts.event_study_chart(study, dark()), width="stretch", **PLOT)
+
+    def avg(value, _row) -> str:
+        if blank(value):
+            return esc(None)
+        return f'<span class="{trend(value)}">{signed(value)}</span>'
+
+    html_table(
+        study,
+        [
+            ("Kind of filing", "type", lambda v, r: esc(v and v.replace("_", " "))),
+            ("Events>", "events", None),
+            ("Avg 1 day>", "avg_1d", avg),
+            ("Avg 5 days>", "avg_5d", avg),
+            ("Avg 20 days>", "avg_20d", avg),
+            ("Events with 20 days>", "n_20d", None),
+        ],
     )
     if st.toggle("Show the filings behind each type"):
         lb = load("labels", isin=s["isin"] if s else None)
@@ -1626,11 +1649,12 @@ def moves_page() -> None:
 
 
 def manage_page() -> None:
-    st.title("Manage stocks")
-    help_link("getting-started")
-    st.caption(
-        "Changes here take effect straight away: the scheduler picks up new stocks on its next "
-        "run. Load a new stock's history with the button that appears after adding it."
+    page_header(
+        "Manage stocks",
+        "Add, edit and remove your stocks. Changes take effect straight away: the scheduler "
+        "picks up new stocks on its next run. Load a new stock's history with the button that "
+        "appears after adding it.",
+        "getting-started",
     )
     with Session(engine()) as session:
         add_stock_form(session)
@@ -1913,70 +1937,91 @@ def run_now_section() -> None:
 
 
 def system_page() -> None:
-    st.title("System")
-    st.caption(
-        "Whether the scheduled jobs ran, what is stored, and this month's AI spend. "
-        "The schedule is in config/schedule.yaml."
+    page_header(
+        "System",
+        "Whether the scheduled jobs ran, what is stored, and this month's AI spend. The "
+        "schedule is in config/schedule.yaml.",
+        "keeping-it-running",
     )
-    help_link("keeping-it-running")
     run_now_section()
     left, right = st.columns(2)
     with left:
-        st.subheader("Schedule (India time)")
+        section_title("Schedule (India time)")
         try:
             from stock_news_analyzer.settings_store import paused_jobs
 
             schedule = load_schedule(SCHEDULE_FILE)
             upcoming = next_runs(schedule, datetime.now(IST))
             off = paused_jobs(get_settings())
-            st.dataframe(
-                pd.DataFrame(
-                    [
-                        {
-                            "job": j.name,
-                            "next run": "off on Settings"
-                            if j.name in off
-                            else upcoming[j.name].strftime("%a %d %b %H:%M")
-                            if j.enabled
-                            else "paused",
-                        }
-                        for j in schedule
-                    ]
-                ),
-                hide_index=True,
-                width="stretch",
+            html_table(
+                [
+                    {
+                        "job": j.name,
+                        "next": "off on Settings"
+                        if j.name in off
+                        else upcoming[j.name].strftime("%a %d %b, %H:%M")
+                        if j.enabled
+                        else "paused",
+                    }
+                    for j in schedule
+                ],
+                [
+                    ("Job", "job", lambda v, r: f'<span class="sna-mono">{esc(v)}</span>'),
+                    (
+                        "Next run",
+                        "next",
+                        lambda v, r: (
+                            f'<span class="sna-muted">{esc(v)}</span>'
+                            if v in ("off on Settings", "paused")
+                            else esc(v)
+                        ),
+                    ),
+                ],
             )
         except (OSError, ValueError) as exc:
             st.error(f"Could not read {SCHEDULE_FILE}: {exc}")
     with right:
-        st.subheader("Stored data")
+        section_title("Stored data")
         counts = load("data_counts")
-        st.dataframe(
-            pd.DataFrame({"what": list(counts), "count": [str(v) for v in counts.values()]}),
-            hide_index=True,
-            width="stretch",
+        html_table(
+            [{"what": k, "count": v} for k, v in counts.items()],
+            [
+                ("Data", "what", lambda v, r: esc(v[:1].upper() + v[1:])),
+                (
+                    "Count>",
+                    "count",
+                    lambda v, r: f"{v:,}" if isinstance(v, int) else esc(v),
+                ),
+            ],
         )
-    st.subheader("AI usage")
+    section_title("AI usage")
     usage = load("llm_usage")
-    a, b, c = st.columns(3)
-    a.metric(f"Spent in {usage['month']}", f"${usage['spent']:.2f}")
-    b.metric(
-        "Monthly budget",
-        f"${usage['budget']:.2f}",
-        help="Set on Settings; calls stop for the month when reached.",
+    spent, budget = usage["spent"], usage["budget"]
+    stat_tiles(
+        [
+            (f"Spent in {usage['month']}", f"${spent:.2f}", ""),
+            ("Monthly budget", f"${budget:.2f}", "Set on Settings; AI calls stop when reached"),
+            ("Articles waiting for triage", f"{usage['pending_triage']:,}", ""),
+        ]
     )
-    c.metric("Articles waiting for triage", usage["pending_triage"])
-    st.progress(min(1.0, usage["spent"] / usage["budget"]) if usage["budget"] else 1.0)
-    if usage["by_task"].empty:
-        st.caption("No LLM calls this month yet.")
-    else:
-        st.dataframe(
-            usage["by_task"],
-            hide_index=True,
-            width="stretch",
-            column_config={"cost $": st.column_config.NumberColumn(format="$%.4f")},
-        )
-    st.subheader("Recent runs")
+    st.progress(
+        min(1.0, spent / budget) if budget else 1.0,
+        text=f"{spent / budget:.0%} of the monthly budget used" if budget else "No budget set",
+    )
+    html_table(
+        usage["by_task"],
+        [
+            ("Task", "task", None),
+            ("Model", "model", None),
+            ("Calls>", "calls", None),
+            ("Failed>", "failed", lambda v, r: f'<span class="sna-down">{v}</span>' if v else "0"),
+            ("Input tokens>", "input tokens", lambda v, r: f"{v:,}"),
+            ("Output tokens>", "output tokens", lambda v, r: f"{v:,}"),
+            ("Cost>", "cost $", lambda v, r: f"${v:.4f}"),
+        ],
+        empty="No AI calls this month yet.",
+    )
+    section_title("Recent runs")
     runs = load("runs", limit=200)
     if runs.empty:
         no_data("No runs yet. The scheduler runs the jobs each day; or run one above.")
@@ -1984,8 +2029,12 @@ def system_page() -> None:
         only_errors = st.toggle("Only errors")
         if only_errors:
             runs = runs[runs["status"] != "ok"]
+        colours = PALETTE["dark" if dark() else "light"]
         st.dataframe(
-            runs,
+            runs.style.map(
+                lambda v: f"color:{colours['up'] if v == 'ok' else colours['high']}",
+                subset=["status"],
+            ),
             hide_index=True,
             width="stretch",
             column_config={
@@ -2019,13 +2068,13 @@ def settings_page() -> None:
     from stock_news_analyzer.agents.orchestrator import job_notes
     from stock_news_analyzer.llm import PRICES, check_key
 
-    st.title("Settings")
-    st.caption(
+    page_header(
+        "Settings",
         "The AI key and budget, the unusual-day threshold, and which scheduled jobs run. "
         "Saved here, a setting takes the place of the same one in .env; the scheduler picks "
-        "changes up within a minute."
+        "changes up within a minute.",
+        "settings",
     )
-    help_link("settings")
     cfg = get_settings()
     with Session(engine()) as session:
         st.subheader("AI features")
@@ -2167,15 +2216,22 @@ def settings_page() -> None:
             st.rerun()
         st.caption("The welcome screens: AI key, stocks and history. Nothing is removed.")
 
-        st.subheader("Where each setting comes from")
-        st.dataframe(
-            pd.DataFrame(
-                [
-                    {"setting": label, "from": store.source(session, k)}
-                    for k, label in SETTING_NAMES.items()
-                ]
-            ),
-            hide_index=True,
+        section_title("Where each setting comes from")
+        html_table(
+            [
+                {"setting": label, "from": store.source(session, k)}
+                for k, label in SETTING_NAMES.items()
+            ],
+            [
+                ("Setting", "setting", None),
+                (
+                    "Source",
+                    "from",
+                    lambda v, r: (
+                        f'<span class="sna-muted">{esc(v)}</span>' if v == "default" else esc(v)
+                    ),
+                ),
+            ],
         )
         st.caption(
             "Settings page: saved here, in this computer's database. .env: the project's .env "

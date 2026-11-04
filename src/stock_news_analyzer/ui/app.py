@@ -217,6 +217,11 @@ h1{letter-spacing:-.01em}
 .sna-tone{font-size:.95rem;display:flex;align-items:center;gap:6px}
 .sna-tone .sna-dot{margin-right:0}
 .sna-summary{margin:.5rem 0 0;line-height:1.55}
+.sna-sources{font-size:.82rem;color:var(--sna-muted);border-top:1px solid var(--sna-border);
+  padding-top:8px;margin-top:4px}
+.sna-sources ol{margin:4px 0 0 1.2rem;padding:0}
+.sna-sources li{margin:2px 0}
+.sna-sources a{color:inherit}
 </style>
 """
 
@@ -1498,22 +1503,42 @@ def themes_page() -> None:
     )
 
 
+def sources_html(lines: list[str]) -> str:
+    """The sources under an answer, one per line, each with a link when it has one."""
+    items = []
+    for line in lines:
+        text, _, url = line.rpartition(" http")
+        if text and url:
+            url = "http" + url
+            items.append(
+                f"<li>{html.escape(text)} "
+                f'<a href="{html.escape(url)}" target="_blank" rel="noopener">open</a></li>'
+            )
+        else:
+            items.append(f"<li>{html.escape(line)}</li>")
+    return f'<div class="sna-sources"><b>Sources</b><ol>{"".join(items)}</ol></div>'
+
+
 def ask_page() -> None:
     from stock_news_analyzer.agents import ask as qa
     from stock_news_analyzer.llm import LLM, LLMError
 
-    st.title("Ask")
-    help_link("how-ai-is-used")
-    st.caption(
-        "Ask about your companies in plain English. The Analyst Q&A looks things up in the "
-        "database (read-only) and answers with sources; each question costs a few cents."
+    page_header(
+        "Ask",
+        "Questions in plain English, answered from your stocks' filings, results and calls. "
+        "The Analyst Q&A looks things up in the database (read-only) and answers with its "
+        "sources; each question costs a few cents.",
+        "how-ai-is-used",
     )
-    with st.form("ask"):
+    with st.form("ask", border=False):
         question = st.text_area(
-            "Question", placeholder="Which of my companies raised guidance this year?"
+            "Your question", placeholder="Which of my companies raised guidance this year?"
         )
-        save = st.text_input("Save as report (optional name)", max_chars=64)
-        asked = st.form_submit_button("Ask", icon=":material/search:")
+        name_col, button_col = st.columns([3, 1], vertical_alignment="bottom")
+        save = name_col.text_input(
+            "Save as report (optional)", max_chars=64, placeholder="Report name"
+        )
+        asked = button_col.form_submit_button("Ask", icon=":material/search:", type="primary")
     with Session(engine()) as session:
         if asked and question.strip():
             steps = st.status("Looking things up...", expanded=True)
@@ -1534,26 +1559,31 @@ def ask_page() -> None:
                     state="complete",
                     expanded=False,
                 )
-                st.markdown(answer.text)
-                for ref in answer.sources:
-                    st.caption(qa.describe_source(session, ref))
-        st.subheader("Earlier questions")
+                with st.container(border=True, key="card-answer"):
+                    st.html(f"{AI_TAG}")
+                    st.markdown(answer.text)
+                    if answer.sources:
+                        st.html(
+                            sources_html([qa.describe_source(session, r) for r in answer.sources])
+                        )
+        section_title("Earlier questions")
         rows = qa.history(session)
         if not rows:
             st.caption("None yet.")
         for r in rows:
-            label = (
-                f"{r.asked_at.astimezone(IST):%d %b %H:%M} "
-                + (f"[{r.name}] " if r.name else "")
-                + r.question[:100]
-            )
+            when = f"{r.asked_at.astimezone(IST):%d %b %Y, %H:%M}"
+            label = f"{r.question[:110]} · {when}" + (f" · {r.name}" if r.name else "")
             with st.expander(label):
+                st.html(AI_TAG)
                 st.markdown(r.answer)
+                lines = []
                 for ref in r.sources:
                     try:
-                        st.caption(qa.describe_source(session, ref))
+                        lines.append(qa.describe_source(session, ref))
                     except AttributeError:  # the source was deleted since
-                        st.caption(f"[{ref}] (no longer stored)")
+                        lines.append(f"[{ref}] (no longer stored)")
+                if lines:
+                    st.html(sources_html(lines))
                 st.caption(f"{r.steps} lookups with {r.model}, ${r.cost_usd:.4f}")
 
 
@@ -1721,22 +1751,30 @@ def edit_stocks(session: Session) -> None:
         st.rerun()
 
 
-SEVERITY = {"high": "🔴 high", "medium": "🟠 medium", "low": "⚪ low"}
+SEVERITY = {"high": "● high", "medium": "● medium", "low": "● low"}
 
 
 def flags_page() -> None:
     from stock_news_analyzer.agents import redflags
 
-    st.title("Red flags")
-    st.caption(
+    page_header(
+        "Red flags",
         "Warnings about governance and money: an auditor or CFO leaving, a rating cut, a "
         "pledge, promoters selling, a penalty, results filed late. Dismiss one once you have "
-        "looked into it; it stays on record with your note."
+        "looked into it; it stays on record with your note.",
+        "words-used",
     )
-    help_link("words-used")
-    c1, c2, c3 = st.columns([2, 1, 1])
-    severities = c1.multiselect(
-        "Severity", list(SEVERITY), default=["high", "medium"], format_func=SEVERITY.get
+    c1, c2, c3, c4 = st.columns([1.4, 1, 1.4, 1], vertical_alignment="bottom")
+    severities = c1.pills(
+        "Severity",
+        list(SEVERITY),
+        default=["high", "medium"],
+        selection_mode="multi",
+        format_func={
+            "high": ":red[●] high",
+            "medium": ":orange[●] medium",
+            "low": ":gray[●] low",
+        }.get,
     )
     days = c2.selectbox(
         "Raised in the last",
@@ -1744,18 +1782,31 @@ def flags_page() -> None:
         index=2,
         format_func=lambda d: f"{d} days" if d < 365 else f"{d // 365} year{'s' * (d > 365)}",
     )
-    dismissed = c3.toggle("Show dismissed")
-    flags = load("flag_table", days=days, severities=tuple(severities), include_dismissed=dismissed)
+    dismissed = c4.toggle("Show dismissed")
+    flags = load(
+        "flag_table", days=days, severities=tuple(severities or []), include_dismissed=dismissed
+    )
     symbols = sorted(flags["symbol"].unique())
-    pick = st.multiselect("Stocks", symbols, placeholder="All stocks")
+    pick = c3.multiselect("Stocks", symbols, placeholder="All stocks")
     if pick:
         flags = flags[flags["symbol"].isin(pick)]
     if flags.empty:
         no_data("No red flags for these choices.")
         return
-    shown = flags.assign(severity=flags["severity"].map(SEVERITY))
+    open_count = int((flags["status"] == "open").sum())
+    st.caption(f"{len(flags)} flags · {open_count} open")
+    colours = PALETTE["dark" if dark() else "light"]
+    shown = flags.drop(columns=["id"]).assign(
+        severity=flags["severity"].map(SEVERITY),
+        note=flags["note"].fillna(""),
+        link=flags["link"].fillna(""),
+    )
+    styled = shown.style.map(
+        lambda v: f"color:{colours[v.split()[-1]]}" if isinstance(v, str) else "",
+        subset=["severity"],
+    ).map(lambda v: f"color:{colours['muted']}" if v == "dismissed" else "", subset=["status"])
     selection = st.dataframe(
-        shown.drop(columns=["id"]),
+        styled,
         hide_index=True,
         width="stretch",
         on_select="rerun",
@@ -1777,21 +1828,32 @@ def flags_page() -> None:
         st.caption("Select a flag to dismiss it, or to open a dismissed one again.")
         return
     flag = flags.iloc[rows[0]]
-    st.markdown(f"**{flag['symbol']}:** {flag['title']}")
-    with Session(engine()) as session:
-        if flag["status"] == "open":
-            with st.form("dismiss", clear_on_submit=True):
-                note = st.text_input(
-                    "Note (optional)", placeholder="e.g. a planned retirement; successor named"
-                )
-                if st.form_submit_button("Dismiss", icon=":material/done:"):
-                    redflags.dismiss(session, int(flag["id"]), note.strip() or None)
+    with st.container(border=True, key="card-flag-chosen"):
+        st.html(
+            f'<div class="sna-flag"><span class="sna-dot {flag["severity"]}"></span>'
+            f'<span class="sna-muted sna-flag-date">{flag["date"]:%d %b}</span>'
+            f'<span class="sna-{flag["severity"]} sna-flag-kind">{html.escape(flag["kind"])}'
+            f'</span><span><b class="sna-mono">{html.escape(flag["symbol"])}</b>: '
+            f"{html.escape(flag['title'])}</span></div>"
+        )
+        with Session(engine()) as session:
+            if flag["status"] == "open":
+                with st.form("dismiss", clear_on_submit=True, border=False):
+                    note_col, button_col = st.columns([4, 1], vertical_alignment="bottom")
+                    note = note_col.text_input(
+                        "Note (optional)", placeholder="e.g. a planned retirement; successor named"
+                    )
+                    if button_col.form_submit_button("Dismiss", icon=":material/done:"):
+                        redflags.dismiss(session, int(flag["id"]), note.strip() or None)
+                        load.clear()
+                        st.rerun()
+            else:
+                if flag["note"]:
+                    st.caption(f"Your note: {flag['note']}")
+                if st.button("Open it again", icon=":material/undo:"):
+                    redflags.restore(session, int(flag["id"]))
                     load.clear()
                     st.rerun()
-        elif st.button("Open it again", icon=":material/undo:"):
-            redflags.restore(session, int(flag["id"]))
-            load.clear()
-            st.rerun()
 
 
 class _StatusLog:

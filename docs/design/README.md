@@ -14,6 +14,14 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.21 · Nov 4, 2026
+
+- Step 29, the dashboard redesigned: a design made in Lovable from ui-brief.md and rebuilt in Streamlit (themes, IBM Plex fonts, cards, tiles, tables whose text wraps, AI tags); the sector index's chart colour is ochre, not the design's teal, so the lines can be told apart. Trying it on a clean Mac and Windows becomes step 30
+
+### sharing.md 1.8 · Nov 4, 2026
+
+- Step 29 added and built (the dashboard redesign); the clean-machine test moves to step 30
+
 ### 1.20 · Nov 2, 2026
 
 - Step 28, ready for others: the author's watchlist is no longer tracked and is removed from the Git history; the start script pulls the prebuilt image by default; release 0.1.0. Trying it on a clean Mac and Windows becomes step 29

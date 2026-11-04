@@ -1,6 +1,6 @@
 # Making it usable by others
 
-Version 1.7 · Nov 2, 2026 · @Ramki · companion to the [system design](design.md) and [agent design](agent-design.md); changes are listed in [README.md](README.md)
+Version 1.8 · Nov 4, 2026 · @Ramki · companion to the [system design](design.md) and [agent design](agent-design.md); changes are listed in [README.md](README.md)
 
 ## Goal
 
@@ -103,6 +103,9 @@ Every action people need, with a button, so the command line is only for develop
 
 ### Look and feel
 
+Built in step 29, from a design made in Lovable ([ui-brief.md](ui-brief.md), [lovable-prompts.md](lovable-prompts.md)); Lovable was used for the design only, since a React front end would need an API and double the code.
+
+
 - One colour scheme for charts and status, readable in light and dark.
 - Numbers in Indian format: Rs 1,23,456 crore, lakh shares.
 - Every page opens with a one-line "what this shows" and an empty state that says what to do: "No results yet: load history from My stocks."
@@ -139,7 +142,8 @@ Each step is one PR, tested on the Mac like the agents:
 | 26 | First-run setup (done) | Medium |
 | 27 | Packaging: start scripts, everything in one compose file, migrations on start, example watchlist, MIT licence, prebuilt image (done) | Medium |
 | 28 | Ready for others: the author's watchlist out of the repository and its history, the prebuilt image pulled by default, release notes for 0.1.0 (done) | Small |
-| 29 | Try it on a clean Mac and a Windows machine; fix what breaks | Small |
+| 29 | Dashboard redesign: a design made in Lovable (mock-ups with sample data) and rebuilt in Streamlit page by page; themes, fonts, cards, tiles, wrapped tables (done) | Medium |
+| 30 | Try it on a clean Mac and a Windows machine; fix what breaks | Small |
 
 The Guide comes first because it is quick and shows where the app is hard to follow, which shapes steps 24 to 26.
 

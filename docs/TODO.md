@@ -14,5 +14,5 @@ Done in the code: `config/watchlist.yaml` is no longer tracked (`.gitignore`), t
 ## Later
 
 - **Email delivery** of the digest and high-severity red flags, as an option on Settings (each user's own mail account).
-- **Try it on a clean Mac and a Windows machine** (step 29 of the [sharing plan](design/sharing.md)).
+- **Try it on a clean Mac and a Windows machine** (step 30 of the [sharing plan](design/sharing.md)).
 - Market Signals: NSE's structured SAST data, monthly mutual fund portfolios, tenders.

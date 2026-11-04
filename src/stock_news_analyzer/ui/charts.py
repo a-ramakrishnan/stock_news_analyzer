@@ -1,9 +1,10 @@
 """Plotly figures for the dashboard.
 
-One colour job each: the stock is blue, its sector index orange, the Nifty 50 gray (the
-baseline everything is measured against). Bars that can be up or down use blue for up and red
-for down. Every chart has one y-axis; the price chart indexes all three lines to 100 instead of
-mixing price scales.
+One colour job each: the stock is blue, its sector index ochre, the Nifty 50 gray (the
+baseline everything is measured against); key filings are diamonds on the stock's line. Bars
+that can be up or down use green for up and red for down. The colours are the dashboard's
+theme (.streamlit/config.toml), in a light and a dark version. Every chart has one y-axis; the
+price chart indexes all three lines to 100 instead of mixing price scales.
 """
 
 from dataclasses import dataclass
@@ -20,6 +21,7 @@ class Theme:
     nifty: str
     up: str
     down: str
+    key: str
     text: str
     muted: str
     grid: str
@@ -28,29 +30,32 @@ class Theme:
 
 
 LIGHT = Theme(
-    stock="#2a78d6",
-    sector="#eb6834",
-    nifty="#898781",
-    up="#2a78d6",
-    down="#e34948",
-    text="#0b0b0b",
-    muted="#52514e",
-    grid="#e1e0d9",
-    baseline="#c3c2b7",
-    surface="#fcfcfb",
+    stock="#0b6a96",
+    sector="#b0650f",
+    nifty="#8b9095",
+    up="#0f6a31",
+    down="#cc2827",
+    key="#0b6a96",
+    text="#141b24",
+    muted="#5b646f",
+    grid="#ebe8e2",
+    baseline="#c9c5bc",
+    surface="#ffffff",
 )
 DARK = Theme(
-    stock="#3987e5",
-    sector="#d95926",
-    nifty="#898781",
-    up="#3987e5",
-    down="#e66767",
-    text="#f0efec",
-    muted="#c3c2b7",
-    grid="#2c2c2a",
-    baseline="#383835",
-    surface="#1a1a19",
+    stock="#3d91c4",
+    sector="#c47a24",
+    nifty="#8b9095",
+    up="#5ac576",
+    down="#fa6863",
+    key="#3d91c4",
+    text="#eae7e2",
+    muted="#9299a1",
+    grid="#1f252b",
+    baseline="#353c44",
+    surface="#13191f",
 )
+FONT = "IBM Plex Sans, system-ui, sans-serif"
 
 
 # No trading on weekends: leave them out of date axes instead of drawing flat gaps.
@@ -67,7 +72,7 @@ def _layout(fig: go.Figure, t: Theme, height: int) -> go.Figure:
         margin=dict(l=8, r=8, t=32, b=8),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color=t.text, size=13),
+        font=dict(family=FONT, color=t.text, size=13),
         legend=dict(
             orientation="h", yanchor="bottom", y=1.0, xanchor="left", x=0, font=dict(color=t.muted)
         ),
@@ -154,7 +159,7 @@ def performance_chart(
                     name="Filing",
                     mode="markers",
                     marker=dict(
-                        size=9, color=t.stock, symbol="diamond", line=dict(color=t.surface, width=2)
+                        size=9, color=t.key, symbol="diamond", line=dict(color=t.surface, width=2)
                     ),
                     customdata=ev[["type", "title"]].to_numpy(),
                     hovertemplate="%{customdata[0]}: %{customdata[1]}<extra></extra>",

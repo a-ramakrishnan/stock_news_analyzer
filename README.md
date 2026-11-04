@@ -655,6 +655,7 @@ src/stock_news_analyzer/   Python package
   agents/results.py        Results Reader: revenue, profit, margins from results filings
   ui/queries.py            dashboard: read-only queries
   ui/charts.py             dashboard: charts
+  ui/static/fonts/         IBM Plex fonts, served with the dashboard (SIL Open Font License)
   ui/app.py                dashboard: the Streamlit pages
   cli.py                   `sna` command-line tool
 config/watchlist.example.yaml  an example watchlist: stocks, bullion and their news aliases
@@ -671,4 +672,4 @@ Not investment advice. This is a personal research tool.
 
 ## Licence and data
 
-MIT licensed: see [LICENSE](LICENSE). The system fetches public data from the NSE, BSE and news websites, from your own computer and at a polite rate, for your personal use; check each site's terms before doing more with it. Nothing it shows is investment advice.
+MIT licensed: see [LICENSE](LICENSE). The dashboard's IBM Plex fonts are under the SIL Open Font License ([OFL.txt](src/stock_news_analyzer/ui/static/fonts/OFL.txt)). The system fetches public data from the NSE, BSE and news websites, from your own computer and at a polite rate, for your personal use; check each site's terms before doing more with it. Nothing it shows is investment advice.

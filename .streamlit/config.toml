@@ -4,9 +4,86 @@ gatherUsageStats = false
 
 [server]
 address = "localhost"
-
-[theme]
-primaryColor = "#2a78d6"
+# Serves src/stock_news_analyzer/ui/static (the fonts) at app/static/, so nothing is fetched
+# from the internet to draw the dashboard.
+enableStaticServing = true
 
 [client]
 toolbarMode = "viewer"
+
+# The look: IBM Plex fonts, warm off-white or charcoal backgrounds, deep teal accents, green up
+# and red down. A light and a dark theme; the dashboard's settings menu (top right) switches
+# between them, and by default it follows the computer's setting. The same colours are used by
+# the charts (ui/charts.py) and the page styles (ui/app.py, STYLE).
+[theme]
+font = "IBM Plex Sans, system-ui, sans-serif"
+codeFont = "IBM Plex Mono, ui-monospace, monospace"
+baseFontSize = 15
+baseRadius = "0.5rem"
+headingFontWeights = [600, 600, 600, 600, 600, 600]
+showWidgetBorder = true
+
+[[theme.fontFaces]]
+family = "IBM Plex Sans"
+url = "app/static/fonts/ibm-plex-sans-latin-wght-normal.woff2"
+weight = "100 700"
+unicodeRange = "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+
+[[theme.fontFaces]]
+# Accented letters, and the rupee sign (U+20B9).
+family = "IBM Plex Sans"
+url = "app/static/fonts/ibm-plex-sans-latin-ext-wght-normal.woff2"
+weight = "100 700"
+unicodeRange = "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF"
+
+[[theme.fontFaces]]
+family = "IBM Plex Mono"
+url = "app/static/fonts/ibm-plex-mono-latin-400-normal.woff2"
+weight = "400"
+
+[[theme.fontFaces]]
+family = "IBM Plex Mono"
+url = "app/static/fonts/ibm-plex-mono-latin-500-normal.woff2"
+weight = "500"
+
+[theme.light]
+base = "light"
+primaryColor = "#005477"
+backgroundColor = "#fbfaf7"
+secondaryBackgroundColor = "#f3f0ea"
+textColor = "#141b24"
+linkColor = "#005477"
+borderColor = "#e1ded7"
+dataframeBorderColor = "#e1ded7"
+dataframeHeaderBackgroundColor = "#f3f0ea"
+greenColor = "#0f6a31"
+redColor = "#cc2827"
+orangeColor = "#875300"
+blueColor = "#005477"
+chartCategoricalColors = ["#0b6a96", "#b0650f", "#5f6469", "#0f6a31", "#cc2827"]
+
+[theme.light.sidebar]
+backgroundColor = "#f6f3ee"
+secondaryBackgroundColor = "#dce6ed"
+borderColor = "#e1ded7"
+
+[theme.dark]
+base = "dark"
+primaryColor = "#65bae1"
+backgroundColor = "#0b1015"
+secondaryBackgroundColor = "#1f252b"
+textColor = "#eae7e2"
+linkColor = "#65bae1"
+borderColor = "#262c33"
+dataframeBorderColor = "#262c33"
+dataframeHeaderBackgroundColor = "#13191f"
+greenColor = "#5ac576"
+redColor = "#fa6863"
+orangeColor = "#f2af48"
+blueColor = "#65bae1"
+chartCategoricalColors = ["#3d91c4", "#c47a24", "#8b9095", "#5ac576", "#fa6863"]
+
+[theme.dark.sidebar]
+backgroundColor = "#080c10"
+secondaryBackgroundColor = "#16242c"
+borderColor = "#1d2328"

@@ -86,21 +86,78 @@ def no_data(message: str) -> None:
 # --- pages -------------------------------------------------------------------
 
 
-# Compact tiles for the index strip: many indices fit on a row and wrap on narrow screens, and
-# full names wrap instead of being cut off. Up/down carry an arrow and a sign, not only colour.
-TILES_CSS = """
+# The look shared by every page, in the theme's colours (.streamlit/config.toml): cards and tiles
+# on a white (or charcoal) surface, IBM Plex Mono for stock symbols, small tags for kinds and
+# confidence, an "AI" tag on AI-written text, and coloured dots for red-flag severity. Up and
+# down always carry an arrow or a sign as well as a colour.
+PALETTE = {
+    "light": dict(
+        card="#ffffff",
+        border="#e1ded7",
+        muted="#5b646f",
+        soft="#f3f0ea",
+        accent="#dfeef7",
+        accent_text="#004766",
+        up="#0f6a31",
+        down="#cc2827",
+        high="#cc2827",
+        medium="#875300",
+        low="#5f6469",
+    ),
+    "dark": dict(
+        card="#13191f",
+        border="#262c33",
+        muted="#9299a1",
+        soft="#1f252b",
+        accent="#1a2b36",
+        accent_text="#a9d9ef",
+        up="#5ac576",
+        down="#fa6863",
+        high="#fa6863",
+        medium="#f2af48",
+        low="#8b9095",
+    ),
+}
+
+STYLE = """
 <style>
+:root{%(vars)s}
+/* Cards: bordered containers with a key starting "card", e.g. st.container(border=True,
+   key="card-LT"). */
+[class*="st-key-card"]{background:var(--sna-card)}
+[data-testid="stMetricValue"]{font-size:1.5rem;font-variant-numeric:tabular-nums}
+[data-testid="stMetricLabel"]{color:var(--sna-muted)}
+h1{letter-spacing:-.01em}
+/* The index strip: many indices fit on a row and wrap on narrow screens. */
 .sna-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:8px;
   margin:4px 0 12px}
-.sna-tile{border:1px solid rgba(128,128,128,.3);border-radius:8px;padding:8px 10px}
-.sna-tile .l{font-size:.78rem;opacity:.75;line-height:1.2}
+.sna-tile{background:var(--sna-card);border:1px solid var(--sna-border);border-radius:.5rem;
+  padding:8px 10px}
+.sna-tile .l{font-size:.78rem;color:var(--sna-muted);line-height:1.2}
 .sna-tile .v{font-size:1.15rem;font-weight:600;margin:2px 0;font-variant-numeric:tabular-nums}
 .sna-tile .c{font-size:.8rem;font-weight:600;font-variant-numeric:tabular-nums}
-.sna-tile .up{color:#0ca30c}
-.sna-tile .down{color:#d03b3b}
-[data-testid="stMetricValue"]{font-size:1.6rem}
+.sna-up{color:var(--sna-up)}
+.sna-down{color:var(--sna-down)}
+.sna-muted{color:var(--sna-muted)}
+.sna-mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-weight:500}
+.sna-tag{display:inline-block;font-size:.75rem;line-height:1.3;padding:1px 7px;border-radius:999px;
+  background:var(--sna-soft);color:var(--sna-muted);white-space:nowrap}
+.sna-tag.ai{background:var(--sna-accent);color:var(--sna-accent-text);font-weight:600}
+.sna-dot{display:inline-block;width:.55rem;height:.55rem;border-radius:50%%;margin-right:.35rem;
+  vertical-align:.05rem;background:var(--sna-low)}
+.sna-dot.high{background:var(--sna-high)}
+.sna-dot.medium{background:var(--sna-medium)}
+.sna-high{color:var(--sna-high)}
+.sna-medium{color:var(--sna-medium)}
 </style>
 """
+
+
+def apply_style() -> None:
+    """The shared styles, in the colours of the theme in use."""
+    colours = PALETTE["dark" if dark() else "light"]
+    variables = ";".join(f"--sna-{k.replace('_', '-')}:{v}" for k, v in colours.items())
+    st.html(STYLE % {"vars": variables})
 
 
 def index_tiles(rows: list[dict]) -> None:
@@ -110,7 +167,7 @@ def index_tiles(rows: list[dict]) -> None:
         if change is None:
             delta = '<div class="c">–</div>'
         else:
-            arrow, cls = ("▲", "up") if change >= 0 else ("▼", "down")
+            arrow, cls = ("▲", "sna-up") if change >= 0 else ("▼", "sna-down")
             delta = f'<div class="c {cls}">{arrow} {change:+.2%}</div>'
         name = html.escape(m["index"])
         value = f"{m['close']:,.2f}" if m["close"] else "–"
@@ -118,14 +175,12 @@ def index_tiles(rows: list[dict]) -> None:
             f'<div class="sna-tile" title="{name}, {m["date"]}"><div class="l">{name}</div>'
             f'<div class="v">{value}</div>{delta}</div>'
         )
-    st.markdown(
-        TILES_CSS + f'<div class="sna-tiles">{"".join(tiles)}</div>', unsafe_allow_html=True
-    )
+    st.markdown(f'<div class="sna-tiles">{"".join(tiles)}</div>', unsafe_allow_html=True)
 
 
 def stock_card(s: dict) -> None:
     threshold = get_settings().unusual_threshold
-    with st.container(border=True):
+    with st.container(border=True, key=f"card-{s['isin']}"):
         head, badge = st.columns([3, 1])
         head.markdown(f"**{s['symbol']}**  \n:gray[{s['name']}]")
         if s["unusual"]:
@@ -1982,6 +2037,7 @@ NAV = {
 
 
 def main() -> None:
+    apply_style()
     if setup_needed():
         st.navigation([SETUP_PAGE, PAGES["guide"]]).run()
         return

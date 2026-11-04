@@ -122,7 +122,7 @@ PALETTE = {
 
 STYLE = """
 <style>
-:root{%(vars)s}
+:root{THEME_VARIABLES}
 /* Cards: bordered containers with a key starting "card", e.g. st.container(border=True,
    key="card-LT"). */
 [class*="st-key-card"]{background:var(--sna-card)}
@@ -146,7 +146,7 @@ h1{letter-spacing:-.01em}
 .sna-tag{display:inline-block;font-size:.75rem;line-height:1.3;padding:1px 7px;border-radius:999px;
   background:var(--sna-soft);color:var(--sna-muted);white-space:nowrap}
 .sna-tag.ai{background:var(--sna-accent);color:var(--sna-accent-text);font-weight:600}
-.sna-dot{display:inline-block;width:.55rem;height:.55rem;border-radius:50%%;margin-right:.35rem;
+.sna-dot{display:inline-block;width:.55rem;height:.55rem;border-radius:50%;margin-right:.35rem;
   vertical-align:.05rem;background:var(--sna-low)}
 .sna-dot.high{background:var(--sna-high)}
 .sna-dot.medium{background:var(--sna-medium)}
@@ -174,6 +174,49 @@ h1{letter-spacing:-.01em}
 .sna-flag-date{flex:none;width:3.6rem;font-variant-numeric:tabular-nums}
 .sna-flag-kind{flex:none;font-weight:500}
 @media (max-width:640px){.sna-flag{flex-wrap:wrap;gap:4px 10px}}
+/* Number tiles: a label, a large value, a line under it. */
+.sna-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;
+  margin:6px 0 10px}
+.sna-stat{background:var(--sna-card);border:1px solid var(--sna-border);border-radius:.5rem;
+  padding:12px 16px}
+.sna-stat .l{font-size:.78rem;color:var(--sna-muted)}
+.sna-stat .v{font-size:1.5rem;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums}
+.sna-stat .s{font-size:.8rem;margin-top:2px;color:var(--sna-muted)}
+.sna-card-title{font-weight:600;font-size:.95rem}
+/* Tables whose text wraps; on a phone each row becomes a card. */
+.sna-table-wrap{border:1px solid var(--sna-border);border-radius:.5rem;overflow-x:auto;
+  background:var(--sna-card)}
+.sna-table{width:100%;border-collapse:collapse;font-size:.87rem}
+.sna-table th{text-align:left;font-weight:500;font-size:.78rem;color:var(--sna-muted);
+  padding:9px 12px;border-bottom:1px solid var(--sna-border);background:var(--sna-soft)}
+.sna-table td{padding:9px 12px;vertical-align:top;border-top:1px solid var(--sna-border);
+  line-height:1.45}
+.sna-table tr:first-child td{border-top:0}
+.sna-table .r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.sna-table a{color:inherit;text-decoration:underline;text-decoration-color:var(--sna-border)}
+@media (max-width:640px){
+  .sna-table thead{display:none}
+  .sna-table,.sna-table tbody,.sna-table tr,.sna-table td{display:block;width:100%}
+  .sna-table tr{border-top:1px solid var(--sna-border);padding:6px 0}
+  .sna-table tr:first-child{border-top:0}
+  .sna-table td{border:0;padding:3px 12px;text-align:left!important;white-space:normal}
+  .sna-table td::before{content:attr(data-label);display:block;font-size:.72rem;
+    color:var(--sna-muted)}
+}
+.sna-tag.good{background:color-mix(in srgb,var(--sna-up) 15%,transparent);color:var(--sna-up)}
+.sna-tag.warn{background:color-mix(in srgb,var(--sna-medium) 15%,transparent);
+  color:var(--sna-medium)}
+.sna-tag.bad{background:color-mix(in srgb,var(--sna-high) 15%,transparent);color:var(--sna-high)}
+.sna-dot.good{background:var(--sna-up)}
+.sna-dot.warn{background:var(--sna-medium)}
+.sna-dot.bad{background:var(--sna-high)}
+.sna-meter{display:inline-flex;gap:2px;vertical-align:middle}
+.sna-meter i{width:7px;height:12px;border-radius:2px;background:var(--sna-soft)}
+.sna-meter i.on{background:var(--sna-accent-text)}
+.sna-quote{font-style:italic;color:var(--sna-muted);font-size:.82rem}
+.sna-tone{font-size:.95rem;display:flex;align-items:center;gap:6px}
+.sna-tone .sna-dot{margin-right:0}
+.sna-summary{margin:.5rem 0 0;line-height:1.55}
 </style>
 """
 
@@ -182,7 +225,7 @@ def apply_style() -> None:
     """The shared styles, in the colours of the theme in use."""
     colours = PALETTE["dark" if dark() else "light"]
     variables = ";".join(f"--sna-{k.replace('_', '-')}:{v}" for k, v in colours.items())
-    st.html(STYLE % {"vars": variables})
+    st.html(STYLE.replace("THEME_VARIABLES", variables))
 
 
 def index_tiles(rows: list[dict]) -> None:
@@ -320,6 +363,98 @@ def page_header(title: str, description: str, section: str, *notes: str) -> None
     st.caption(description)
 
 
+def blank(value) -> bool:
+    """Nothing to show: None, NaN (an empty cell from a table) or an empty string."""
+    return value is None or value == "" or (not isinstance(value, str | list) and pd.isna(value))
+
+
+def esc(value) -> str:
+    """Text for HTML, or a dash for nothing."""
+    if blank(value):
+        return '<span class="sna-muted">–</span>'
+    return html.escape(str(value))
+
+
+def html_table(rows, columns: list[tuple], empty: str = "Nothing to show.") -> None:
+    """A table whose text wraps instead of being cut off; on a narrow screen each row becomes a
+    stacked card. `columns`: (label, field, render) where render(value, row) returns HTML, or
+    None to show the value as text; a label ending in ">" right-aligns the column."""
+    records = rows.to_dict("records") if isinstance(rows, pd.DataFrame) else list(rows)
+    if not records:
+        st.caption(empty)
+        return
+    head, body = [], []
+    for label, _field, _render in columns:
+        right = label.endswith(">")
+        head.append(f'<th class="{"r" if right else ""}">{html.escape(label.rstrip(">"))}</th>')
+    for row in records:
+        cells = []
+        for label, field, render in columns:
+            value = row.get(field)
+            content = render(value, row) if render else esc(value)
+            right = label.endswith(">")
+            cells.append(
+                f'<td class="{"r" if right else ""}" data-label="'
+                f'{html.escape(label.rstrip(">"))}">{content}</td>'
+            )
+        body.append(f"<tr>{''.join(cells)}</tr>")
+    st.html(
+        f'<div class="sna-table-wrap"><table class="sna-table"><thead><tr>{"".join(head)}'
+        f"</tr></thead><tbody>{''.join(body)}</tbody></table></div>"
+    )
+
+
+def stat_tiles(items: list[tuple[str, str, str]]) -> None:
+    """Number tiles in a row: (label, value HTML, line under it HTML)."""
+    tiles = "".join(
+        f'<div class="sna-stat"><div class="l">{html.escape(label)}</div>'
+        f'<div class="v">{value}</div>' + (f'<div class="s">{sub}</div>' if sub else "") + "</div>"
+        for label, value, sub in items
+    )
+    narrow = ' style="max-width:420px"' if len(items) == 1 else ""
+    st.html(f'<div class="sna-stats"{narrow}>{tiles}</div>')
+
+
+def tag(text: str, kind: str = "") -> str:
+    """A small pill: kind good, bad, warn or ai colours it."""
+    return f'<span class="sna-tag {kind}">{html.escape(text)}</span>'
+
+
+AI_TAG = '<span class="sna-tag ai" title="Written by AI; check the sources">✦ AI</span>'
+SENTIMENT_CLASS = {
+    "positive": "sna-up",
+    "negative": "sna-down",
+    "good": "sna-up",
+    "bad": "sna-down",
+}
+STATUS_KIND = {
+    "kept": "good",
+    "kept_late": "warn",
+    "partly": "warn",
+    "delayed": "warn",
+    "revised": "warn",
+    "missed": "bad",
+}
+
+
+def sentiment_html(value, _row=None) -> str:
+    if blank(value):
+        return esc(None)
+    return f'<span class="{SENTIMENT_CLASS.get(value, "sna-muted")}">{html.escape(value)}</span>'
+
+
+def quote_html(value, _row=None) -> str:
+    """Words quoted from a filing or call, in italics and quotation marks."""
+    return esc(None) if blank(value) else f'<span class="sna-quote">“{html.escape(value)}”</span>'
+
+
+def chart_card(title: str, key: str):
+    """A card holding one chart, with its title."""
+    box = st.container(border=True, key=f"card-chart-{key}")
+    box.html(f'<div class="sna-card-title">{html.escape(title)}</div>')
+    return box
+
+
 def today_page() -> None:
     watch = stocks()
     if not watch:
@@ -410,12 +545,15 @@ def stock_page_body() -> None:
         window = st.segmented_control("Range", list(RANGES), default="1Y", key="range") or "1Y"
     st.query_params["symbol"] = s["symbol"]
 
-    st.title(s["name"])
-    help_link()
+    left, right = st.columns([4, 1], vertical_alignment="bottom")
+    left.title(s["name"])
+    with right:
+        help_link()
     sector = s["sector_index"] or "no sector index"
     st.caption(
         f"NSE {s['symbol']} · benchmark Nifty 50 and {sector}" + (" · owned" if s["owned"] else "")
     )
+    st.caption("One company in depth: its price against its benchmarks, and what moved it.")
 
     start = date.today() - timedelta(days=RANGES[window])
     perf = load("performance", isin=s["isin"], start=start)
@@ -429,23 +567,27 @@ def stock_page_body() -> None:
             .drop_duplicates(["type", "day0"])
         )
         last = perf.iloc[-1]
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric(f"{s['symbol']} over {window}", f"{last['stock'] - 100:+.1f}%")
-        m2.metric(f"Nifty 50 over {window}", f"{last['nifty'] - 100:+.1f}%")
+
+        def over(value) -> str:
+            change = (value - 100) / 100
+            return f'<span class="{trend(change)}">{signed(change)}</span>'
+
+        tiles = [
+            (f"{s['symbol']} over {window}", over(last["stock"]), ""),
+            (f"Nifty 50 over {window}", over(last["nifty"]), ""),
+        ]
         if s["sector_index"] and pd.notna(last["sector"]):
-            m3.metric(f"{s['sector_index']} over {window}", f"{last['sector'] - 100:+.1f}%")
-        m4.metric("Unusual days", int(perf["unusual"].sum()))
-        st.plotly_chart(
-            charts.performance_chart(perf, s["symbol"], s["sector_index"], events, dark()),
-            width="stretch",
-            **PLOT,
-        )
-        st.markdown("**Daily return minus the Nifty 50's**")
-        st.plotly_chart(
-            charts.excess_bars(perf, dark=dark()),
-            width="stretch",
-            **PLOT,
-        )
+            tiles.append((f"{s['sector_index']} over {window}", over(last["sector"]), ""))
+        tiles.append(("Unusual days", str(int(perf["unusual"].sum())), ""))
+        stat_tiles(tiles)
+        with chart_card("Price, each starting at 100", "price"):
+            st.plotly_chart(
+                charts.performance_chart(perf, s["symbol"], s["sector_index"], events, dark()),
+                width="stretch",
+                **PLOT,
+            )
+        with chart_card("Daily return minus the Nifty 50's", "excess"):
+            st.plotly_chart(charts.excess_bars(perf, dark=dark()), width="stretch", **PLOT)
         st.caption(
             f"Adjusted for bonus issues, splits and dividends. Solid bars and circled "
             f"points are unusual days: beyond {get_settings().unusual_threshold}σ of the "
@@ -506,23 +648,41 @@ def stock_page_body() -> None:
             no_data("No unusual days yet.")
         else:
             missing = int(days["cause"].isna().sum())
-            shown = days.copy()
-            for col in ("stock", "vs_nifty"):
-                shown[col] = shown[col] * 100
-            st.dataframe(
-                shown,
-                hide_index=True,
-                width="stretch",
-                column_config={
-                    "date": st.column_config.DateColumn("Day", format="DD MMM YYYY"),
-                    "stock": st.column_config.NumberColumn("Stock", format="%+.2f%%"),
-                    "vs_nifty": st.column_config.NumberColumn("vs Nifty 50", format="%+.2f%%"),
-                    "zscore": st.column_config.NumberColumn("z", format="%+.1f"),
-                    "cause": st.column_config.TextColumn("Likely cause"),
-                    "confidence": st.column_config.TextColumn("Confidence"),
-                    "explanation": st.column_config.TextColumn("Explanation", width="large"),
-                    "evidence": st.column_config.TextColumn("Based on", width="medium"),
-                },
+            confidence = {"high": "good", "medium": "warn", "low": ""}
+
+            def move(value, _row) -> str:
+                return f'<span class="{trend(value)}">{signed(value)}</span>'
+
+            html_table(
+                days,
+                [
+                    ("Day", "date", lambda v, r: f"{v:%d %b %Y}"),
+                    ("Move>", "stock", move),
+                    ("vs Nifty 50>", "vs_nifty", move),
+                    ("z>", "zscore", lambda v, r: f"{v:+.1f}".replace("-", "−")),
+                    ("Likely cause", "cause", lambda v, r: esc(v and v.replace("_", " "))),
+                    (
+                        "Confidence",
+                        "confidence",
+                        lambda v, r: tag(v, confidence.get(v, "")) if not blank(v) else esc(None),
+                    ),
+                    (
+                        "Explanation",
+                        "explanation",
+                        lambda v, r: f"{AI_TAG} {html.escape(v)}" if not blank(v) else esc(None),
+                    ),
+                    (
+                        "Based on",
+                        "evidence",
+                        lambda v, r: (
+                            '<span class="sna-small sna-muted">'
+                            + "<br>".join(html.escape(t) for t in v.split(" | "))
+                            + "</span>"
+                            if not blank(v)
+                            else esc(None)
+                        ),
+                    ),
+                ],
             )
             if missing:
                 st.caption(
@@ -573,52 +733,52 @@ def shareholding(s: dict) -> None:
         return
     latest = df.iloc[-1]
     prev = df.iloc[-2] if len(df) > 1 else None
-    cols = st.columns(4)
-    for col, (key, label) in zip(
-        cols,
-        [
-            ("promoter", "Promoters"),
-            ("fii", "Foreign inst."),
-            ("dii", "Domestic inst."),
-            ("retail", "Retail"),
-        ],
-        strict=True,
+    tiles = []
+    for key, name in (
+        ("promoter", "Promoters"),
+        ("fii", "Foreign inst."),
+        ("dii", "Domestic inst."),
+        ("retail", "Retail"),
     ):
-        delta = (
-            f"{latest[key] - prev[key]:+.2f} pts"
-            if prev is not None and pd.notna(latest[key]) and pd.notna(prev[key])
-            else None
-        )
-        col.metric(f"{label}, {latest['quarter']:%b %Y}", _fmt(latest[key], "{:.2f}%"), delta)
-    st.line_chart(
-        df.set_index("quarter")[["promoter", "fii", "dii", "retail"]].rename(
-            columns={
-                "promoter": "Promoters",
-                "fii": "Foreign institutions",
-                "dii": "Domestic institutions",
-                "retail": "Retail",
-            }
-        ),
-        y_label="% of shares",
-        height=260,
-    )
-    st.dataframe(
-        df.iloc[::-1],
-        hide_index=True,
-        width="stretch",
-        column_config={
-            "quarter": st.column_config.DateColumn("Quarter end", format="MMM YYYY"),
-            "promoter": st.column_config.NumberColumn("Promoters", format="%.2f%%"),
-            "fii": st.column_config.NumberColumn("Foreign inst.", format="%.2f%%"),
-            "dii": st.column_config.NumberColumn("Domestic inst.", format="%.2f%%"),
-            "mf": st.column_config.NumberColumn("Mutual funds", format="%.2f%%"),
-            "insurance": st.column_config.NumberColumn("Insurers", format="%.2f%%"),
-            "retail": st.column_config.NumberColumn("Retail", format="%.2f%%"),
-            "pledged": st.column_config.NumberColumn(
-                "Pledged", format="%.2f%%", help="Percent of the promoters' own shares."
+        change = ""
+        if prev is not None and pd.notna(latest[key]) and pd.notna(prev[key]):
+            points = latest[key] - prev[key]
+            change = (
+                f'<span class="{trend(points)}">{f"{points:+.2f}".replace("-", "−")} pts</span>'
+                " since the quarter before"
+            )
+        tiles.append((f"{name}, {latest['quarter']:%b %Y}", _fmt(latest[key], "{:.2f}%"), change))
+    stat_tiles(tiles)
+    with chart_card("Who owns it, % of shares", "holdings"):
+        st.line_chart(
+            df.set_index("quarter")[["promoter", "fii", "dii", "retail"]].rename(
+                columns={
+                    "promoter": "Promoters",
+                    "fii": "Foreign institutions",
+                    "dii": "Domestic institutions",
+                    "retail": "Retail",
+                }
             ),
-            "shareholders": st.column_config.NumberColumn("Shareholders", format="localized"),
-        },
+            y_label="% of shares",
+            height=260,
+        )
+
+    def share(value, _row) -> str:
+        return _fmt(value, "{:.2f}%")
+
+    html_table(
+        df.iloc[::-1],
+        [
+            ("Quarter end", "quarter", lambda v, r: f"{v:%b %Y}"),
+            ("Promoters>", "promoter", share),
+            ("Foreign inst.>", "fii", share),
+            ("Domestic inst.>", "dii", share),
+            ("Mutual funds>", "mf", share),
+            ("Insurers>", "insurance", share),
+            ("Retail>", "retail", share),
+            ("Pledged, of promoters' shares>", "pledged", share),
+            ("Shareholders>", "shareholders", lambda v, r: _fmt(v, "{:,.0f}")),
+        ],
     )
     st.caption(
         "Percent of all shares, from the quarterly shareholding pattern. Domestic institutions "
@@ -626,7 +786,6 @@ def shareholding(s: dict) -> None:
     )
 
 
-TONE = {"positive": "🟢", "neutral": "⚪", "cautious": "🟠", "negative": "🔴"}
 CATEGORY = {
     "guidance": "Guidance",
     "demand": "Demand",
@@ -655,8 +814,12 @@ def earnings_calls(s: dict) -> None:
             format_func=lambda c: f"{c['quarter']} · filed {c['filed']:%d %b %Y} · {c['tone']}",
             key="concall",
         )
-        st.markdown(f"#### {TONE.get(pick['tone'], '')} {pick['quarter']}: {pick['tone']} tone")
-        st.write(pick["summary"])
+        tone = {"positive": "good", "cautious": "warn", "negative": "bad"}.get(pick["tone"], "")
+        st.html(
+            f'<div class="sna-tone"><span class="sna-dot {tone}"></span>Tone: '
+            f"<b>{html.escape(pick['tone'])}</b> {AI_TAG}</div>"
+            f'<p class="sna-summary">{html.escape(pick["summary"] or "")}</p>'
+        )
         left, right = st.columns(2)
         with left:
             st.markdown("**To watch**")
@@ -665,37 +828,39 @@ def earnings_calls(s: dict) -> None:
             st.markdown("**Since the previous call**")
             st.markdown(
                 "\n".join(
-                    f"- *{c['kind'].replace('_', ' ')}*: {c['text']}" for c in pick["changes"]
+                    f"- **{c['kind'].replace('_', ' ')}**: {c['text']}" for c in pick["changes"]
                 )
                 or "First call stored, nothing to compare with."
             )
+
         if pick["points"]:
-            points = pd.DataFrame(pick["points"])
-            points["category"] = points["category"].map(CATEGORY).fillna(points["category"])
-            st.markdown("**What management said**")
-            st.dataframe(
-                points,
-                hide_index=True,
-                width="stretch",
-                column_config={
-                    "category": st.column_config.TextColumn("Topic"),
-                    "point": st.column_config.TextColumn("Point", width="large"),
-                    "sentiment": st.column_config.TextColumn("For shareholders"),
-                    "quote": st.column_config.TextColumn("In their words", width="medium"),
-                },
+            section_title("What management said")
+            html_table(
+                pick["points"],
+                [
+                    ("Topic", "category", lambda v, r: esc(CATEGORY.get(v, v))),
+                    ("Point", "point", None),
+                    ("For shareholders", "sentiment", sentiment_html),
+                    ("In their words", "quote", quote_html),
+                ],
             )
         if pick["concerns"]:
-            st.markdown("**What analysts pressed on**")
-            st.dataframe(
-                pd.DataFrame(pick["concerns"]),
-                hide_index=True,
-                width="stretch",
-                column_order=["topic", "question", "answer"],
-                column_config={
-                    "topic": st.column_config.TextColumn("Topic"),
-                    "question": st.column_config.TextColumn("Question", width="large"),
-                    "answer": st.column_config.TextColumn("Answer"),
-                },
+            section_title("What analysts pressed on")
+            html_table(
+                pick["concerns"],
+                [
+                    ("Topic", "topic", None),
+                    ("Question", "question", None),
+                    (
+                        "Answer",
+                        "answer",
+                        lambda v, r: (
+                            tag(v, {"evasive": "bad", "partial": "warn"}.get(v, ""))
+                            if not blank(v)
+                            else esc(None)
+                        ),
+                    ),
+                ],
             )
         if pick["note"]:
             st.caption(pick["note"])
@@ -703,40 +868,54 @@ def earnings_calls(s: dict) -> None:
             st.text(load("concall_text", doc_id=pick["document_id"])[:20000])
 
     ledger = load("promises", isin=s["isin"])
-    st.markdown("**Promise ledger**")
+    section_title("Promise ledger")
     score = next((c for c in load("credibility") if c["isin"] == s["isin"]), None)
     if score:
-        left, right = st.columns([1, 3], vertical_alignment="center")
-        left.metric(
-            "Promises kept",
-            f"{score['score']:.0%}" if score["score"] is not None else "–",
-            help="Kept 1, kept late or partly kept 0.5, missed, dropped or long overdue 0, "
-            "over the promises settled so far. Shown from 3 settled promises.",
+        stat_tiles(
+            [
+                (
+                    "Promises kept",
+                    f"{score['score']:.0%}" if score["score"] is not None else "–",
+                    f"Of {score['scored']} settled: {score['kept']} kept, {score['kept_late']} "
+                    f"kept late, {score['partly']} partly, {score['missed']} missed, "
+                    f"{score['dropped']} dropped, {score['overdue']} long overdue. "
+                    f"{score['to_come']} still to come.",
+                )
+            ]
         )
-        right.caption(
-            f"Of {score['scored']} settled: {score['kept']} kept, {score['kept_late']} kept "
-            f"late, {score['partly']} partly, {score['missed']} missed, {score['dropped']} "
-            f"dropped, {score['overdue']} long overdue. {score['to_come']} still to come."
+        st.caption(
+            "Kept counts 1, kept late or partly kept 0.5, missed, dropped or long overdue 0, over "
+            "the promises settled so far; shown from 3 settled promises."
         )
     if ledger.empty:
         st.caption("No promises recorded yet.")
     else:
         overdue = int(ledger["overdue"].sum())
-        st.dataframe(
-            ledger.drop(columns=["symbol"]),
-            hide_index=True,
-            width="stretch",
-            column_config={
-                "promise": st.column_config.TextColumn("Promise", width="large"),
-                "target": st.column_config.TextColumn("Target"),
-                "due": st.column_config.TextColumn("Due (as said)"),
-                "status": st.column_config.TextColumn("Status"),
-                "due_date": st.column_config.DateColumn("Due by", format="DD MMM YYYY"),
-                "overdue": st.column_config.CheckboxColumn("Overdue"),
-                "note": st.column_config.TextColumn("Latest update", width="medium"),
-                "said_in": st.column_config.TextColumn("Said in"),
-                "quote": st.column_config.TextColumn("In their words", width="medium"),
-            },
+        html_table(
+            ledger,
+            [
+                ("Promise", "promise", lambda v, r: f"<b>{esc(v)}</b>"),
+                ("Target", "target", None),
+                ("Due (as said)", "due", None),
+                (
+                    "Status",
+                    "status",
+                    lambda v, r: (
+                        tag(v.replace("_", " "), STATUS_KIND.get(v, ""))
+                        if not blank(v)
+                        else esc(None)
+                    ),
+                ),
+                ("Due by", "due_date", lambda v, r: f"{v:%d %b %Y}" if pd.notna(v) else esc(None)),
+                (
+                    "Overdue",
+                    "overdue",
+                    lambda v, r: '<span class="sna-down">✓</span>' if v else esc(None),
+                ),
+                ("Latest update", "note", None),
+                ("Said in", "said_in", None),
+                ("In their words", "quote", quote_html),
+            ],
         )
         st.caption(
             "Each later call updates a promise when management mentions it again; once its "
@@ -746,16 +925,14 @@ def earnings_calls(s: dict) -> None:
         checks = load("promise_checks", isin=s["isin"])
         if not checks.empty:
             with st.expander(f"How promises were checked ({len(checks)})"):
-                st.dataframe(
+                html_table(
                     checks,
-                    hide_index=True,
-                    width="stretch",
-                    column_config={
-                        "checked": st.column_config.DatetimeColumn("Checked", format="DD MMM YYYY"),
-                        "promise": st.column_config.TextColumn("Promise", width="medium"),
-                        "note": st.column_config.TextColumn("Finding", width="large"),
-                        "based_on": st.column_config.TextColumn("Based on", width="medium"),
-                    },
+                    [
+                        ("Checked", "checked", lambda v, r: f"{v:%d %b %Y}"),
+                        ("Promise", "promise", None),
+                        ("Finding", "note", None),
+                        ("Based on", "based_on", None),
+                    ],
                 )
     gaps = load("concall_gaps", isin=s["isin"])
     if not gaps.empty:
@@ -777,44 +954,63 @@ def results(s: dict) -> None:
         )
         return
     latest = periods.iloc[-1]
-    m1, m2, m3 = st.columns(3)
-    m1.metric(
-        f"Revenue, {latest['period']}",
-        _fmt(latest["revenue_cr"], "Rs {:,.0f} cr"),
-        delta=_fmt(latest["revenue_yoy"], "{:+.0%} y/y")
-        if pd.notna(latest["revenue_yoy"])
-        else None,
-    )
-    m2.metric(
-        "Profit after tax",
-        _fmt(latest["pat_cr"], "Rs {:,.0f} cr"),
-        delta=_fmt(latest["pat_yoy"], "{:+.0%} y/y") if pd.notna(latest["pat_yoy"]) else None,
-    )
-    m3.metric(
-        "EBITDA margin",
-        _fmt(latest["ebitda_margin"], "{:.1%}"),
-        help="Profit before tax + finance costs + depreciation − other income, ÷ revenue.",
-    )
-    st.plotly_chart(charts.revenue_chart(periods, dark()), width="stretch", **PLOT)
-    st.dataframe(
-        periods.iloc[::-1],
-        hide_index=True,
-        width="stretch",
-        column_config={
-            "period": st.column_config.TextColumn("Period"),
-            "revenue_cr": st.column_config.NumberColumn("Revenue", format="localized"),
-            "revenue_yoy": st.column_config.NumberColumn("Revenue y/y", format="percent"),
-            "ebitda_cr": st.column_config.NumberColumn("EBITDA", format="localized"),
-            "ebitda_margin": st.column_config.NumberColumn("EBITDA margin", format="percent"),
-            "pat_cr": st.column_config.NumberColumn("Profit after tax", format="localized"),
-            "pat_yoy": st.column_config.NumberColumn("Profit y/y", format="percent"),
-            "pat_margin": st.column_config.NumberColumn("Net margin", format="percent"),
-            "eps": st.column_config.NumberColumn("EPS (Rs)", format="%.2f"),
-            "basis": st.column_config.TextColumn("Basis"),
-            "checked": st.column_config.CheckboxColumn(
-                "Checked", help="Every figure was found as written in the filing."
+
+    def yoy(value) -> str:
+        if value is None or pd.isna(value):
+            return ""
+        return f'<span class="{trend(value)}">{f"{value:+.0%}".replace("-", "−")} y/y</span>'
+
+    stat_tiles(
+        [
+            (
+                f"Revenue, {latest['period']}",
+                _fmt(latest["revenue_cr"], "Rs {:,.0f} cr"),
+                yoy(latest["revenue_yoy"]),
             ),
-        },
+            ("Profit after tax", _fmt(latest["pat_cr"], "Rs {:,.0f} cr"), yoy(latest["pat_yoy"])),
+            (
+                "EBITDA margin",
+                _fmt(latest["ebitda_margin"], "{:.1%}"),
+                '<span class="sna-muted">PBT + finance costs + depreciation − other income, '
+                "÷ revenue</span>",
+            ),
+        ]
+    )
+    with chart_card("Revenue and profit, Rs crore", "results"):
+        st.plotly_chart(charts.revenue_chart(periods, dark()), width="stretch", **PLOT)
+
+    def crore(value, _row) -> str:
+        return _fmt(value, "{:,.0f}")
+
+    def growth(value, _row) -> str:
+        if value is None or pd.isna(value):
+            return esc(None)
+        return f'<span class="{trend(value)}">{f"{value:+.1%}".replace("-", "−")}</span>'
+
+    html_table(
+        periods.iloc[::-1],
+        [
+            ("Period", "period", None),
+            ("Revenue>", "revenue_cr", crore),
+            ("Revenue y/y>", "revenue_yoy", growth),
+            ("EBITDA>", "ebitda_cr", crore),
+            ("EBITDA margin>", "ebitda_margin", lambda v, r: _fmt(v, "{:.1%}")),
+            ("Profit after tax>", "pat_cr", crore),
+            ("Profit y/y>", "pat_yoy", growth),
+            ("Net margin>", "pat_margin", lambda v, r: _fmt(v, "{:.1%}")),
+            ("EPS (Rs)>", "eps", lambda v, r: _fmt(v, "{:.2f}")),
+            ("Basis", "basis", None),
+            (
+                "Checked",
+                "checked",
+                lambda v, r: (
+                    '<span class="sna-up" title="Every figure was found as written in '
+                    'the filing">✓</span>'
+                    if v is True
+                    else esc(None)
+                ),
+            ),
+        ],
     )
     st.caption(
         "Rs crore, from the results filed with the exchanges (consolidated where given). y/y: "
@@ -915,28 +1111,45 @@ def events_tab_body(s: dict) -> None:
             "morning; the **events** job on System reads them now."
         )
         return
-    st.dataframe(
-        rows.drop(columns=["id"]),
-        hide_index=True,
-        width="stretch",
-        column_config={
-            "filed": st.column_config.DateColumn("Filed", format="DD MMM YYYY"),
-            "type": st.column_config.TextColumn("Type"),
-            "importance": st.column_config.ProgressColumn(
-                "Importance", min_value=1, max_value=5, format="%d"
-            ),
-            "sentiment": st.column_config.TextColumn("Sentiment"),
-            "headline": st.column_config.TextColumn("Event", width="large"),
-            "amount": st.column_config.TextColumn(
-                "Amount",
-                help="Share of revenue: the amount ÷ the 12 months' revenue. A rating's amount "
-                "is the debt rated.",
-            ),
-            "qa": st.column_config.TextColumn("QA"),
-            "qa_notes": st.column_config.TextColumn("QA notes", width="medium"),
-            "quote": st.column_config.TextColumn("From the filing", width="large"),
-            "link": st.column_config.LinkColumn("Filing", display_text="open"),
-        },
+
+    def importance(value, _row) -> str:
+        if value is None or pd.isna(value):
+            return esc(None)
+        n = int(value)
+        return (
+            f'<span class="sna-meter" title="Importance {n} of 5">'
+            + "".join(f'<i class="{"on" if i < n else ""}"></i>' for i in range(5))
+            + "</span>"
+        )
+
+    def qa(value, row) -> str:
+        mark = {"checked": "✅ passed", "you accepted it": "✅ you accepted it"}.get(
+            value, f"— {value}"
+        )
+        notes = row.get("qa_notes")
+        return html.escape(mark) + (
+            f'<div class="sna-small sna-muted">{html.escape(notes)}</div>' if notes else ""
+        )
+
+    def link(value, _row) -> str:
+        if not value:
+            return esc(None)
+        return f'<a href="{html.escape(value)}" target="_blank" rel="noopener">filing</a>'
+
+    section_title("Events read from filings")
+    html_table(
+        rows,
+        [
+            ("Filed", "filed", lambda v, r: f"{v:%d %b %Y}"),
+            ("Type", "type", None),
+            ("Importance", "importance", importance),
+            ("Sentiment", "sentiment", sentiment_html),
+            ("Headline", "headline", lambda v, r: f"<b>{esc(v)}</b>"),
+            ("Amount", "amount", lambda v, r: f'<span class="sna-small">{esc(v)}</span>'),
+            ("QA", "qa", qa),
+            ("From the filing", "quote", quote_html),
+            ("Source", "link", link),
+        ],
     )
     st.caption(
         "Read from the company's filings (Haiku), every quote and amount checked against the "

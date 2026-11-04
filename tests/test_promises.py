@@ -312,4 +312,5 @@ def test_ledger_reaches_digest_dashboard_cli_and_scheduler(
     at.query_params["symbol"] = "LT"
     at.run()
     assert not at.exception, at.exception
-    assert any(m.label == "Promises kept" and m.value == "67%" for m in at.metric)
+    tiles = " ".join(h.proto.body for h in at.get("html"))
+    assert '<div class="l">Promises kept</div><div class="v">67%</div>' in tiles

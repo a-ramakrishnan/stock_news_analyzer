@@ -41,6 +41,7 @@ New to the system? The [Guide](src/stock_news_analyzer/ui/guide.md) explains wha
 | 26 | First-run setup: a new copy opens on four screens (welcome, AI key and budget, stocks, history) that download the company list and load prices, filings and news; run again from Settings | done |
 | 27 | Packaging: start and stop scripts for Mac and Windows, everything in one `docker compose up` (database changes applied on start), the dashboard reachable from this computer only, an example watchlist, MIT licence, no command hints left on the dashboard; a prebuilt image published by GitHub Actions | done |
 | 28 | Ready for others: the author's watchlist out of the repository, the prebuilt image pulled by default, release 0.1.0 ([release notes](docs/releases/0.1.0.md)) | done |
+| 29 | Dashboard redesigned from a Lovable design: light and dark themes, IBM Plex fonts, cards, number tiles, tables whose text wraps, tags for AI-written text, the same header on every page | done |
 
 ## Quick start (no Python needed)
 

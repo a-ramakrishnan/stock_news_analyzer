@@ -128,6 +128,7 @@ def test_charts_build(loaded):  # noqa: F811
         "manage_page",
         "settings_page",
         "system_page",
+        "agents_page",
         "guide_page",
     ],
 )
@@ -157,6 +158,7 @@ def test_every_page_renders(loaded, test_database_url, monkeypatch, tmp_path, pa
         "Manage stocks",
         "Settings",
         "System",
+        "Agent map",
         "Guide",
     }
 
@@ -176,7 +178,7 @@ def test_main_registers_every_page():
         "st.markdown(str(sum(len(p) for p in groups.values())))\n"
     )
     at.run()
-    assert not at.exception and at.markdown[-1].value == "12"
+    assert not at.exception and at.markdown[-1].value == "13"
     assert at.markdown[-2].value == "Today,Research,Library,Set up,Help"
 
 
@@ -299,3 +301,72 @@ def test_every_setup_step_renders(loaded, test_database_url, monkeypatch, tmp_pa
             "History",
         ][step]
     )
+
+
+@pytest.mark.db
+def test_agent_map_shows_each_part_live(loaded):  # noqa: F811
+    from datetime import UTC, datetime, timedelta
+    from decimal import Decimal
+
+    from stock_news_analyzer.models import LlmCall
+    from stock_news_analyzer.ui import agent_map
+
+    now = datetime.now(UTC)
+    loaded.add_all(
+        [
+            Run(job="filings", started_at=now - timedelta(minutes=2), status="running"),
+            Run(
+                job="news",
+                started_at=now - timedelta(hours=1),
+                finished_at=now - timedelta(hours=1) + timedelta(seconds=40),
+                status="error",
+                error="HTTP 403 from a feed",
+            ),
+            Run(
+                job="triage",
+                started_at=now - timedelta(minutes=30),
+                finished_at=now - timedelta(minutes=29),
+                status="ok",
+                summary="12 articles triaged",
+            ),
+            LlmCall(
+                at=now,
+                task="triage",
+                model="claude-haiku-5-5",
+                input_tokens=100,
+                output_tokens=10,
+                cache_read_tokens=0,
+                cache_write_tokens=0,
+                cost_usd=Decimal("0.0020"),
+                ok=True,
+            ),
+        ]
+    )
+    loaded.commit()
+    status = queries.agent_status(loaded)
+    assert status["jobs"]["filings"]["status"] == "running"
+    assert status["jobs"]["news"]["status"] == "error"
+    assert status["ai_today"]["triage"]["calls"] == 1
+    assert status["runs_24h"] == 3 and status["errors_24h"] == 1
+
+    page = agent_map.render(status, app_palette(), dark=False)
+    assert 'class="chip running"' in page and "running for 2 min" in page
+    assert 'class="chip error" title="HTTP 403 from a feed"' in page
+    assert "1 AI call today · $0.00" in page
+    for layer in ("Perceive", "Plan", "Think", "Remember", "Act", "Guardrails", "Observe"):
+        assert layer in page
+    assert "$" + "bg" not in page  # every colour filled in
+
+
+def app_palette() -> dict:
+    """The dashboard's light colours, without importing the Streamlit app."""
+    import ast
+    from pathlib import Path
+
+    source = (Path(queries.__file__).parent / "app.py").read_text()
+    tree = ast.parse(source)
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and getattr(node.targets[0], "id", "") == "PALETTE":
+            light = node.value.values[0]
+            return {k.arg: ast.literal_eval(k.value) for k in light.keywords}
+    raise AssertionError("PALETTE not found")

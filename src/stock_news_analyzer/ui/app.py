@@ -12,6 +12,7 @@ from datetime import date, datetime, timedelta
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 from sqlalchemy.orm import Session
 
 from stock_news_analyzer.agents.orchestrator import SCHEDULE_FILE, load_schedule, next_runs
@@ -19,7 +20,7 @@ from stock_news_analyzer.agents.triage import TOPICS
 from stock_news_analyzer.config import get_settings
 from stock_news_analyzer.db import get_engine
 from stock_news_analyzer.sources.announcements import IST
-from stock_news_analyzer.ui import actions, charts, guide, queries
+from stock_news_analyzer.ui import actions, agent_map, charts, guide, queries
 
 st.set_page_config(
     page_title="Stock News Analyzer", page_icon=":material/newspaper:", layout="wide"
@@ -93,6 +94,8 @@ def no_data(message: str) -> None:
 # down always carry an arrow or a sign as well as a colour.
 PALETTE = {
     "light": dict(
+        bg="#fbfaf7",
+        text="#141b24",
         card="#ffffff",
         border="#e1ded7",
         muted="#5b646f",
@@ -106,6 +109,8 @@ PALETTE = {
         low="#5f6469",
     ),
     "dark": dict(
+        bg="#0b1015",
+        text="#eae7e2",
         card="#13191f",
         border="#262c33",
         muted="#9299a1",
@@ -1900,6 +1905,29 @@ class _StatusLog:
         self.logger.setLevel(self.level)
 
 
+def agents_page() -> None:
+    page_header(
+        "Agent map",
+        "How the agents work together, and what each is doing now: the collectors perceive, "
+        "the scheduler plans, the AI agents think, the database remembers, tools act, and "
+        "guardrails and the run log watch over all of it. Refreshed every 30 seconds.",
+        "keeping-it-running",
+    )
+    live_agent_map()
+
+
+@st.fragment(run_every=30)
+def live_agent_map() -> None:
+    with Session(engine()) as session:
+        status = queries.agent_status(session)
+    components.html(
+        agent_map.render(status, PALETTE["dark" if dark() else "light"], dark=dark()),
+        height=1320,
+        scrolling=True,
+    )
+    st.caption(f"As of {status['now']:%d %b %Y, %H:%M:%S} IST.")
+
+
 def run_now_section() -> None:
     """Run any job now, with its log lines shown as it goes."""
     from stock_news_analyzer.agents import orchestrator as orch
@@ -2493,6 +2521,9 @@ PAGES = {
     "system": st.Page(
         system_page, title="System", icon=":material/monitor_heart:", url_path="system"
     ),
+    "agents": st.Page(
+        agents_page, title="Agent map", icon=":material/account_tree:", url_path="agents"
+    ),
     "guide": st.Page(guide_page, title="Guide", icon=":material/help:", url_path="guide"),
 }
 
@@ -2516,7 +2547,7 @@ NAV = {
     "Today": ["today", "flags"],
     "Research": ["stock", "ask", "themes", "moves"],
     "Library": ["filings", "news"],
-    "Set up": ["manage", "settings", "system"],
+    "Set up": ["manage", "settings", "system", "agents"],
     "Help": ["guide"],
 }
 
@@ -2531,7 +2562,9 @@ def main() -> None:
             load.clear()
         st.caption("Collecting happens in the scheduler; add stocks on Manage stocks.")
         st.page_link(PAGES["guide"], label="New here? Read the Guide", icon=":material/help:")
-    st.navigation({group: [PAGES[k] for k in keys] for group, keys in NAV.items()}).run()
+    st.navigation(
+        {group: [PAGES[k] for k in keys] for group, keys in NAV.items()}, expanded=True
+    ).run()
 
 
 if __name__ == "__main__":  # `streamlit run` runs this file as __main__

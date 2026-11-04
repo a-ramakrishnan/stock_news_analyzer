@@ -180,6 +180,7 @@ def add_equity(
         item = WatchlistItem(kind="equity", isin=company.isin, display_name=company.name)
         session.add(item)
     item.owned = owned
+    item.study_only = False  # added or updated by hand: followed fully
     item.quantity = quantity
     if notes is not None:
         item.notes = notes
@@ -303,6 +304,79 @@ def set_peers(session: Session, company: Company, symbols: list[str]) -> list[st
             session.add(CompanyPeer(isin=company.isin, peer_isin=peer.isin, source="manual"))
     session.commit()
     return [s for s in wanted if s not in found]
+
+
+# --- the Nifty 50 ------------------------------------------------------------
+
+# NSE's industry (from its index lists) -> the sector index used as each stock's second
+# benchmark. Banks are told apart from other financial companies by name.
+SECTOR_FOR_INDUSTRY = {
+    "Financial Services": "Nifty Financial Services",
+    "Information Technology": "Nifty IT",
+    "Oil Gas & Consumable Fuels": "Nifty Energy",
+    "Power": "Nifty Energy",
+    "Automobile and Auto Components": "Nifty Auto",
+    "Fast Moving Consumer Goods": "Nifty FMCG",
+    "Healthcare": "Nifty Healthcare Index",
+    "Metals & Mining": "Nifty Metal",
+    "Construction": "Nifty Infrastructure",
+    "Construction Materials": "Nifty Infrastructure",
+    "Capital Goods": "Nifty Infrastructure",
+    "Telecommunication": "Nifty Infrastructure",
+    "Consumer Durables": "Nifty India Consumption",
+    "Consumer Services": "Nifty India Consumption",
+    "Services": "Nifty Services Sector",
+    "Realty": "Nifty Realty",
+    "Media Entertainment & Publication": "Nifty Media",
+}
+
+
+def sector_for(industry: str, name: str, known: set[str]) -> str | None:
+    """The sector index for an NSE industry, if NSE publishes that index (`known`)."""
+    sector = SECTOR_FOR_INDUSTRY.get(industry.strip())
+    if sector == "Nifty Financial Services" and "bank" in name.lower():
+        sector = "Nifty Bank"
+    return sector if sector in known else None
+
+
+@dataclass
+class IndexAddResult:
+    added: list[Company]
+    present: list[Company]  # already on the watchlist: left as they are
+    unknown: list[str]  # symbols not in the master list (run `sna securities refresh`)
+
+
+def add_index_members(
+    session: Session, members: list, known_indices: set[str], study_only: bool = True
+) -> IndexAddResult:
+    """Add an index's members to the watchlist as study-only stocks, each with a sector
+    benchmark. Stocks already on the watchlist keep their settings."""
+    result = IndexAddResult([], [], [])
+    tracked = set(
+        session.scalars(select(WatchlistItem.isin).where(WatchlistItem.isin.is_not(None)))
+    )
+    for member in members:
+        company = session.get(Company, member.isin) or session.scalar(
+            select(Company).where(Company.nse_symbol == member.symbol)
+        )
+        if company is None:
+            result.unknown.append(member.symbol)
+            continue
+        if company.isin in tracked:
+            result.present.append(company)
+            continue
+        item = WatchlistItem(
+            kind="equity",
+            isin=company.isin,
+            display_name=company.name,
+            study_only=study_only,
+            sector_index=sector_for(member.industry, company.name, known_indices),
+        )
+        session.add(item)
+        tracked.add(company.isin)
+        result.added.append(company)
+    session.commit()
+    return result
 
 
 # --- watchlist file ----------------------------------------------------------

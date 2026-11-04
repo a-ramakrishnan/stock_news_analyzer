@@ -264,7 +264,7 @@ def test_cli_watchlist_history_loads_each_stock(watchlist, test_database_url, mo
     assert result.exit_code == 1
     assert [since for _, since in loaded] == [date(2025, 10, 1)] * 2
     assert "error: LT: stopped: RuntimeError: NSE said no" in result.stdout
-    assert "== KARURVYSYA" in result.stdout
+    assert "== 2/2 KARURVYSYA" in result.stdout
 
 
 def test_reclassify_updates_stale_types_and_titles(watchlist, tmp_path):

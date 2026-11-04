@@ -47,6 +47,7 @@ KEY_TYPES = (
 def watchlist(session: Session) -> list[dict]:
     """One dict per watchlist stock: identity, benchmark and its latest daily move."""
     owned = dict(session.execute(select(WatchlistItem.isin, WatchlistItem.owned)).all())
+    study = set(session.scalars(select(WatchlistItem.isin).where(WatchlistItem.study_only)))
     week_ago = datetime.now(IST) - timedelta(days=7)
     out = []
     for company, sector in sorted(
@@ -83,6 +84,7 @@ def watchlist(session: Session) -> list[dict]:
                 "symbol": company.nse_symbol or company.bse_code,
                 "name": company.name,
                 "owned": bool(owned.get(company.isin)),
+                "study_only": company.isin in study,
                 "sector_index": sector,
                 "close": float(close) if close is not None else None,
                 "date": latest.trade_date if latest else None,

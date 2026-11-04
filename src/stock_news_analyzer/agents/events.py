@@ -42,6 +42,9 @@ log = logging.getLogger(__name__)
 PROMPT_VERSION = "events-4"
 EVENT_DAYS = 400  # how far back the first run reads
 BATCH_SIZE = 6  # filings per LLM call
+# Filings of the last few days are read first, so a backlog (stocks just added with their
+# history) waits behind them instead of in front; a run's `limit` then caps the backlog.
+FRESH = timedelta(days=3)
 FILING_CHARS = 5000  # of each filing's text; event letters are short
 OUTPUT_TOKENS = 400  # a typical answer per filing, for estimates
 MAX_TOKENS = 6000
@@ -371,6 +374,8 @@ def extract(
     ready = [(d, c) for d, c in rows if d.text_status != "pending"]
     result.waiting += len(rows) - len(ready)
     read, copies = _split_copies(ready)
+    cutoff = datetime.now(IST) - FRESH
+    read.sort(key=lambda row: row[0].published_at < cutoff)  # fresh first, each oldest first
     for copy, original in copies:
         session.add(
             EventFiling(

@@ -386,6 +386,36 @@ def esc(value) -> str:
     return html.escape(str(value))
 
 
+def study_moves(study: list[dict]) -> None:
+    """The study-only stocks (the Nifty 50) in one table, unusual moves first, instead of a
+    card each."""
+    if not study:
+        return
+    unusual = [s for s in study if s["unusual"]]
+    section_title(f"Nifty 50, study only ({len(study)})")
+    st.caption(
+        (f"{len(unusual)} moved unusually on the last day. " if unusual else "No unusual moves. ")
+        + "Followed for the evidence; untick Study only on Manage stocks to follow one fully."
+    )
+
+    def change(x, _row):
+        return f'<span class="{trend(x)}">{signed(x)}</span>'
+
+    rows = sorted(study, key=lambda s: (not s["unusual"], -abs(s["excess_return"] or 0)))
+    with st.expander("All of them, largest moves against the Nifty first", expanded=bool(unusual)):
+        html_table(
+            rows,
+            [
+                ("Stock", "symbol", lambda v, r: f'<span class="sna-mono">{esc(v)}</span>'),
+                ("Company", "name", None),
+                ("Day>", "stock_return", change),
+                ("vs Nifty 50>", "excess_return", change),
+                ("Unusual", "unusual", lambda v, r: tag("unusual", "warn") if v else ""),
+                ("Likely cause", "cause", None),
+            ],
+        )
+
+
 def html_table(rows, columns: list[tuple], empty: str = "Nothing to show.") -> None:
     """A table whose text wraps instead of being cut off; on a narrow screen each row becomes a
     stacked card. `columns`: (label, field, render) where render(value, row) returns HTML, or
@@ -484,7 +514,7 @@ def today_page() -> None:
     red_flag_list(load("red_flags"), "Red flags, last 30 days")
 
     owned = [s for s in watch if s["owned"]]
-    watching = [s for s in watch if not s["owned"]]
+    watching = [s for s in watch if not s["owned"] and not s["study_only"]]
     for title, group in (("Stocks I own", owned), ("Watchlist", watching)):
         section_title(f"{title} ({len(group)})")
         if not group:
@@ -495,6 +525,7 @@ def today_page() -> None:
         for i, s in enumerate(group):
             with cols[i % 3]:
                 stock_card(s)
+    study_moves([s for s in watch if s["study_only"]])
 
     bullion_section()
 
@@ -1754,11 +1785,26 @@ def edit_stocks(session: Session) -> None:
         hide_index=True,
         width="stretch",
         disabled=["symbol", "name"],
-        column_order=["symbol", "name", "owned", "sector_index", "aliases", "peers", "remove"],
+        column_order=[
+            "symbol",
+            "name",
+            "owned",
+            "study_only",
+            "sector_index",
+            "aliases",
+            "peers",
+            "remove",
+        ],
         column_config={
             "symbol": st.column_config.TextColumn("Symbol", width="small"),
             "name": st.column_config.TextColumn("Company"),
             "owned": st.column_config.CheckboxColumn("I own it", width="small"),
+            "study_only": st.column_config.CheckboxColumn(
+                "Study only",
+                help="Followed for the evidence (the Nifty 50): collected and read by the cheap "
+                "agents, but no earnings calls, promises or move explanations, and no card on "
+                "Today. Untick to follow it fully.",
+            ),
             "sector_index": st.column_config.SelectboxColumn("Sector benchmark", options=indices),
             "aliases": st.column_config.TextColumn("Other names in the news"),
             "peers": st.column_config.TextColumn(

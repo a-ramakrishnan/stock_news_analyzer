@@ -14,6 +14,10 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.23 · Nov 4, 2026
+
+- Step 30 begins: decision inputs. The Nifty 50 joins as study-only stocks (collected and read by the cheap agents, no Sonnet work, no card on Today), the evidence base for an event study of what each kind of news did to prices. New filings and news are read before any backlog, and the events and orders agents cap their calls per run. agent-design.md's Watchlist Manager. The clean Mac and Windows test becomes step 31
+
 ### 1.22 · Nov 4, 2026
 
 - The Agent map: the system as an agent's anatomy, in the Today group; live (each job's state, a narrated feed of today's runs) or replayed over the last 7 days. design.md's dashboard row, agent-design.md's Reporter and Observability rows

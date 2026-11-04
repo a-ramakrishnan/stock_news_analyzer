@@ -359,26 +359,81 @@ def watchlist_history(
     The same as "Load history now" on Manage stocks, for several stocks in one go. Safe to run
     again; what is stored is skipped.
     """
-    from stock_news_analyzer.ui.actions import load_history
-
     start = datetime.strptime(since, "%Y-%m-%d").date()
-    problems = []
     with get_session() as session:
         companies = [_companies_or_exit(session, symbol)[0] for symbol in symbols]  # all, first
-        for company in companies:
-            typer.echo(f"== {company.nse_symbol}: {company.name}")
-            try:
-                errors = load_history(
-                    session, company.isin, get_settings().data_dir, since=start, progress=typer.echo
-                )
-            except Exception as exc:  # keep going with the next stock; what was stored is kept
-                session.rollback()
-                errors = [f"stopped: {type(exc).__name__}: {exc}"[:300]]
-            problems += [f"{company.nse_symbol}: {e}" for e in errors]
+        problems = _load_histories(session, companies, start)
     for problem in problems:
         typer.echo(f"error: {problem}")
     if problems:
         typer.echo("Run the same command again to fill the gaps.")
+        raise typer.Exit(1)
+
+
+def _load_histories(session, companies, start) -> list[str]:
+    """Load each company's history, keeping going after a failure; returns the problems."""
+    from stock_news_analyzer.ui.actions import load_history
+
+    problems = []
+    for n, company in enumerate(companies, 1):
+        typer.echo(f"== {n}/{len(companies)} {company.nse_symbol}: {company.name}")
+        try:
+            errors = load_history(
+                session, company.isin, get_settings().data_dir, since=start, progress=typer.echo
+            )
+        except Exception as exc:  # keep going with the next stock; what was stored is kept
+            session.rollback()
+            errors = [f"stopped: {type(exc).__name__}: {exc}"[:300]]
+        problems += [f"{company.nse_symbol}: {e}" for e in errors]
+    return problems
+
+
+@watchlist_app.command("nifty50")
+def watchlist_nifty50(
+    history: bool = typer.Option(True, help="Load the new stocks' history too (hours)."),
+    since: str = typer.Option("2023-10-01", help="History start date, YYYY-MM-DD."),
+) -> None:
+    """Add the Nifty 50's current members as study-only stocks, for the evidence page.
+
+    Study-only stocks are collected (filings, news, prices, results) and read by the cheap
+    agents, but get no earnings-call analysis, promises or move explanations, and no card on
+    Today; untick "Study only" on Manage stocks to follow one fully. Stocks already on the
+    watchlist keep their settings. Safe to run again, e.g. after NSE changes the index.
+    """
+    from sqlalchemy import select
+
+    from stock_news_analyzer.agents import xbrl_results
+    from stock_news_analyzer.models import WatchlistItem
+    from stock_news_analyzer.sources import securities
+    from stock_news_analyzer.sources.exchange_http import ExchangeClient
+    from stock_news_analyzer.ui.actions import index_names
+
+    members = securities.parse_index_members(securities.download(securities.NIFTY50_URL))
+    with get_session() as session:
+        result = wl.add_index_members(session, members, set(index_names(session)))
+        typer.echo(
+            f"Nifty 50: {len(members)} members; {len(result.added)} added as study-only, "
+            f"{len(result.present)} already on the watchlist."
+        )
+        for company in result.added:
+            item = session.scalar(select(WatchlistItem).where(WatchlistItem.isin == company.isin))
+            typer.echo(f"  + {company.nse_symbol:<12} {item.sector_index or 'Nifty 50 only'}")
+        if result.unknown:
+            typer.echo(
+                f"Not in the master list: {', '.join(result.unknown)}. Run: sna securities "
+                "refresh, then this again."
+            )
+        if not history or not result.added:
+            return
+        start = datetime.strptime(since, "%Y-%m-%d").date()
+        problems = _load_histories(session, result.added, start)
+        typer.echo("== Results from NSE's XBRL files (no AI)")
+        xbrl = xbrl_results.import_results(session, ExchangeClient(), progress=typer.echo)
+        problems += xbrl.errors
+    for problem in problems:
+        typer.echo(f"error: {problem}")
+    if problems:
+        typer.echo("Run sna watchlist history SYMBOL... for the stocks with gaps.")
         raise typer.Exit(1)
 
 

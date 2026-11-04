@@ -168,13 +168,20 @@ def job_promises(session: Session) -> str:
     return summary
 
 
+# LLM calls per scheduled run for the events and orders agents. New filings come first; the
+# rest of a backlog (e.g. the Nifty 50's history) is read over the following days, so it
+# spreads its cost instead of spending the month's budget in one morning.
+EVENTS_CALLS = 25  # 6 filings a call
+ORDERS_CALLS = 15  # 8 filings a call
+
+
 def job_orders(session: Session) -> str:
     from stock_news_analyzer.agents import orders
     from stock_news_analyzer.llm import LLM
 
     if not get_settings().anthropic_api_key:
         return NO_KEY
-    result = orders.run(session, LLM(session))
+    result = orders.run(session, LLM(session), limit=ORDERS_CALLS)
     summary = (
         f"{result.orders} orders from {result.filings} filings ({result.duplicates} copies), "
         f"{result.snapshots} order books, ${result.cost_usd:.4f}"
@@ -235,7 +242,7 @@ def job_events(session: Session) -> str:
     if not get_settings().anthropic_api_key:
         return NO_KEY
     collector = FilingsCollector(session, ExchangeClient(), get_settings().data_dir)
-    result = events.run(session, LLM(session), fetch=collector.fetch_attachment)
+    result = events.run(session, LLM(session), limit=EVENTS_CALLS, fetch=collector.fetch_attachment)
     summary = (
         f"{result.events} events from {result.filings} filings; QA {result.passed} passed, "
         f"{result.flagged} flagged, {result.rejected} failed; ${result.cost_usd:.4f}"

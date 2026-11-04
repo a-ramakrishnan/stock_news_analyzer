@@ -40,7 +40,7 @@ The sidebar groups the pages: **Today** (what changed, and the agent map), **Res
 - **Themes:** themes across your companies (data centres, defence, credit and so on), whether they are getting stronger, and **read-across**: an important order or event at one company that may matter to another.
 - **Ask:** questions in plain English, answered from your own data with the sources listed. Earlier questions are kept.
 - **What moves the stock:** how stocks moved on average, 1, 5 and 20 trading days after each kind of filing.
-- **Manage stocks:** add, edit and remove stocks; load a new stock's history.
+- **Manage stocks:** add, edit and remove stocks; load a new stock's history. **Study only** marks a stock followed for the evidence, like the Nifty 50 added with `sna watchlist nifty50`: its filings, news, prices and results are collected and read by the cheap AI, but its earnings calls and unusual days are not, and on **Today** it is a row in one table instead of a card. Untick it to follow a stock fully; a stock you own always is.
 - **Settings:** the API key, the monthly AI budget and models, the unusual-day threshold, and which scheduled jobs run.
 - **System:** run any job now and watch it work; the schedule, how much is stored, recent runs and errors, and the AI spend this month by task.
 - **Agent map:** how an agentic system works, shown on this one: the collectors perceive, the scheduler plans, the AI agents think, the database remembers, tools act, and guardrails and the run log watch over it, each with a line on what that part does in any agentic system.

@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.22 · Nov 4, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.23 · Nov 4, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -263,6 +263,7 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **Trigger:** when you add or remove a stock; monthly refresh.
 - **LLM:** Haiku 5.5, only for fuzzy name matching ("L&T", "Larsen").
 - **As built (steps 2, 7, 11):** no LLM. rapidfuzz matching against the NSE main board, NSE SME and BSE lists; an exact full-name match wins; a symbol pins ambiguous names. Peers are suggested from the same industry, largest first, and approved on the dashboard's Manage stocks page. That page also adds stocks, marks them owned and loads their history.
+- **As built (step 30):** `sna watchlist nifty50` adds the Nifty 50's current members from NSE's list as *study-only* stocks, each with a sector index from its NSE industry (banks get Nifty Bank). Study-only stocks are collected and read by the Haiku agents (triage, events, orders) for the evidence on what news does to prices, but get no Sonnet work (earnings calls, promises, move explanations) and no card on Today. Unticking "Study only" on Manage stocks follows one fully. To keep a backlog from spending the budget in a morning, triage, events and orders read the last 3 days first, and events and orders cap their calls per scheduled run (25 and 15).
 - **Reads / writes:** `companies`, `watchlist`, `relationships` (first-pass peers).
 
 1. Accept a name, symbol or ISIN; for bullion accept "gold" or "silver".

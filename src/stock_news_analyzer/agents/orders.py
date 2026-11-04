@@ -48,6 +48,9 @@ from stock_news_analyzer.text import clean
 log = logging.getLogger(__name__)
 
 BATCH_SIZE = 8  # order filings per LLM call
+# Filings of the last few days are read first, so a backlog (stocks just added with their
+# history) waits behind them instead of in front; a run's `limit` then caps the backlog.
+FRESH = timedelta(days=3)
 FILING_CHARS = 4000
 # The same announcement on BSE and NSE: same company, within this long, similar titles.
 SAME_ANNOUNCEMENT = timedelta(days=2)
@@ -343,6 +346,8 @@ def extract_orders(
     ready = [(d, c) for d, c in rows if d.text_status != "pending"]
     result.waiting += len(rows) - len(ready)  # PDF not downloaded yet: read on a later run
     read, copies = _split_copies(ready)
+    cutoff = datetime.now(IST) - FRESH
+    read.sort(key=lambda row: row[0].published_at < cutoff)  # fresh first, each oldest first
     for copy, original in copies:
         session.add(
             OrderFiling(

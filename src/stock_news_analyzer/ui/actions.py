@@ -69,6 +69,7 @@ def tracked_stocks(session: Session) -> list[dict]:
             "symbol": c.nse_symbol or c.bse_code or "",
             "name": c.name,
             "owned": bool(i.owned),
+            "study_only": bool(i.study_only),
             "sector_index": i.sector_index or "",
             "aliases": ", ".join(i.aliases or []),
             "peers": ", ".join(p.nse_symbol for p in wl.approved_peers(session, c) if p.nse_symbol),
@@ -79,7 +80,7 @@ def tracked_stocks(session: Session) -> list[dict]:
 
 
 def save_changes(session: Session, rows: list[dict]) -> tuple[int, int, list[str]]:
-    """Apply edited rows (owned, sector index, aliases, peers, remove).
+    """Apply edited rows (owned, study only, sector index, aliases, peers, remove).
 
     Returns (updated, removed, peer symbols that matched no NSE-listed company).
     """
@@ -95,12 +96,15 @@ def save_changes(session: Session, rows: list[dict]) -> tuple[int, int, list[str
             continue
         aliases = _aliases(row.get("aliases") or "")
         sector = (row.get("sector_index") or "").strip() or None
-        changed = (bool(row["owned"]), sector, aliases) != (
+        study = bool(row.get("study_only", item.study_only)) and not row["owned"]
+        changed = (bool(row["owned"]), study, sector, aliases) != (
             bool(item.owned),
+            bool(item.study_only),
             item.sector_index,
             list(item.aliases or []),
         )
-        item.owned, item.sector_index, item.aliases = bool(row["owned"]), sector, aliases
+        item.owned, item.study_only = bool(row["owned"]), study  # a stock you own is followed fully
+        item.sector_index, item.aliases = sector, aliases
         if "peers" in row:
             company = session.get(Company, row["isin"])
             wanted = _aliases((row.get("peers") or "").upper())

@@ -106,6 +106,7 @@ make watchlist
 | `make watchlist` | Load `config/watchlist.yaml` and show the watchlist |
 | `uv run sna watchlist add "State Bank of India" --owned --alias SBI` | Add or update a stock by name, NSE symbol, BSE code or ISIN |
 | `uv run sna watchlist add gold` | Track bullion (gold or silver) |
+| `uv run sna watchlist nifty50` | Add the Nifty 50's current members (NSE's list) as study-only stocks and load their history (hours; `--no-history` to add only). Safe to run again when NSE changes the index |
 | `uv run sna watchlist history HDFCBANK SBIN` | Load new stocks' filings, news, corporate actions, moves and labels since Oct 2023 (`--since` to change); the CLI form of "Load history now" |
 | `uv run sna watchlist list` | Show the watchlist with NSE/BSE codes and industry |
 | `uv run sna watchlist remove LT` | Stop tracking |

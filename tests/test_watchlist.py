@@ -183,3 +183,36 @@ def test_peers_share_nse_industry_largest_first_and_can_be_approved(master):
     wl.approve_peers(master, kvb, [wl.resolve(master, "CUB")])
     wl.approve_peers(master, kvb, [wl.resolve(master, "CUB")])  # no duplicate
     assert [p.nse_symbol for p in wl.approved_peers(master, kvb)] == ["CUB"]
+
+
+def test_nifty50_members_join_as_study_only_with_a_sector(master):
+    from stock_news_analyzer.models import WatchlistItem
+    from stock_news_analyzer.sources.securities import parse_index_members
+
+    members = parse_index_members((FIXTURES / "ind_nifty50list.csv").read_text())
+    assert [m.symbol for m in members][:2] == ["LT", "KARURVYSYA"]
+    federal = wl.resolve(master, "FEDERALBNK")
+    wl.add_equity(master, federal, owned=True)  # already followed: left as it is
+    known = {"Nifty Bank", "Nifty Financial Services", "Nifty Infrastructure"}
+
+    result = wl.add_index_members(master, members, known)
+    assert [c.nse_symbol for c in result.added] == ["LT", "KARURVYSYA", "LTF", "MOTHERSON"]
+    assert [c.nse_symbol for c in result.present] == ["FEDERALBNK"]
+    assert result.unknown == ["NOTHERE"]
+    items = {c.nse_symbol: i for i, c in wl.list_items(master)}
+    assert items["FEDERALBNK"].owned and not items["FEDERALBNK"].study_only
+    assert all(items[s].study_only and not items[s].owned for s in ("LT", "KARURVYSYA", "LTF"))
+    sectors = {s: items[s].sector_index for s in ("LT", "KARURVYSYA", "LTF", "MOTHERSON")}
+    # A bank gets Nifty Bank; Nifty Auto isn't in `known`, so MOTHERSON has the Nifty 50 only.
+    assert sectors == {
+        "LT": "Nifty Infrastructure",
+        "KARURVYSYA": "Nifty Bank",
+        "LTF": "Nifty Financial Services",
+        "MOTHERSON": None,
+    }
+
+    again = wl.add_index_members(master, members, known)  # safe to run again
+    assert again.added == [] and len(again.present) == 5
+    # Adding one by hand follows it fully.
+    wl.add_equity(master, wl.resolve(master, "LT"))
+    assert not master.query(WatchlistItem).filter_by(isin="INE018A01030").one().study_only

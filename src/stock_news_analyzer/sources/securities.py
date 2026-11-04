@@ -22,6 +22,8 @@ NSE_EQUITY_LIST_URL = "https://archives.nseindia.com/content/equities/EQUITY_L.c
 # Companies on NSE Emerge, the SME platform (not in EQUITY_L.csv); same columns.
 NSE_SME_LIST_URL = "https://nsearchives.nseindia.com/emerge/corporates/content/SME_EQUITY_L.csv"
 NIFTY500_URL = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
+# The Nifty 50's current members, in the same layout; NSE changes them twice a year.
+NIFTY50_URL = "https://archives.nseindia.com/content/indices/ind_nifty50list.csv"
 BSE_SCRIPS_URL = (
     "https://api.bseindia.com/BseIndiaAPI/api/ListofScripData/w"
     "?Group=&Scripcode=&industry=&segment=Equity&status=Active"
@@ -89,6 +91,28 @@ def parse_nse_equity_list(text: str) -> list[NseSecurity]:
 def parse_nifty500(text: str) -> dict[str, str]:
     """ISIN -> NSE industry for Nifty 500 members."""
     return {row["ISIN CODE"]: row["INDUSTRY"] for row in _rows(text) if row.get("ISIN CODE")}
+
+
+@dataclass
+class IndexMember:
+    symbol: str
+    name: str
+    industry: str
+    isin: str
+
+
+def parse_index_members(text: str) -> list[IndexMember]:
+    """An NSE index's constituent list (Company Name, Industry, Symbol, Series, ISIN Code)."""
+    return [
+        IndexMember(
+            symbol=row["SYMBOL"],
+            name=row.get("COMPANY NAME", ""),
+            industry=row.get("INDUSTRY", ""),
+            isin=row["ISIN CODE"],
+        )
+        for row in _rows(text)
+        if row.get("SYMBOL") and row.get("ISIN CODE")
+    ]
 
 
 def _decimal(value) -> Decimal | None:

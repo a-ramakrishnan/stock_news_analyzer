@@ -1,5 +1,6 @@
 # When each job runs, as cron expressions in India time (minute hour day month weekday).
 # Used by `sna orchestrator start`. Run any job by hand with `sna run <job>`.
+# `cron` can be a list, for a job that runs at more than one time.
 # Set `enabled: false` to pause a job. After editing, restart the orchestrator.
 jobs:
   filings:       # new BSE + NSE announcements
@@ -9,9 +10,10 @@ jobs:
   triage:        # LLM (Haiku): relevance, topic, sentiment, importance of new articles
     cron: "25 6-23 * * *"
   prices:        # NSE prices (published around 18:00), corporate actions, moves and labels
-    cron: "30 19,21 * * 1-5"
+    # The evenings, and a morning catch-up (Tue-Sat) in case the computer slept through them.
+    cron: ["30 19,21 * * 1-5", "5 7 * * 2-6"]
   deals:         # NSE bulk and block deals (published in the evening)
-    cron: "0 19,22 * * 1-5"
+    cron: ["0 19,22 * * 1-5", "6 7 * * 2-6"]
   xbrl:          # results from NSE's XBRL files (exact figures, no LLM), before the PDF reader
     cron: "15 7 * * *"
   holdings:      # shareholding patterns from NSE's XBRL files (no LLM), before the red flags

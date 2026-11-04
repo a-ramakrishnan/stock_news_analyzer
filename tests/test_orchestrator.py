@@ -75,6 +75,54 @@ def test_paused_jobs_are_not_scheduled(tmp_path):
     assert [j.id for j in scheduler.get_jobs()] == ["news"]
 
 
+def test_a_job_can_run_at_several_times(tmp_path):
+    f = tmp_path / "s.yaml"
+    f.write_text("jobs:\n  prices:\n    cron: ['30 19,21 * * 1-5', '5 7 * * 2-6']\n")
+    (prices,) = orch.load_schedule(f)
+    assert prices.cron == "30 19,21 * * 1-5 | 5 7 * * 2-6"
+    friday_night = datetime(2026, 10, 30, 22, 0, tzinfo=IST)
+    # Saturday's morning catch-up comes before Monday evening.
+    assert prices.trigger.get_next_fire_time(None, friday_night) == datetime(
+        2026, 10, 31, 7, 5, tzinfo=IST
+    )
+
+
+@pytest.mark.db
+def test_missed_runs_and_catch_up(session, test_database_url, monkeypatch, tmp_path):
+    monkeypatch.setenv("DATABASE_URL", test_database_url)
+    f = tmp_path / "s.yaml"
+    f.write_text(
+        "jobs:\n  prices:\n    cron: '30 19 * * *'\n  filings:\n    cron: '*/30 7-23 * * *'\n"
+        "  digest:\n    cron: '0 8 * * *'\n"
+    )
+    schedule = orch.load_schedule(f)
+    now = datetime(2026, 11, 4, 14, 10, tzinfo=IST)
+    session.add_all(
+        [
+            Run(job="prices", started_at=now - timedelta(days=3), status="ok"),  # missed 3 days
+            Run(job="filings", started_at=now - timedelta(minutes=10), status="ok"),  # on time
+            Run(job="digest", started_at=now - timedelta(hours=6, minutes=5), status="ok"),
+        ]
+    )
+    session.commit()
+    missed = orch.missed_runs(session, schedule, now)
+    # prices missed its run 3 days ago; filings ran 10 minutes ago; today's digest ran.
+    assert set(missed) == {"prices"}
+    assert missed["prices"] == datetime(2026, 11, 1, 19, 30, tzinfo=IST)
+    # A run a little late (within the scheduler's 3 hours of grace) is not missed yet.
+    assert orch.missed_runs(session, schedule, datetime(2026, 11, 1, 21, 0, tzinfo=IST)) == {}
+
+    ran = []
+    monkeypatch.setattr(orch, "missed_runs", lambda _s: {"digest": now, "prices": now})
+    monkeypatch.setitem(orch.JOBS, "prices", lambda _s: ran.append("prices") or "3 days loaded")
+    monkeypatch.setitem(orch.JOBS, "digest", lambda _s: ran.append("digest") or "written")
+    lines = []
+    done = orch.catch_up(session, progress=lines.append)
+    assert ran == ["prices", "digest"]  # the scheduler's order: measure, then report
+    assert [r.status for _, r in done] == ["ok", "ok"]
+    assert lines[-1] == "digest: ok, written"
+
+
 # --- running and recording ---------------------------------------------------
 
 

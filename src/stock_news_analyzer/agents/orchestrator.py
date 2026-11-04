@@ -16,6 +16,7 @@ from pathlib import Path
 import yaml
 from apscheduler.executors.pool import ThreadPoolExecutor
 from apscheduler.schedulers.blocking import BlockingScheduler
+from apscheduler.triggers.combining import OrTrigger
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.orm import Session
 
@@ -60,10 +61,22 @@ def job_filings(session: Session) -> str:
 
 
 def job_news(session: Session) -> str:
+    from dataclasses import replace
+
+    from sqlalchemy import func, select
+
     from stock_news_analyzer.agents.news import NewsCollector
     from stock_news_analyzer.sources.news import NewsClient, load_feed_config
 
-    result = NewsCollector(session, NewsClient(), load_feed_config(FEEDS_FILE)).collect()
+    config = load_feed_config(FEEDS_FILE)
+    # After a gap (the computer off for days), search Google News over the whole gap.
+    last = session.scalar(
+        select(func.max(Run.started_at)).where(Run.job == "news", Run.status == "ok")
+    )
+    if last:
+        gap = (datetime.now(IST) - last).days + 1
+        config = replace(config, google_days=min(max(config.google_days, gap), 30))
+    result = NewsCollector(session, NewsClient(), config).collect()
     summary = f"{result.new} new articles ({result.matched} matched of {result.seen} read)"
     if result.errors:
         raise JobError(summary, [f"{r.key}: {r.error}" for r in result.errors])
@@ -437,9 +450,9 @@ def scheduled_run(name: str) -> Run | None:
 @dataclass
 class ScheduledJob:
     name: str
-    cron: str
+    cron: str  # one cron expression, or several joined by " | "
     enabled: bool
-    trigger: CronTrigger
+    trigger: CronTrigger | OrTrigger
 
 
 WEEKDAYS = ("sun", "mon", "tue", "wed", "thu", "fri", "sat", "sun")
@@ -468,12 +481,17 @@ def load_schedule(path: Path = SCHEDULE_FILE) -> list[ScheduledJob]:
         if name not in JOBS:
             raise ValueError(f"{path}: unknown job '{name}' (known: {', '.join(JOBS)})")
         spec = spec or {}
-        cron = str(spec.get("cron", "")).strip()
+        # `cron` is one expression, or a list of them (e.g. a morning catch-up run as well).
+        crons = spec.get("cron", "")
+        crons = [str(c).strip() for c in crons] if isinstance(crons, list) else [str(crons).strip()]
         try:
-            trigger = cron_trigger(cron)
+            triggers = [cron_trigger(c) for c in crons]
         except ValueError as exc:
-            raise ValueError(f"{path}: job '{name}' has an invalid cron '{cron}': {exc}") from exc
-        out.append(ScheduledJob(name, cron, bool(spec.get("enabled", True)), trigger))
+            raise ValueError(
+                f"{path}: job '{name}' has an invalid cron '{' | '.join(crons)}': {exc}"
+            ) from exc
+        trigger = triggers[0] if len(triggers) == 1 else OrTrigger(triggers)
+        out.append(ScheduledJob(name, " | ".join(crons), bool(spec.get("enabled", True)), trigger))
     return out
 
 
@@ -490,6 +508,50 @@ def job_notes(path: Path = SCHEDULE_FILE) -> dict[str, str]:
 def next_runs(schedule: list[ScheduledJob], now: datetime | None = None) -> dict[str, datetime]:
     now = now or datetime.now(IST)
     return {j.name: j.trigger.get_next_fire_time(None, now) for j in schedule if j.enabled}
+
+
+def missed_runs(
+    session: Session, schedule: list[ScheduledJob] | None = None, now: datetime | None = None
+) -> dict[str, datetime]:
+    """{job: the scheduled time it missed}: jobs whose next run after their last one is more
+    than MISFIRE_GRACE in the past, which the scheduler has given up on (the computer was
+    asleep or Docker stopped). Jobs turned off, or never run in the last week, are judged
+    from a week ago."""
+    from sqlalchemy import func, select
+
+    from stock_news_analyzer.settings_store import paused_jobs
+
+    now = now or datetime.now(IST)
+    schedule = load_schedule() if schedule is None else schedule
+    last = dict(session.execute(select(Run.job, func.max(Run.started_at)).group_by(Run.job)).all())
+    off = paused_jobs(get_settings())
+    out = {}
+    for job in schedule:
+        if not job.enabled or job.name in off:
+            continue
+        since = max(last.get(job.name) or now - timedelta(days=7), now - timedelta(days=7))
+        due = job.trigger.get_next_fire_time(None, since + timedelta(seconds=1))
+        if due and due + MISFIRE_GRACE < now:
+            out[job.name] = due
+    return out
+
+
+def catch_up(
+    session: Session, progress: Callable[[str], None] | None = None
+) -> list[tuple[str, Run]]:
+    """Run every job that missed a scheduled run, in the scheduler's order (collect, judge,
+    measure, report). Each picks up from where it last stopped: filings, prices and deals
+    from their latest stored day, news over the gap, the AI agents on everything waiting."""
+    say = progress or (lambda _line: None)
+    missed = missed_runs(session)
+    order = [n for n in RUN_ALL if n in missed] + sorted(set(missed) - set(RUN_ALL))
+    done = []
+    for name in order:
+        say(f"{name}: missed {missed[name]:%a %d %b %H:%M}, running now...")
+        run = run_job(name)
+        say(f"{name}: {run.status}, {run.error or run.summary or ''}")
+        done.append((name, run))
+    return done
 
 
 def build_scheduler(schedule: list[ScheduledJob]) -> BlockingScheduler:

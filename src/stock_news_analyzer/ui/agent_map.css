@@ -96,3 +96,7 @@ body{margin:0;background:var(--bg);color:var(--text);font:13px/1.4 "IBM Plex San
 /* In a replay, live-only details (what is running now, what runs next) are hidden. */
 .replay .kv{display:none}
 .replay .chip .note{display:none}
+/* A job whose scheduled run never happened (the computer was asleep or Docker stopped). */
+.missed{border-color:color-mix(in srgb,$medium 60%,var(--border))}
+.missed .dot{background:$medium}
+.missed .when{color:$medium}

@@ -68,10 +68,10 @@ The sidebar now always shows every page: with thirteen, Streamlit had started fo
 ### Live and replay
 
 The map moved to the Today group, under Red flags, and became a way to learn how an agentic system is built. A switch at the top chooses:
-- **Today, live:** the map's state now, refreshed every 30 seconds. Dots loop along the path of each job running now, and a feed explains each of today's runs in plain words, e.g. "Think · the News triage agent took its working set from memory, asked Claude (Haiku) 3 times for $0.006, and wrote its answer back to memory. Result: 10 articles triaged."
+- **Today, live:** the map's state now, refreshed every 30 seconds. A faint line traces the path of each job running now, and a feed explains each of today's runs in plain words, e.g. "Think · the News triage agent took its working set from memory, asked Claude (Haiku) 3 times for $0.006, and wrote its answer back to memory. Result: 10 articles triaged."
 - **Replay the last 7 days:** today's or the week's runs (`queries.agent_events`: each run with the AI calls made during it, and each question asked) played back on the map.
   - Play and pause, a speed (10 minutes, an hour or six hours a second), "skip quiet hours", and a time slider that jumps to any moment.
-  - As each run starts, the scheduler pulses, its box lights up and shows what that run did, and a dot carries the information along its path: source → collector → memory for a collector; memory → agent → Claude → agent → memory for an AI agent; you → Ask → database → Claude → dashboard for a question.
+  - As each run starts, the scheduler pulses, its box lights up and shows what that run did, and a thin line draws the information's path, then fades: source → collector → memory for a collector; memory → agent → Claude → agent → memory for an AI agent; you → Ask → database → Claude → dashboard for a question.
   - The budget pulses before AI calls and the QA checker with the events agent; a failed run flashes Observe.
   - A tally counts the replayed runs, errors, AI calls and cost.
 - **Teaching:** every layer carries one line on what it does in any agentic system, e.g. "Guardrails: limits on what agents may do, checked at every step, not only at the start."
@@ -86,6 +86,10 @@ Prices and deals looked stale on the Mac: they ran only in the evening, when the
 - **Catch up:** a button on the Agent map and on System lists the missed jobs and runs them in the usual order (collect, judge, measure, report), with progress. `sna run missed` does the same from the command line. News looks back as many days as it missed, up to 30.
 
 Two tests check a job with several times and the missed and catch-up logic; 358 tests pass.
+
+### Lines, not dots
+
+Moving dots looked busy, so each run's path is now a thin line drawn over the map (an SVG layer), from box to box, that fades once drawn. At most three lines show at a time in a replay; in the live view a job running now gets one faint line that stays, with nothing looping. With the system's "reduce motion" setting, lines appear without being drawn.
 
 ## On the Mac
 

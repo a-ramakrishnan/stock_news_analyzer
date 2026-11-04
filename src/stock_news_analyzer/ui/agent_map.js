@@ -71,16 +71,53 @@
     return [r.left - m.left + r.width / 2, r.top - m.top + r.height / 2];
   }
 
-  // A dot travelling through the boxes of a route.
-  function send(ids, color, ms) {
+  // A thin line drawn through the boxes of a route, over the map.
+  const SVG = "http://www.w3.org/2000/svg";
+  const layer = document.createElementNS(SVG, "svg");
+  layer.setAttribute("class", "trace-layer");
+  map.appendChild(layer);
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function curve(points) {
+    // Gentle S-bends between boxes, so the line reads as a path, not a zig-zag.
+    let d = `M${points[0][0]},${points[0][1]}`;
+    for (let k = 1; k < points.length; k++) {
+      const [x0, y0] = points[k - 1];
+      const [x1, y1] = points[k];
+      const my = (y0 + y1) / 2;
+      d += ` C${x0},${my} ${x1},${my} ${x1},${y1}`;
+    }
+    return d;
+  }
+
+  // Draw the line in over `ms`, then let it fade; with `keep`, it stays (a job running now).
+  function send(ids, color, ms, keep) {
     const points = ids.map(center).filter(Boolean);
     if (points.length < 2) return;
-    const dot = document.createElement("div");
-    dot.className = "packet";
-    dot.style.background = color;
-    map.appendChild(dot);
-    const frames = points.map(([x, y]) => ({ transform: `translate(${x - 6}px, ${y - 6}px)` }));
-    dot.animate(frames, { duration: ms, easing: "ease-in-out" }).onfinish = () => dot.remove();
+    layer.setAttribute("viewBox", `0 0 ${map.clientWidth} ${map.clientHeight}`);
+    const path = document.createElementNS(SVG, "path");
+    path.setAttribute("d", curve(points));
+    path.setAttribute("class", keep ? "trace keep" : "trace");
+    path.style.stroke = color;
+    layer.appendChild(path);
+    // At most a few passing lines at once: the oldest go first, so the map stays calm.
+    const passing = layer.querySelectorAll(".trace:not(.keep)");
+    for (let k = 0; k < passing.length - 3; k++) passing[k].remove();
+    const length = path.getTotalLength();
+    path.style.strokeDasharray = length;
+    if (still) {
+      path.style.strokeDashoffset = 0;
+    } else {
+      path.animate([{ strokeDashoffset: length }, { strokeDashoffset: 0 }], {
+        duration: ms,
+        easing: "ease-in-out",
+        fill: "forwards",
+      });
+    }
+    if (keep) return;
+    path
+      .animate([{ opacity: 0.5 }, { opacity: 0 }], { duration: 900, delay: ms + 300, fill: "forwards" })
+      .onfinish = () => path.remove();
   }
 
   function flash(id, cls, ms) {
@@ -152,18 +189,13 @@
   }
 
   if (D.mode === "live") {
-    // Today's action: every run so far, newest first; dots loop along the path of each job
-    // running now.
+    // Today's action: every run so far, newest first; a faint line traces the path of each
+    // job running now, drawn once and left in place.
     const today = D.events.filter((e) => e.start >= D.today);
     today.forEach((e) => feed.insertAdjacentHTML("afterbegin", narrate(e)));
     if (!today.length) feed.innerHTML = '<li class="none">Nothing has run yet today.</li>';
     const running = D.events.filter((e) => e.status === "running");
-    const loop = () =>
-      running.forEach((e, i) => setTimeout(() => send(route(e), D.colors.run, 1800), i * 400));
-    if (running.length) {
-      setTimeout(loop, 600);
-      setInterval(loop, 2600);
-    }
+    running.forEach((e, i) => setTimeout(() => send(route(e), D.colors.run, 1800, true), 600 + i * 400));
     return;
   }
 

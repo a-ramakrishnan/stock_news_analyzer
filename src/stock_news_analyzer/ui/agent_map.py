@@ -2,7 +2,7 @@
 remember, act, guardrails, observe), to show and teach how an agentic system works.
 
 Two modes: "live" shows each part's state now (from `queries.agent_status`) and today's runs
-as a narrated feed, with moving dots along the path of each job that is running; "replay"
+as a narrated feed, with a faint line along the path of each job that is running; "replay"
 plays back the last days' runs (`queries.agent_events`) on the map, with play, speed and a
 time slider. `render` returns a complete HTML page, shown in an iframe by the dashboard (the
 iframe keeps its own styles and script, which `st.html` would drop).
@@ -32,7 +32,7 @@ CONCEPT = {
     "guard": "Limits on what agents may do, checked at every step, not only at the start.",
     "observe": "A record of every run and AI call, to debug the loop and track its cost.",
 }
-# Where each job's information comes from, for the moving dots and the narration.
+# Where each job's information comes from, for the traced lines and the narration.
 SOURCE = {
     "filings": ("in-exchanges", "the BSE and NSE announcement pages"),
     "news": ("in-news", "news feeds and Google News"),

@@ -58,9 +58,10 @@ body{margin:0;background:var(--bg);color:var(--text);font:13px/1.4 "IBM Plex San
 .observe .concept{flex-basis:100%;margin:2px 0 0}
 .map{position:relative}
 /* A dot carrying information from box to box. */
-.packet{position:absolute;left:0;top:0;width:12px;height:12px;border-radius:50%;z-index:5;
-  pointer-events:none;box-shadow:0 0 0 3px color-mix(in srgb,currentColor 0%,transparent),
-  0 0 10px 2px color-mix(in srgb,$run 60%,transparent)}
+.trace-layer{position:absolute;inset:0;width:100%;height:100%;z-index:5;pointer-events:none;
+  overflow:visible}
+.trace{fill:none;stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round;opacity:.5}
+.trace.keep{opacity:.35}
 .pulse{animation:pulse-box .9s ease-out}
 @keyframes pulse-box{0%{box-shadow:0 0 0 0 color-mix(in srgb,$run 70%,transparent)}
   100%{box-shadow:0 0 0 10px transparent}}

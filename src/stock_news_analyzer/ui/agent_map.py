@@ -1,16 +1,48 @@
 """The Agent map: the whole system laid out as an agent's anatomy (perceive, plan, think,
-remember, act, guardrails, observe) with each part's live state, from `queries.agent_status`.
+remember, act, guardrails, observe), to show and teach how an agentic system works.
 
-`render` returns a complete HTML page, shown in an iframe by the dashboard (the iframe keeps its
-own styles, and inline SVG would be dropped by `st.html`).
+Two modes: "live" shows each part's state now (from `queries.agent_status`) and today's runs
+as a narrated feed, with moving dots along the path of each job that is running; "replay"
+plays back the last days' runs (`queries.agent_events`) on the map, with play, speed and a
+time slider. `render` returns a complete HTML page, shown in an iframe by the dashboard (the
+iframe keeps its own styles and script, which `st.html` would drop).
 """
 
 import html
+import json
 from datetime import datetime
 from pathlib import Path
 from string import Template
 
 CSS = Path(__file__).with_name("agent_map.css")
+SCRIPT = Path(__file__).with_name("agent_map.js")
+
+# What each layer is, in any agentic system: the map teaches as well as shows.
+CONCEPT = {
+    "perceive": "Turns the outside world into data the agents can use: fetch, clean, store. "
+    "No reasoning yet.",
+    "plan": "Decides what runs when, and in what order. Here a fixed schedule; in other "
+    "systems an LLM breaks a goal into steps.",
+    "think": "Each agent makes one kind of judgement with an LLM, from what memory holds, "
+    "and writes its answer back.",
+    "remember": "Short-term memory is what one decision sees; long-term memory is everything "
+    "kept, which every agent reads and adds to.",
+    "act": "Tools are how agents touch the world: an API, the database, files.",
+    "output": "What people see: the morning digest, the dashboard, the flags to look into.",
+    "guard": "Limits on what agents may do, checked at every step, not only at the start.",
+    "observe": "A record of every run and AI call, to debug the loop and track its cost.",
+}
+# Where each job's information comes from, for the moving dots and the narration.
+SOURCE = {
+    "filings": ("in-exchanges", "the BSE and NSE announcement pages"),
+    "news": ("in-news", "news feeds and Google News"),
+    "prices": ("in-exchanges", "NSE's daily price files"),
+    "deals": ("in-exchanges", "NSE's bulk and block deals"),
+    "xbrl": ("in-exchanges", "NSE's XBRL results files"),
+    "holdings": ("in-exchanges", "NSE's shareholding patterns"),
+    "bullion": ("in-yahoo", "gold and silver prices"),
+    "securities": ("in-exchanges", "the NSE and BSE company lists"),
+}
 
 # (job, name, what it does): the collectors, which use no AI.
 COLLECTORS = [
@@ -85,7 +117,8 @@ def _chip(status: dict, job: str, name: str, note: str, tasks=(), model: str = "
     tip = html.escape(run.get("error") or run.get("summary") or note)
     nxt = _next(status, job)
     return (
-        f'<div class="chip {state}" title="{tip}"><div class="head"><span class="dot"></span>'
+        f'<div class="chip {state}" id="job-{job}" data-job="{job}" title="{tip}">'
+        '<div class="head"><span class="dot"></span>'
         f"<b>{html.escape(name)}</b>"
         + (f'<span class="model">{html.escape(model)}</span>' if model else "")
         + f'</div><div class="note">{html.escape(note)}</div>'
@@ -95,8 +128,9 @@ def _chip(status: dict, job: str, name: str, note: str, tasks=(), model: str = "
 
 def _layer(kind: str, label: str, title: str, body: str, extra: str = "") -> str:
     return (
-        f'<section class="layer {kind}" style="--c:{LAYER[kind]}"><div class="band">'
-        f'{html.escape(label)}</div><div class="inner"><h2>{html.escape(title)}</h2>'
+        f'<section class="layer {kind}" id="layer-{kind}" style="--c:{LAYER[kind]}">'
+        f'<div class="band">{html.escape(label)}</div><div class="inner">'
+        f'<h2>{html.escape(title)}</h2><p class="concept">{html.escape(CONCEPT[kind])}</p>'
         f"{body}{extra}</div></section>"
     )
 
@@ -110,8 +144,15 @@ def _flow(text: str, arrow: str = "↓") -> str:
     return f'<div class="flow"><span>{arrow}</span>{html.escape(text)}</div>'
 
 
-def render(status: dict, palette: dict[str, str], dark: bool = False) -> str:
-    """The Agent map as a complete HTML page in the theme's colours."""
+def render(
+    status: dict,
+    palette: dict[str, str],
+    dark: bool = False,
+    events: list[dict] | None = None,
+    mode: str = "live",
+) -> str:
+    """The Agent map as a complete HTML page in the theme's colours. `events`: the runs to
+    narrate (today's in "live", the last days' in "replay")."""
     p = palette
     running = [j for j, r in status["jobs"].items() if r["status"] == "running"]
     upcoming = sorted(
@@ -124,13 +165,13 @@ def render(status: dict, palette: dict[str, str], dark: bool = False) -> str:
     s = status["stored"]
 
     inputs = "".join(
-        f'<span class="src">{html.escape(t)}</span>'
-        for t in (
-            "NSE and BSE websites",
-            "News feeds, Google News",
-            "Yahoo Finance (gold, silver, USD)",
-            "The schedule, 07:00–23:00",
-            "Your questions on Ask",
+        f'<span class="src" id="{key}">{html.escape(t)}</span>'
+        for key, t in (
+            ("in-exchanges", "NSE and BSE websites"),
+            ("in-news", "News feeds, Google News"),
+            ("in-yahoo", "Yahoo Finance (gold, silver, USD)"),
+            ("in-schedule", "The schedule, 07:00–23:00"),
+            ("in-you", "Your questions on Ask"),
         )
     )
     perceive = (
@@ -165,10 +206,10 @@ def render(status: dict, palette: dict[str, str], dark: bool = False) -> str:
         + "</div>"
     )
     remember = (
-        '<div class="mem"><h3>Short-term</h3><p>Each run\'s working set: the filings, news, '
-        "prices and earlier calls put in front of the model for one decision; Ask's lookups "
-        "for one question.</p></div>"
-        '<div class="mem"><h3>Long-term (Postgres)</h3><p>'
+        '<div class="mem" id="mem-short"><h3>Short-term</h3><p>Each run\'s working set: the '
+        "filings, news, prices and earlier calls put in front of the model for one decision; "
+        "Ask's lookups for one question.</p></div>"
+        '<div class="mem" id="mem-long"><h3>Long-term (Postgres)</h3><p>'
         + " · ".join(
             _count(s[key], word)
             for key, word in (
@@ -185,27 +226,30 @@ def render(status: dict, palette: dict[str, str], dark: bool = False) -> str:
     )
     calls_today = sum(v["calls"] for v in status["ai_today"].values())
     cost_today = sum(v["cost"] for v in status["ai_today"].values())
+    tools = [
+        ("tool-anthropic", "Anthropic API", f"{calls_today} calls today · ${cost_today:.2f}"),
+        ("tool-download", "Exchange downloads", "browser-like, at a polite rate"),
+        ("tool-database", "Database", "agents write; Ask reads only"),
+        ("tool-files", "data folder", "filing PDFs, digests"),
+    ]
     act = (
         '<div class="tools">'
-        f'<div class="tool"><b>Anthropic API</b><span>{calls_today} calls today · '
-        f"${cost_today:.2f}</span></div>"
-        '<div class="tool"><b>Exchange downloads</b><span>browser-like, at a polite rate</span>'
-        "</div>"
-        '<div class="tool"><b>Database</b><span>agents write; Ask reads only</span></div>'
-        '<div class="tool"><b>data folder</b><span>filing PDFs, digests</span></div>'
-        "</div>"
+        + "".join(
+            f'<div class="tool" id="{key}"><b>{name}</b><span>{html.escape(what)}</span></div>'
+            for key, name, what in tools
+        )
+        + "</div>"
     )
+    flags_state = "error" if status["open_flags"] else "ok"
     output = (
         '<div class="chips">'
         + "".join(_chip(status, job, name, note) for job, name, note in OUTPUTS)
-        + (
-            '<div class="chip ok"><div class="head"><span class="dot"></span><b>Dashboard</b></div>'
-            '<div class="note">these pages</div></div>'
-            f'<div class="chip {"error" if status["open_flags"] else "ok"}"><div class="head">'
-            '<span class="dot"></span><b>Red flags</b></div>'
-            f'<div class="note">{status["open_flags"]} open, for you to look into</div></div>'
-        )
-        + "</div>"
+        + '<div class="chip ok" id="out-dashboard"><div class="head"><span class="dot"></span>'
+        '<b>Dashboard</b></div><div class="note">these pages</div></div>'
+        f'<div class="chip {flags_state}" id="out-flags"><div class="head">'
+        '<span class="dot"></span><b>Red flags</b></div>'
+        f'<div class="note">{status["open_flags"]} open, for you to look into</div></div>'
+        "</div>"
     )
     guards = [
         (
@@ -231,8 +275,8 @@ def render(status: dict, palette: dict[str, str], dark: bool = False) -> str:
         ("Rate limits", "exchanges and news fetched politely", ""),
     ]
     guard = "".join(
-        f'<div class="g"><b>{html.escape(n)}</b><span>{html.escape(v)}</span>{x}</div>'
-        for n, v, x in guards
+        f'<div class="g" id="g-{i}"><b>{html.escape(n)}</b><span>{html.escape(v)}</span>{x}</div>'
+        for i, (n, v, x) in enumerate(guards)
     )
     observe = "".join(
         f'<div class="o"><span>{html.escape(n)}</span><b>{html.escape(v)}</b></div>'
@@ -273,12 +317,55 @@ def render(status: dict, palette: dict[str, str], dark: bool = False) -> str:
         )
         + "<span>Hover over a box for its last result.</span>"
     )
+    jobs = {job: {"name": n, "kind": "collector", "note": note} for job, n, note in COLLECTORS}
+    for job, n, model, _tasks in THINKERS:
+        jobs[job] = {"name": n, "kind": "ask" if job == "ask" else "ai", "model": model}
+    jobs.update({job: {"name": n, "kind": "rules"} for job, n, _note in RULES})
+    jobs.update({job: {"name": n, "kind": "output"} for job, n, _note in OUTPUTS})
+    for job, (where, what) in SOURCE.items():
+        jobs[job].update(source=where, from_=what)
+    data = {
+        "mode": mode,
+        "now": int(status["now"].timestamp() * 1000),
+        "today": int(
+            status["now"].replace(hour=0, minute=0, second=0, microsecond=0).timestamp() * 1000
+        ),
+        "events": events or [],
+        "jobs": jobs,
+        "running": running,
+        "colors": {"run": p["accent_text"], "up": p["up"], "down": p["down"]},
+    }
+    controls = (
+        '<div class="controls" id="controls">'
+        '<button id="play" type="button">▶ Play</button>'
+        '<span class="seg"><button type="button" data-span="today">Today</button>'
+        '<button type="button" data-span="week" class="on">Last 7 days</button></span>'
+        '<label>Speed <select id="speed"><option value="600">10 min / s</option>'
+        '<option value="3600" selected>1 hour / s</option><option value="21600">6 hours / s'
+        "</option></select></label>"
+        '<label><input type="checkbox" id="skip" checked> skip quiet hours</label>'
+        '<input type="range" id="scrub" min="0" max="1000" value="0">'
+        '<b id="clock"></b><span id="tally" class="muted"></span></div>'
+        if mode == "replay"
+        else ""
+    )
+    feed_title = (
+        "What happened, step by step" if mode == "replay" else "Today's action, newest first"
+    )
+    feed = (
+        f'<section class="feed"><h2>{feed_title}</h2>'
+        '<p class="concept">Each line is one step of the loop: where information came from, '
+        'which part handled it, and where it went.</p><ol id="feed"></ol></section>'
+    )
+    payload = json.dumps(data).replace("</", "<\\/")
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <style>
 {css}
-</style></head><body>
-<div class="map">
-<aside class="guard"><h2>Guardrails</h2>{guard}</aside>
+</style></head><body class="{mode}">
+{controls}
+<div class="map" id="map">
+<aside class="guard" id="layer-guard"><h2>Guardrails</h2>
+<p class="concept">{html.escape(CONCEPT["guard"])}</p>{guard}</aside>
 <div class="main">
 <div class="inputs"><span class="lbl">Input</span>{inputs}</div>
 {_flow("collected on the schedule")}
@@ -296,5 +383,11 @@ def render(status: dict, palette: dict[str, str], dark: bool = False) -> str:
 </div>
 <div class="legend">{legend}</div>
 </div>
-<footer class="observe"><h2>Observe</h2>{observe}</footer>
-</div></body></html>"""
+<footer class="observe" id="observe"><h2>Observe</h2>{observe}
+<p class="concept">{html.escape(CONCEPT["observe"])}</p></footer>
+</div>
+{feed}
+<script id="data" type="application/json">{payload}</script>
+<script>
+{SCRIPT.read_text()}
+</script></body></html>"""

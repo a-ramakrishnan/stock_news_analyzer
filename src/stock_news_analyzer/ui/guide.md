@@ -28,7 +28,7 @@ Start the system with **start.command** (Mac) or **start.bat** (Windows) in its 
 
 ## The pages
 
-The sidebar groups the pages: **Today** (what changed), **Research** (one stock, questions, themes), **Library** (every filing and article), **Set up** (stocks, settings, system, the agent map) and **Help**.
+The sidebar groups the pages: **Today** (what changed, and the agent map), **Research** (one stock, questions, themes), **Library** (every filing and article), **Set up** (stocks, settings, system) and **Help**.
 
 - **Today:** index levels, a card for each stock (Stocks I own first), the latest digest, recent red flags, and whether the morning jobs ran.
 - **Red flags:** every flag, filtered by severity, period and stock. Select one to dismiss it with a note once you have looked into it, or to open a dismissed one again.
@@ -43,7 +43,9 @@ The sidebar groups the pages: **Today** (what changed), **Research** (one stock,
 - **Manage stocks:** add, edit and remove stocks; load a new stock's history.
 - **Settings:** the API key, the monthly AI budget and models, the unusual-day threshold, and which scheduled jobs run.
 - **System:** run any job now and watch it work; the schedule, how much is stored, recent runs and errors, and the AI spend this month by task.
-- **Agent map:** the whole system on one page, live: the collectors, the scheduler, the AI agents, memory, tools, the guardrails around them and the run log. Each box shows whether its job is running, worked or failed last time, its next run, and its AI calls and cost today. Hover over a box for its last result.
+- **Agent map:** how an agentic system works, shown on this one: the collectors perceive, the scheduler plans, the AI agents think, the database remembers, tools act, and guardrails and the run log watch over it, each with a line on what that part does in any agentic system.
+  - **Today, live:** each box shows whether its job is running, worked or failed, its next run, and its AI calls and cost today; dots move along the path of each job running now; a feed explains each of today's runs in plain words.
+  - **Replay the last 7 days:** press Play to watch information move through the system, today's or the week's, at 10 minutes, an hour or six hours a second; drag the slider to jump to a time. Each run lights up its box, a dot carries the information from source to memory or from memory through Claude and back, and the feed narrates it.
 - **Guide:** this page.
 
 ## Settings

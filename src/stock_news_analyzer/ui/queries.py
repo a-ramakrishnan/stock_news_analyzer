@@ -1189,3 +1189,84 @@ def agent_status(session: Session) -> dict:
         "unchecked_events": count(Event, Event.qa_status == "flagged", Event.review.is_(None)),
         "open_flags": count(RedFlag, RedFlag.dismissed_at.is_(None)),
     }
+
+
+# Which jobs' runs an LLM task's calls belong to, for the Agent map's replay.
+TASK_JOB = {
+    "triage": "triage",
+    "results": "results",
+    "events": "events",
+    "qa": "events",
+    "explain": "explain",
+    "concall": "concalls",
+    "promises": "promises",
+    "orders": "orders",
+    "order_book": "orders",
+    "themes": "themes",
+    "bullion": "bullion",
+    "ask": "ask",
+}
+
+
+def agent_events(session: Session, days: int = 7) -> list[dict]:
+    """What moved through the system in the last `days`, oldest first, for the Agent map's
+    replay: every job run (start, end, status, summary or error) with the AI calls and cost
+    made during it, and every question asked on Ask. Times are epoch milliseconds."""
+    from stock_news_analyzer.models import Question
+
+    since = datetime.now(IST) - timedelta(days=days)
+
+    def ms(when: datetime) -> int:
+        return int(when.timestamp() * 1000)
+
+    calls: dict[str, list[tuple[int, float]]] = {}
+    for at, task, cost in session.execute(
+        select(LlmCall.at, LlmCall.task, LlmCall.cost_usd)
+        .where(LlmCall.at >= since)
+        .order_by(LlmCall.at)
+    ):
+        job = TASK_JOB.get(task)
+        if job:
+            calls.setdefault(job, []).append((ms(at), float(cost or 0)))
+
+    def ai(job: str, start: int, end: int) -> tuple[int, float]:
+        made = [c for at, c in calls.get(job, []) if start - 5000 <= at <= end + 5000]
+        return len(made), round(sum(made), 4)
+
+    events = []
+    now = ms(datetime.now(IST))
+    for run in session.scalars(select(Run).where(Run.started_at >= since).order_by(Run.started_at)):
+        start = ms(run.started_at)
+        end = ms(run.finished_at) if run.finished_at else now
+        n, cost = ai(run.job, start, end)
+        events.append(
+            {
+                "job": run.job,
+                "start": start,
+                "end": end,
+                "status": run.status,
+                "summary": (run.summary or "")[:160],
+                "error": (run.error or "")[:160],
+                "calls": n,
+                "cost": cost,
+            }
+        )
+    for q in session.scalars(
+        select(Question).where(Question.asked_at >= since).order_by(Question.asked_at)
+    ):
+        start = ms(q.asked_at)
+        end = start + max(q.steps, 1) * 4000
+        n, cost = ai("ask", start - 120_000, end)
+        events.append(
+            {
+                "job": "ask",
+                "start": start,
+                "end": end,
+                "status": "ok",
+                "summary": q.question[:120],
+                "error": "",
+                "calls": n,
+                "cost": cost or float(q.cost_usd or 0),
+            }
+        )
+    return sorted(events, key=lambda e: e["start"])

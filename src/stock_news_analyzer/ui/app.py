@@ -1908,24 +1908,51 @@ class _StatusLog:
 def agents_page() -> None:
     page_header(
         "Agent map",
-        "How the agents work together, and what each is doing now: the collectors perceive, "
-        "the scheduler plans, the AI agents think, the database remembers, tools act, and "
-        "guardrails and the run log watch over all of it. Refreshed every 30 seconds.",
+        "How an agentic system works, shown on this one: the collectors perceive, the "
+        "scheduler plans, the AI agents think, the database remembers, tools act, and "
+        "guardrails and the run log watch over all of it. Watch today's action live, or replay "
+        "how information moved through it over the last seven days.",
         "keeping-it-running",
     )
-    live_agent_map()
+    mode = st.segmented_control(
+        "Show",
+        ["Today, live", "Replay the last 7 days"],
+        default="Today, live",
+        label_visibility="collapsed",
+        key="agent-map-mode",
+    )
+    if mode == "Replay the last 7 days":
+        with Session(engine()) as session:
+            status = queries.agent_status(session)
+            events = queries.agent_events(session, days=7)
+        components.html(
+            agent_map.render(status, theme_palette(), dark(), events, mode="replay"),
+            height=1760,
+            scrolling=True,
+        )
+        st.caption(
+            f"{len(events)} runs and questions from the run log and the AI call log. Play "
+            "starts at the beginning; drag the slider to jump to a time."
+        )
+    else:
+        live_agent_map()
+
+
+def theme_palette() -> dict[str, str]:
+    return PALETTE["dark" if dark() else "light"]
 
 
 @st.fragment(run_every=30)
 def live_agent_map() -> None:
     with Session(engine()) as session:
         status = queries.agent_status(session)
+        events = queries.agent_events(session, days=1)
     components.html(
-        agent_map.render(status, PALETTE["dark" if dark() else "light"], dark=dark()),
-        height=1320,
+        agent_map.render(status, theme_palette(), dark(), events, mode="live"),
+        height=1760,
         scrolling=True,
     )
-    st.caption(f"As of {status['now']:%d %b %Y, %H:%M:%S} IST.")
+    st.caption(f"As of {status['now']:%d %b %Y, %H:%M:%S} IST; refreshed every 30 seconds.")
 
 
 def run_now_section() -> None:
@@ -2544,10 +2571,10 @@ def setup_needed() -> bool:
 
 # The sidebar's groups, in order.
 NAV = {
-    "Today": ["today", "flags"],
+    "Today": ["today", "flags", "agents"],
     "Research": ["stock", "ask", "themes", "moves"],
     "Library": ["filings", "news"],
-    "Set up": ["manage", "settings", "system", "agents"],
+    "Set up": ["manage", "settings", "system"],
     "Help": ["guide"],
 }
 

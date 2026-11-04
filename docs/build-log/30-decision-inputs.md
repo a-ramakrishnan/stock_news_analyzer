@@ -23,6 +23,30 @@ More companies make the evidence worth trusting: ten stocks give a handful of la
 
 Tests cover the list parser, adding members (study-only, sector benchmarks, a bank, an index NSE doesn't publish, stocks already followed left alone, running it twice), the command, study-only stocks left out of the scheduled move explanations, fresh news triaged before a backlog, and the Study only column on Manage stocks. Today and Manage stocks were checked on the demo database.
 
+## Part 2: the evidence
+
+`agents/study.py` turns everything stored into cases and measures what followed each one. No AI: it reads what the agents already wrote.
+
+| Kind | From | Dated by |
+| --- | --- | --- |
+| Results: revenue and profit up (or up 20%+), revenue up and profit down, revenue down and profit up, both down, little change (within ±2%), swung to a loss, back to a profit | Each quarter's figures (XBRL or the Results Reader) against the same quarter a year before | The results filing, the first in the 100 days after the quarter ended |
+| Order win: large (5%+ of a year's revenue), medium (1–5%), small (under 1%), size not given | Each order-win filing, its orders' values added up, against revenue over the four quarters reported before it | The filing |
+| Events, e.g. "Management change: negative", "Credit rating: positive" | The Event Extractor's events of importance 3 or more that the QA check passed or you accepted | The filing |
+| Red flag, by kind | The Red-flag Monitor, flags raised from a filing | The filing |
+| Block or bulk deal: buy or sell | NSE's deals | After that day's close |
+
+Each case's move is the stock's return against the Nifty 50 (and its sector index) over 1, 5 and 20 trading days from day 0, the first close that could reflect the news, compounded as for the event labels. Per kind: the number of cases, the median, the 25th to 75th percentile ("the middle half") and the share that beat the benchmark. Under 10 cases is marked "few cases".
+
+**The page:** What news does to prices, in Research. Choose the horizon, the benchmark and which kinds; the kinds are listed by group with a range bar (the middle half as a band, the median as a tick, zero as a line, on one scale), and a kind's cases are listed below with their 1, 5 and 20-day moves, stocks owned marked. "How to read this" spells out what the numbers mean and what they don't. `sna evidence` prints the same in the terminal.
+
+**Point in time:** an order's size uses only revenue reported before the order; a quarter is compared with figures filed a year earlier. Nothing is measured with information that came later.
+
+**What it can't say:** cases overlap (a results filing can also carry an event), the market moves for many reasons at once, and big news is often priced in within minutes, before the close. The medians show what usually followed, not what caused it.
+
+### Checked
+
+Tests cover each results kind, order sizes, the summary statistics, a full run over generated prices with results, an order, events (one counted, one routine, one failed by QA) and a deal, including day 0 for news after the close and the order sized only on revenue known then, and the CLI. The page was checked in light and dark on generated data for twelve stocks over fourteen months, where order wins worth 5% or more of a year's revenue had been given a drift: the study found it (median +2.3% over 5 days, 87% rising), and the other kinds stayed near zero.
+
 ## On the Mac
 
 ```

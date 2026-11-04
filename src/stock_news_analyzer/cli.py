@@ -985,6 +985,44 @@ def run(
         raise typer.Exit(1)
 
 
+@app.command("evidence")
+def evidence(
+    days: int = typer.Option(5, help="Trading days after the news: 1, 5 or 20."),
+    sector: bool = typer.Option(False, help="Against the sector index, not the Nifty 50."),
+    kind: str = typer.Option(None, help="List the cases of kinds containing this text."),
+) -> None:
+    """What each kind of event did to the stock afterwards: the median move against the
+    market, the middle half of the moves, and how often the stock rose (an event study)."""
+    from stock_news_analyzer.agents import study
+    from stock_news_analyzer.sources.announcements import IST
+
+    if days not in study.HORIZONS:
+        typer.echo("--days must be 1, 5 or 20")
+        raise typer.Exit(1)
+    with get_session() as session:
+        cases = study.all_cases(session)
+    benchmark = "sector index" if sector else "Nifty 50"
+    typer.echo(f"{len(cases)} cases; moves against the {benchmark} over {days} trading days")
+    typer.echo(f"{'Kind of event':<52} {'cases':>5} {'median':>7} {'middle half':>15} {'rose':>5}")
+    for r in study.summarise(cases, days, sector=sector):
+        if r.median is None:
+            typer.echo(f"{r.kind:<52} {r.cases:>5}   (all {r.waiting} too recent)")
+            continue
+        middle = f"{r.low:+.1%}..{r.high:+.1%}" if r.low is not None else "–"
+        few = "  few cases" if r.few else ""
+        typer.echo(f"{r.kind:<52} {r.cases:>5} {r.median:>+7.1%} {middle:>15} {r.up:>5.0%}{few}")
+    if kind:
+        typer.echo("")
+        for c in cases:
+            if kind.lower() in c.kind.lower():
+                move = (c.sector_excess if sector else c.excess).get(days)
+                shown = f"{move:+.1%}" if move is not None else "–"
+                typer.echo(
+                    f"{c.at.astimezone(IST):%Y-%m-%d} {c.symbol:<12} {shown:>7}  "
+                    f"{c.kind}: {c.detail}"
+                )
+
+
 @app.command("runs")
 def runs(
     job: str = typer.Option(None, help="Only this job."),

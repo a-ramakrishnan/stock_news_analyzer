@@ -14,6 +14,10 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.24 · Nov 4, 2026
+
+- Step 30, part 2: the evidence. An event study in code (no LLM) over every stock followed: results by revenue and profit growth on the year, order wins by size against a year's revenue, events by type and tone, red flags and deals, each measured over 1, 5 and 20 trading days against the Nifty 50 and the sector, as a median, the middle half and how often the stock rose. A new Research page, What news does to prices, and `sna evidence`. agent-design.md's Reporter
+
 ### 1.23 · Nov 4, 2026
 
 - Step 30 begins: decision inputs. The Nifty 50 joins as study-only stocks (collected and read by the cheap agents, no Sonnet work, no card on Today), the evidence base for an event study of what each kind of news did to prices. New filings and news are read before any backlog, and the events and orders agents cap their calls per run. agent-design.md's Watchlist Manager. The clean Mac and Windows test becomes step 31

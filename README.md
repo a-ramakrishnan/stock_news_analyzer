@@ -574,6 +574,7 @@ make scheduler
 | `make run-all` | Run every job once, now, in order: collect, triage, measure, explain, read calls, digest |
 | `uv run sna run news` | Run one job now: `filings`, `news`, `triage`, `deals`, `prices`, `xbrl`, `results`, `events`, `explain`, `concalls`, `promises`, `orders`, `themes`, `flags`, `bullion`, `securities` or `digest` |
 | `uv run sna run missed` | Run every job that missed its scheduled run (the computer was asleep or off), in order, each from where it last stopped; like **Catch up** on System |
+| `uv run sna evidence --days 5` | The same evidence in the terminal; `--sector` against the sector index, `--kind "order win"` lists the cases |
 | `uv run sna runs` | Recent runs: when, how long, result, errors |
 | `make digest` | Print the digest covering everything since the last scheduled digest (`--hours 24` for a fixed window) |
 | `make scheduler` | Start the orchestrator in Docker; it keeps running while Docker Desktop is open |
@@ -612,6 +613,7 @@ make ui
 | Themes | Theme strength, a theme's months and items, read-across |
 | Ask | Ask a question in plain English; the answer with sources, and earlier questions |
 | What moves the stock | Average return vs Nifty 50 after each kind of filing, 1, 5 and 20 trading days later |
+| What news does to prices | The evidence across every stock followed: for each kind of event (results by revenue and profit growth, order wins by size, events by type and tone, red flags, block and bulk deals), the median move against the Nifty 50 or the sector, the middle half of the moves, how often the stock rose, and the cases behind it |
 | Manage stocks | Search any listed company and add it to Stocks I own or Watchlist, with news aliases and a sector benchmark; edit or remove stocks; **Load history now** fetches a new stock's filings, news and moves since Oct 2023 |
 | Settings | The Anthropic API key, the monthly AI budget and this month's spend, the models, the unusual-day threshold, and which scheduled jobs run. Saved values take the place of `.env`; the scheduler picks them up within a minute |
 | System | Run any job now, with its progress shown; schedule, stored data, recent runs and errors |

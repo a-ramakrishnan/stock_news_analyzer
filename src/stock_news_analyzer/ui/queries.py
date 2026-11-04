@@ -1278,3 +1278,10 @@ def agent_events(session: Session, days: int = 7) -> list[dict]:
             }
         )
     return sorted(events, key=lambda e: e["start"])
+
+
+def evidence(session: Session) -> dict:
+    """The event study's cases (agents/study.py), and which stocks are owned."""
+    from stock_news_analyzer.agents import study
+
+    return {"cases": study.all_cases(session), "owned": study.owned_isins(session)}

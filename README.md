@@ -614,7 +614,7 @@ make ui
 | Manage stocks | Search any listed company and add it to Stocks I own or Watchlist, with news aliases and a sector benchmark; edit or remove stocks; **Load history now** fetches a new stock's filings, news and moves since Oct 2023 |
 | Settings | The Anthropic API key, the monthly AI budget and this month's spend, the models, the unusual-day threshold, and which scheduled jobs run. Saved values take the place of `.env`; the scheduler picks them up within a minute |
 | System | Run any job now, with its progress shown; schedule, stored data, recent runs and errors |
-| Agent map | How an agentic system works, on this one: perceive, plan, think, remember, act, guardrails, observe. **Today, live**: each job running, ok or failed, its next run, AI calls and cost, a narrated feed of today's runs; **Replay**: play the last 7 days (or today) back, with moving dots, play, speed and a time slider |
+| Agent map | How an agentic system works, on this one: perceive, plan, think, remember, act, guardrails, observe. **Today, live**: each job running, ok or failed, its next run, AI calls and cost, a narrated feed of today's runs; **Replay**: play the last 7 days (or today) back, with lines drawn along each run's path, play, speed and a time slider |
 | Guide | How to use the system: getting started, a daily routine, each page, the words used, AI use and cost, problems. Every page links to its part |
 
 ## Other commands

@@ -103,7 +103,7 @@ Every action people need, with a button, so the command line is only for develop
 
 ### The Agent map
 
-Built after step 29: the whole system laid out as an agent's anatomy (input, perceive, plan, think, remember, act, output, with guardrails down the side and observe across the bottom), so the dashboard also teaches how an agentic system is built. **Today, live** shows each job's state and a narrated feed of today's runs; **Replay** plays the last 7 days back with moving dots, play, speed and a time slider. It reads only the run log and the AI call log.
+Built after step 29: the whole system laid out as an agent's anatomy (input, perceive, plan, think, remember, act, output, with guardrails down the side and observe across the bottom), so the dashboard also teaches how an agentic system is built. **Today, live** shows each job's state and a narrated feed of today's runs; **Replay** plays the last 7 days back with lines drawn along each run's path, play, speed and a time slider. It reads only the run log and the AI call log.
 
 ### Look and feel
 

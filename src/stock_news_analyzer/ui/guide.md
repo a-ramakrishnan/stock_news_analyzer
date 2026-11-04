@@ -44,8 +44,8 @@ The sidebar groups the pages: **Today** (what changed, and the agent map), **Res
 - **Settings:** the API key, the monthly AI budget and models, the unusual-day threshold, and which scheduled jobs run.
 - **System:** run any job now and watch it work; the schedule, how much is stored, recent runs and errors, and the AI spend this month by task.
 - **Agent map:** how an agentic system works, shown on this one: the collectors perceive, the scheduler plans, the AI agents think, the database remembers, tools act, and guardrails and the run log watch over it, each with a line on what that part does in any agentic system.
-  - **Today, live:** each box shows whether its job is running, worked or failed, its next run, and its AI calls and cost today; dots move along the path of each job running now; a feed explains each of today's runs in plain words.
-  - **Replay the last 7 days:** press Play to watch information move through the system, today's or the week's, at 10 minutes, an hour or six hours a second; drag the slider to jump to a time. Each run lights up its box, a dot carries the information from source to memory or from memory through Claude and back, and the feed narrates it.
+  - **Today, live:** each box shows whether its job is running, worked or failed, its next run, and its AI calls and cost today; a faint line traces the path of each job running now; a feed explains each of today's runs in plain words.
+  - **Replay the last 7 days:** press Play to watch information move through the system, today's or the week's, at 10 minutes, an hour or six hours a second; drag the slider to jump to a time. Each run lights up its box, a thin line traces the information from source to memory or from memory through Claude and back, and the feed narrates it.
 - **Guide:** this page.
 
 ## Settings

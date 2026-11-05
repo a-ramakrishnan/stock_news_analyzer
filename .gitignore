@@ -224,3 +224,8 @@ data/
 
 # Your own watchlist (start from config/watchlist.example.yaml)
 config/watchlist.yaml
+
+# Eval output: bulky or derived (docs/evals.md)
+.claude/hillclimb/**/traces/
+.claude/hillclimb/**/report.html
+.claude/hillclimb/**/trajectory/

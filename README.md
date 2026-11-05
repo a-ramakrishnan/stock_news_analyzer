@@ -626,6 +626,10 @@ make ui
 | Agent map | How an agentic system works, on this one: perceive, plan, think, remember, act, guardrails, observe. **Today, live**: each job running, ok or failed, its next run, AI calls and cost, a narrated feed of today's runs; **Replay**: play the last 7 days (or today) back, with lines drawn along each run's path, play, speed and a time slider |
 | Guide | How to use the system: getting started, a daily routine, each page, the words used, AI use and cost, problems. Every page links to its part |
 
+## Evals
+
+`sna eval events` measures the Event Extractor on 40 filings from your database with answers you've checked: does it find the events, of the right types and amounts, with real quotes? See [docs/evals.md](docs/evals.md).
+
 ## Other commands
 
 | Command | What it does |

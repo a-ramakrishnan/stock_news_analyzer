@@ -3281,3 +3281,114 @@ def holdings_moves(
         typer.echo(f"no stake moved {points} points or more in the latest quarters")
     for m in found:
         typer.echo(holdings.describe(m))
+
+
+eval_app = typer.Typer(help="Evaluations of the AI agents (docs/evals.md).", no_args_is_help=True)
+app.add_typer(eval_app, name="eval")
+eval_events_app = typer.Typer(
+    help="The Event Extractor's eval: filings with checked answers, scored by code.",
+    no_args_is_help=True,
+)
+eval_app.add_typer(eval_events_app, name="events")
+
+
+@eval_events_app.command("sample")
+def eval_events_sample(
+    with_events: int = typer.Option(25, help="Filings the agent found events in."),
+    without: int = typer.Option(15, help="Filings it found none in."),
+    seed: int = typer.Option(7, help="Random seed (the same seed picks the same filings)."),
+) -> None:
+    """Freeze filings from your database into cases (evals/events/cases/), spread over the
+    event types, with the filings whose events you rejected first. Adds to what is there."""
+    from stock_news_analyzer.evals import events as ev
+
+    with get_session() as session:
+        paths = ev.sample(session, with_events, without, seed)
+    typer.echo(f"Wrote {len(paths)} cases to {ev.CASES}. Next: sna eval events draft")
+
+
+@eval_events_app.command("draft")
+def eval_events_draft(
+    model: str = typer.Option("claude-opus-5-5", help="The model that drafts the answers."),
+) -> None:
+    """Draft the expected events of cases that have none yet, with a stronger model than the
+    one under test (about a cent a filing with Opus). You then check each case file and set
+    `verified: true`."""
+    from stock_news_analyzer.evals import events as ev
+    from stock_news_analyzer.llm import LLM
+
+    cases = ev.load_cases()
+    with get_session() as session:
+        llm = LLM(session)
+        n = ev.draft(llm, cases, model, say=typer.echo)
+        session.commit()
+    typer.echo(f"Drafted {n}. Now check them: sna eval events show, then edit the case files.")
+
+
+@eval_events_app.command("show")
+def eval_events_show() -> None:
+    """The cases and their expected events as a table (also written to evals/events/cases.md)."""
+    from stock_news_analyzer.evals import events as ev
+
+    text = ev.overview(ev.load_cases())
+    (ev.CASES.parent / "cases.md").write_text(text + "\n")
+    typer.echo(text)
+
+
+@eval_events_app.command("run")
+def eval_events_run(
+    variant: str = typer.Option("baseline", help="Results folder: baseline, v1, v2, ..."),
+    model: str = typer.Option(None, help="Model under test (default: the agent's own)."),
+    reps: int = typer.Option(3, help="Runs of each case (more: a steadier score)."),
+    only: list[str] = typer.Option([], "--case", help="Only these case ids (a pilot)."),
+    workers: int = typer.Option(4, help="Calls at once."),
+    timeout_s: float = typer.Option(120, help="Ceiling on one call, in seconds."),
+    mode: str = typer.Option(
+        "agent", help="agent; or oracle / null to check the grader (no calls, no cost)."
+    ),
+    unverified: bool = typer.Option(False, help="Also run cases you haven't checked yet."),
+    approve_harness: bool = typer.Option(
+        False, "--approve-harness", help="Accept the current runner and grader (after reading)."
+    ),
+) -> None:
+    """Run the Event Extractor on the cases, grade by code, write the results and a summary
+    (.claude/hillclimb/events/<variant>/)."""
+    import anthropic
+
+    from stock_news_analyzer.evals import events as ev
+    from stock_news_analyzer.llm import LLM
+
+    settings = get_settings()
+    model = model or settings.llm_model_triage
+    cases = [c for c in ev.load_cases() if not only or c.id in only]
+    skipped = [c.id for c in cases if not c.verified]
+    if skipped and not unverified and mode == "agent":
+        typer.echo(
+            f"{len(skipped)} cases aren't checked yet (verified: true): {', '.join(skipped[:8])}"
+            f"{' ...' if len(skipped) > 8 else ''}. Check them, or pass --unverified for a pilot."
+        )
+        raise typer.Exit(1)
+    if not cases:
+        typer.echo("No cases. Start with: sna eval events sample")
+        raise typer.Exit(1)
+    client = anthropic.Anthropic(
+        api_key=settings.anthropic_api_key or None, timeout=timeout_s, max_retries=2
+    )
+    try:
+        summary = ev.run(
+            get_session,
+            lambda session: LLM(session, client=client),
+            cases,
+            variant=variant,
+            model=model,
+            reps=reps,
+            workers=workers,
+            mode=mode,
+            approve_harness=approve_harness,
+            say=typer.echo,
+        )
+    except ev.HarnessChanged as exc:
+        typer.echo(f"Not run: {exc}.")
+        raise typer.Exit(2) from exc
+    typer.echo(summary["markdown"])
+    typer.echo(f"Details: {ev.FLOW / variant}")

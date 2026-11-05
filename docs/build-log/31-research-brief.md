@@ -40,6 +40,14 @@ The model couldn't be called from the build machine (no key there), so the write
 
 Tests cover numbers that count (rounded, labels, small counts, a fact's year) and ones that don't (a percentage, a P/E or an amount not in the facts, 1.3 for 1.17); dropping parts and falling back to the facts' headline for a verdict; writing a clean view in one call, saving it with its facts and cost, and a view with made-up numbers asked again then trimmed; the versions in order; and the page and `sna brief` showing a saved view. 393 tests pass.
 
+## 31.3: staying current
+
+- **What changed:** fact lines keyed by their label, compared between briefs (changed, new, gone) and between views (verdict, stances, decisions whose tag moved). A new view is given the previous verdict and stances and the facts that changed, and writes a "changed" line, checked like the rest (the previous facts' numbers count too).
+- **The page:** the "What changed" callout under the lede, a **What changed** fold against the previous view, and a note when filed facts have moved since the view was written. **Ask about** buttons for the stock and each peer open Ask with the question filled in.
+- **The briefs job** at 07:57: a new view for each owned stock with no view yet or with new results, a new balance sheet, a red flag or a major event since its last one, five at most; on the Agent map as "Research briefs" and in the digest under "Research briefs".
+
+Checked on generated data with the stand-in model: LT wasn't due, a promoter pledge flag made it due ("a new red flag"), and the second view's "changed" line passed the check; the page showed the new verdict, the callout, the fold (the old verdict and the new Avoid stance), and Ask about BEL opened Ask with "What should I know about Bharat Electronics Limited (BEL)… and how does it compare with Larsen & Toubro Limited (LT)?". Tests cover the fact keys and both comparisons, filed-only comparison, the refresh (first view, nothing due, a red flag making it due, the previous view in the prompt), the digest section and the job's place before the digest. 395 tests pass.
+
 ## On the Mac
 
 ```

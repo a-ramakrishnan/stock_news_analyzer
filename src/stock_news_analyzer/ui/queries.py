@@ -1211,6 +1211,7 @@ TASK_JOB = {
     "orders": "orders",
     "order_book": "orders",
     "themes": "themes",
+    "brief": "briefs",
     "bullion": "bullion",
     "ask": "ask",
 }

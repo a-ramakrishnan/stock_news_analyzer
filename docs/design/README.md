@@ -15,6 +15,10 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.30 · Nov 5, 2026
+
+- research-brief.md 1.2: step 31.3 as built. Briefs compared fact by fact and view by view; a new view is told the delta and writes what changed; the page shows it, notes when filed facts have moved, and offers Ask about buttons; the briefs job (07:57) writes new views for owned stocks after results, a balance sheet, a red flag or a major event, listed in the digest. agent-design.md's orchestrator schedule and Reporter
+
 ### 1.29 · Nov 5, 2026
 
 - research-brief.md 1.1: step 31.2 as built. The view is one Sonnet call over about 40 numbered facts (now with the order book, promises, management changes, ownership, the lean and the top news) in a fixed shape (verdict, summary, stances, Observed → Read, Why it matters and Key risk, decision cards, decisions to make now); every number in it is checked against the facts, with one retry and the failing parts dropped; versions are saved (`research_briefs`, migration 0029). New folds on the page; `sna brief`. agent-design.md's Reporter

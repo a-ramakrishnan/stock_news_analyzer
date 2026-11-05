@@ -146,3 +146,88 @@ def test_brief_page_and_cli_show_the_view(watchlist, test_database_url, monkeypa
     assert result.exit_code == 0, result.stdout
     assert "P/E 65 and debt 1.2× equity." in result.stdout
     assert "dropped decision: numbers 18 not in the facts" in result.stdout
+
+
+def test_what_changed_between_briefs():
+    old = [
+        ("F1", "[Filed] Company: X; brief of 01 Nov 2026"),
+        ("F2", "[Market] Close ₹100.00 on 31 Oct 2026"),
+        ("F3", "[Filed] Results Q2 FY27 (to 30 Sep 2026): revenue ₹100 cr"),
+        ("F4", "[AI] Promise: margin 15% by FY27: open"),
+        ("F5", "[AI] Promise: capex ₹500 cr by FY28: open"),
+    ]
+    new = [
+        ("F1", "[Filed] Company: X; brief of 05 Nov 2026"),  # not compared
+        ("F2", "[Market] Close ₹104.00 on 04 Nov 2026"),
+        ("F3", "[Filed] Results Q2 FY27 (to 30 Sep 2026): revenue ₹101 cr"),
+        ("F4", "[AI] Promise: margin 15% by FY27: kept"),
+        ("F5", "[Filed] Open red flag 04 Nov 2026 (medium): a pledge"),
+    ]
+    assert bf.fact_key(new[1][1]) == "Close"
+    d = bf.diff_facts(old, new)
+    assert [k for k, _, _ in d["changed"]] == ["Close", "Results Q2 FY27 (to 30 Sep 2026)"]
+    assert d["added"] == [
+        "Promise: margin 15% by FY27: kept",
+        "Open red flag 04 Nov 2026 (medium): a pledge",
+    ]
+    assert len(d["removed"]) == 2  # promises share a label: compared by their whole text
+    filed = bf.diff_facts(old, new, filed_only=True)
+    assert [k for k, _, _ in filed["changed"]] == ["Results Q2 FY27 (to 30 Sep 2026)"]
+
+    before = _view().model_dump()
+    after = _view(
+        verdict="New verdict.",
+        stances=[
+            bf.Stance(label="Favor", text="P/E 65"),
+            bf.Stance(label="Avoid", text="the pledge"),
+            bf.Stance(label="Check", text="margin"),
+        ],
+        decisions=[bf.Decision(tag="Review now", title="Margin", why="+52%.", facts=["F2"])],
+    ).model_dump()
+    assert bf.diff_views(before, after) == [
+        'Verdict: was "P/E 65 and debt 1.2× equity."',
+        "New stance: Avoid, the pledge",
+        "Stance dropped: Watch, debt",
+        "Margin: Watch → Review now",
+    ]
+
+
+@pytest.mark.db
+def test_refresh_writes_due_briefs_and_the_digest_lists_them(watchlist, monkeypatch):  # noqa: F811
+    from datetime import UTC, datetime, timedelta
+
+    from stock_news_analyzer.agents import digest
+    from stock_news_analyzer.agents import orchestrator as orch
+    from stock_news_analyzer.models import RedFlag, WatchlistItem
+
+    monkeypatch.setattr(bf, "fact_lines", lambda f, today: FACTS)
+    watchlist.query(WatchlistItem).filter_by(isin=KVB).update({"owned": True})
+    watchlist.commit()
+    assert bf.due(watchlist, KVB) == "no view yet"
+    llm, client = _llm(watchlist, [_view(observations=[], decisions=[])] * 3)
+    written, errors = bf.refresh(watchlist, llm)
+    assert [(s, why) for s, why, _ in written] == [("KARURVYSYA", "no view yet")]
+    assert errors == [] and bf.due(watchlist, KVB) is None
+    assert bf.refresh(watchlist, llm)[0] == []  # nothing new: nothing written
+
+    watchlist.add(
+        RedFlag(
+            isin=KVB,
+            kind="pledge",
+            severity="high",
+            title="Pledge",
+            flagged_on=date(2026, 11, 4),
+            ref="t",
+        )
+    )
+    watchlist.commit()
+    assert bf.due(watchlist, KVB) == "a new red flag"
+    written, _ = bf.refresh(watchlist, llm)
+    assert len(written) == 1
+    # The second view was given the first one and asked what changed.
+    assert "Your previous view" in client.requests[-1]["messages"][0]["content"]
+
+    now = datetime.now(UTC)
+    lines = digest._briefs(watchlist, now - timedelta(days=1), now + timedelta(minutes=1))
+    assert lines[1] == "## Research briefs" and lines[3].startswith("- **KARURVYSYA**: P/E 65")
+    assert "briefs" in orch.JOBS and orch.RUN_ALL.index("briefs") < orch.RUN_ALL.index("digest")

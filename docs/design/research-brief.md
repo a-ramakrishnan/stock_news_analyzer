@@ -1,6 +1,6 @@
 # Research brief
 
-Version 1.1 · Nov 5, 2026 · @Ramki · changes are listed in [README.md](README.md)
+Version 1.2 · Nov 5, 2026 · @Ramki · changes are listed in [README.md](README.md)
 
 A complete research output for one stock, on its own page (**Research brief**, in the Research group). Its layout follows the "briefing grammar" of Robyn's research results (meetrobyn.com), adapted to an Indian listed company and to what this system collects.
 
@@ -75,9 +75,13 @@ Fold numbers are counted on the page, so without a view the facts' folds start a
 - **Saved versions** (`research_briefs`, migration 0029): the facts as given, the view, what was dropped, the model and the cost. The page shows the latest and offers the earlier ones; `sna brief SYMBOL` prints the latest, `--write` writes a new one.
 - **Cost:** about 40 fact lines in, a view of about 2,500 tokens out: roughly $0.03–0.10 a view on Sonnet; a retry doubles it.
 
-### Staying current (31.3)
+### Staying current (31.3, as built)
 
-"What changed since the last brief", the "Ask about …" buttons wired to Ask, and a fresh brief for the stocks owned after their results or a large event, flagged in the morning digest.
+- **What changed, fact by fact:** each fact line has a stable key, its label before the colon ("Results Q2 FY27 (to 30 Sep 2026)", "Peer BEL (…)", "Trailing P/E"); lines sharing a label (two promises) are keyed by their whole text. Two briefs' facts compare as changed (was → now), new and gone; the views compare as verdict, stances added or dropped, and decisions whose tag moved (`diff_facts`, `diff_views`).
+- **The model is told the delta:** a new view is given the previous verdict and stances and the facts that changed since (up to 15 changed, 10 new, 10 gone), and writes **changed**: one or two sentences on what changed and whether it moves the view, Robyn's "only the delta". Its numbers are checked like the rest; the previous facts' numbers count too, so it can say what a figure was.
+- **On the page:** the "What changed" callout under the lede; a **What changed** fold comparing the chosen view with the one before it; and a note when Filed or Read by AI facts have changed since the chosen view was written (Market facts move with every close, so they don't count), suggesting a new view.
+- **Ask about …:** a button for the stock and each peer opens Ask with a question about it filled in (for a peer, how it compares).
+- **The briefs job** (07:57, after the red flags and before the 08:00 digest): for each stock owned whose brief is due, a new view, at most five a run. Due means no view yet, or since the last one new results, a new balance sheet, a new red flag, or an event of importance 4 or more that is shown. The digest lists the new views with their verdict and what changed. It stops at the monthly budget.
 
 ### Not planned
 

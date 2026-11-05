@@ -23,6 +23,7 @@ reasons at once. The medians say what usually followed, not what caused it.
 """
 
 import statistics
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
@@ -414,3 +415,75 @@ def summarise(cases: list[Case], horizon: int = 5, sector: bool = False) -> list
         )
     order = {g: i for i, g in enumerate(GROUPS)}
     return sorted(rows, key=lambda r: (order.get(r.group, 99), -r.cases, r.kind))
+
+
+# --- by the size of the move -----------------------------------------------------------
+
+# Bands of the move against the benchmark, finer near zero where most cases fall:
+# (low, high), low included; None is open-ended.
+MOVE_BANDS = (
+    (None, -0.05),
+    (-0.05, -0.02),
+    (-0.02, -0.01),
+    (-0.01, -0.005),
+    (-0.005, 0.0),
+    (0.0, 0.005),
+    (0.005, 0.01),
+    (0.01, 0.02),
+    (0.02, 0.05),
+    (0.05, None),
+)
+
+
+def band_label(low: float | None, high: float | None) -> str:
+    def p(x: float) -> str:
+        if x == 0:
+            return "0%"
+        return f"{x:+.1%}".replace(".0%", "%").replace("-", "−")
+
+    if low is None:
+        return f"{p(high)} or worse"
+    if high is None:
+        return f"{p(low)} or better"
+    return f"{p(low)} to {p(high)}"
+
+
+@dataclass
+class MoveBand:
+    label: str
+    low: float | None
+    high: float | None
+    cases: list[Case]  # largest move first
+    kinds: list[tuple[str, int, int]]  # (kind, cases in this band, cases of the kind in all)
+    stocks: list[tuple[str, int]]  # (symbol, cases in this band), most first
+
+
+def move_of(case: Case, horizon: int, sector: bool = False) -> float | None:
+    return (case.sector_excess if sector else case.excess).get(horizon)
+
+
+def by_move(cases: list[Case], horizon: int = 5, sector: bool = False) -> list[MoveBand]:
+    """The cases grouped by how far the stock moved against the benchmark, from the biggest
+    fall to the biggest rise: what kinds of event, and which stocks, lie behind moves of each
+    size. Kinds are listed most frequent first, with how many cases of that kind there are in
+    all, so "5 of 15" says a third of that kind's cases moved this much."""
+    measured = [(c, m) for c in cases if (m := move_of(c, horizon, sector)) is not None]
+    totals = Counter(c.kind for c, _ in measured)
+    bands = []
+    for low, high in MOVE_BANDS:
+        inside = [
+            (c, m) for c, m in measured if (low is None or m >= low) and (high is None or m < high)
+        ]
+        inside.sort(key=lambda cm: -abs(cm[1]))
+        kinds = Counter(c.kind for c, _ in inside)
+        bands.append(
+            MoveBand(
+                label=band_label(low, high),
+                low=low,
+                high=high,
+                cases=[c for c, _ in inside],
+                kinds=[(k, n, totals[k]) for k, n in kinds.most_common()],
+                stocks=Counter(c.symbol for c, _ in inside).most_common(),
+            )
+        )
+    return bands

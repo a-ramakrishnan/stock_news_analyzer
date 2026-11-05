@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.24 · Nov 4, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.25 · Nov 5, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -587,7 +587,7 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **LLM:** Opus 5.5 to write; code to format.
 - **As built (steps 6, 7):** the daily digest is put together in code (no LLM yet) and saved as Markdown under `data/digests/`. It has filings, triaged news with stars and topics, unusual moves with their likely cause, and bulk/block deals.
   
-  Step 30 added **What news does to prices** (Research): an event study in code, no LLM (`agents/study.py`, `sna evidence`). Every stored result, order win, event, red flag and deal is a case, dated by its filing and measured like the event labels over 1, 5 and 20 trading days against the Nifty 50 and the sector; cases are grouped by kind (results by revenue and profit growth on the year, orders by size against the last four quarters' revenue, events by type and sentiment) into a median, the middle half and how often the stock rose. Order sizes use only revenue reported before the order, so nothing is known before it was.
+  Step 30 added **What news does to prices** (Research): an event study in code, no LLM (`agents/study.py`, `sna evidence`). Every stored result, order win, event, red flag and deal is a case, dated by its filing and measured like the event labels over 1, 5 and 20 trading days against the Nifty 50 and the sector; cases are grouped by kind (results by revenue and profit growth on the year, orders by size against the last four quarters' revenue, events by type and sentiment) into a median, the middle half and how often the stock rose. Order sizes use only revenue reported before the order, so nothing is known before it was. The page can also group the cases by the size of the move, showing the kinds of event and stocks behind moves of each size.
   The Streamlit dashboard has twelve pages in five groups: Today (Today, Red flags), Research (Stock, Ask, Themes, What moves the stock), Library (Filings, News), Set up (Manage stocks, Settings, System) and Help (Guide). Steps 23–26 added:
   - the Guide, with a help link on every page
   - Settings (API key, budget, models, unusual-day threshold, job switches), which take the place of `.env`

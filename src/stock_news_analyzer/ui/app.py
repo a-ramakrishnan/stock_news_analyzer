@@ -1742,6 +1742,15 @@ def evidence_page() -> None:
             "run; uv run sna watchlist nifty50 adds the Nifty 50 for more cases."
         )
         return
+    view = (
+        st.segmented_control(
+            "Group the cases by",
+            ["Kind of event", "Size of move"],
+            default="Kind of event",
+            key="ev-view",
+        )
+        or "Kind of event"
+    )
     c1, c2, c3 = st.columns([1.2, 1.2, 1.6], vertical_alignment="bottom")
     horizon = (
         c1.segmented_control(
@@ -1796,6 +1805,11 @@ def evidence_page() -> None:
     if not rows:
         st.caption("No cases for these kinds.")
         return
+    owned = data["owned"]
+    sector = benchmark != "Nifty 50"
+    if view == "Size of move":
+        evidence_by_move(cases, horizon, sector, owned)
+        return
     scale = max([abs(v) for r in rows for v in (r["low"], r["high"]) if v is not None] + [0.01])
     scale = min(scale, 0.15)
 
@@ -1830,36 +1844,117 @@ def evidence_page() -> None:
     section_title("The cases behind a kind")
     kinds = [r["kind"] for r in rows]
     kind = st.selectbox("Kind of event", kinds, key="ev-kind")
-    owned = data["owned"]
     picked = sorted((c for c in cases if c.kind == kind), key=lambda c: c.at, reverse=True)
-    move = (
-        (lambda c, n: c.sector_excess.get(n))
-        if benchmark != "Nifty 50"
-        else (lambda c, n: c.excess.get(n))
-    )
+    evidence_cases(picked, owned, sector)
+
+
+def evidence_cases(cases: list, owned: set[str], sector: bool, with_kind: bool = False) -> None:
+    """A list of cases: when, which stock (owned marked), what happened, and the moves."""
+    from stock_news_analyzer.agents import study
 
     def change(v, _row):
         return f'<span class="{trend(v)}">{signed(v, 1)}</span>' if not blank(v) else esc(None)
 
+    columns = [
+        ("Date", "when", None),
+        ("Stock", "stock", lambda v, r: f'<span class="sna-mono">{esc(v)}</span>'),
+    ]
+    if with_kind:
+        columns.append(("Kind of event", "kind", None))
+    columns += [
+        ("What", "detail", None),
+        ("1 day>", "m1", change),
+        ("5 days>", "m5", change),
+        ("20 days>", "m20", change),
+    ]
     html_table(
         [
             {
                 "when": f"{c.at.astimezone(IST):%d %b %Y}",
                 "stock": c.symbol + (" (own)" if c.isin in owned else ""),
+                "kind": c.kind,
                 "detail": c.detail,
-                **{f"m{n}": move(c, n) for n in study.HORIZONS},
+                **{f"m{n}": study.move_of(c, n, sector) for n in study.HORIZONS},
             }
-            for c in picked
+            for c in cases
+        ],
+        columns,
+    )
+
+
+def evidence_by_move(cases: list, horizon: int, sector: bool, owned: set[str]) -> None:
+    """The cases by how far the stock moved: for each band of moves, how many cases, which
+    kinds of event lay behind them and which stocks, then the cases of a band."""
+    from stock_news_analyzer.agents import study
+
+    bands = study.by_move(cases, horizon, sector)
+    biggest = max((len(b.cases) for b in bands), default=0) or 1
+    st.caption(
+        f"Every case put in a band by its move over {HORIZON_LABELS[horizon]}, biggest falls "
+        'first. "5 of 15" beside a kind means 5 of its 15 cases moved this much: a kind '
+        "spread evenly over the bands says little; one bunched at one end is a pattern."
+    )
+
+    def count(v, row):
+        width = 90 * v / biggest  # pixels
+        colour = "var(--sna-down)" if (row["high"] or 1) <= 0 else "var(--sna-up)"
+        return (
+            f'<div style="display:flex;align-items:center;gap:.5rem"><span>{v}</span>'
+            f'<span style="height:8px;border-radius:4px;width:{width:.0f}px;'
+            f'background:{colour};opacity:.7"></span></div>'
+        )
+
+    def kinds(v, _row):
+        if not v:
+            return esc(None)
+        return "<br>".join(
+            f'{html.escape(k)} <span class="sna-muted">{n} of {total}</span>'
+            for k, n, total in v[:6]
+        ) + (
+            f'<br><span class="sna-muted">and {len(v) - 6} more kinds</span>' if len(v) > 6 else ""
+        )
+
+    def stocks(v, _row):
+        if not v:
+            return esc(None)
+        own = {c.symbol for c in cases if c.isin in owned}
+        return ", ".join(
+            (f"<b>{html.escape(sym)}</b>" if sym in own else html.escape(sym))
+            + (f" ×{n}" if n > 1 else "")
+            for sym, n in v[:12]
+        ) + (f" and {len(v) - 12} more" if len(v) > 12 else "")
+
+    html_table(
+        [
+            {
+                "band": b.label,
+                "n": len(b.cases),
+                "high": b.high,
+                "kinds": b.kinds,
+                "stocks": b.stocks,
+            }
+            for b in bands
         ],
         [
-            ("Date", "when", None),
-            ("Stock", "stock", lambda v, r: f'<span class="sna-mono">{esc(v)}</span>'),
-            ("What", "detail", None),
-            ("1 day>", "m1", change),
-            ("5 days>", "m5", change),
-            ("20 days>", "m20", change),
+            ("Move", "band", lambda v, r: f'<span class="sna-mono">{esc(v)}</span>'),
+            ("Cases", "n", count),
+            ("What came before (kind, cases of that kind)", "kinds", kinds),
+            ("Stocks (yours in bold)", "stocks", stocks),
         ],
     )
+    section_title("The cases in a band")
+    filled = [b for b in bands if b.cases]
+    if not filled:
+        st.caption("No cases with prices over this horizon yet.")
+        return
+    band = st.selectbox(
+        "Move",
+        filled,
+        index=next((i for i, b in enumerate(filled) if b.low == 0.0), 0),
+        format_func=lambda b: f"{b.label} ({len(b.cases)} cases)",
+        key="ev-band",
+    )
+    evidence_cases(band.cases, owned, sector, with_kind=True)
 
 
 def manage_page() -> None:

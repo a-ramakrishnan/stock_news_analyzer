@@ -837,6 +837,32 @@ class Shareholding(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class BalanceSheet(Base):
+    """A company's balance sheet at a half year or year end, and its cash flow for that half
+    or year, from the results XBRL (agents/xbrl_results.py). Rs crore; None when the file
+    doesn't carry the line. `as_written` records the tag each figure came from."""
+
+    __tablename__ = "balance_sheets"
+    __table_args__ = (UniqueConstraint("isin", "period_end", name="uq_balance_sheets_isin_end"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    isin: Mapped[str] = mapped_column(ForeignKey("companies.isin"), index=True)
+    period_end: Mapped[date] = mapped_column(Date)
+    months: Mapped[int] = mapped_column()  # the cash flow's span: 6 or 12
+    basis: Mapped[str] = mapped_column(String(16))  # consolidated / standalone
+    equity_cr: Mapped[Decimal | None] = mapped_column(Numeric(16, 2))
+    borrowings_cr: Mapped[Decimal | None] = mapped_column(Numeric(16, 2))
+    cash_cr: Mapped[Decimal | None] = mapped_column(Numeric(16, 2))
+    total_assets_cr: Mapped[Decimal | None] = mapped_column(Numeric(16, 2))
+    cfo_cr: Mapped[Decimal | None] = mapped_column(Numeric(16, 2))  # cash from operations
+    capex_cr: Mapped[Decimal | None] = mapped_column(Numeric(16, 2))  # spent on fixed assets
+    as_written: Mapped[dict] = mapped_column(JSONB, default=dict)
+    source: Mapped[str | None] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class IndexMember(Base):
     """An index's constituents as NSE last listed them (`sna watchlist nifty50`)."""
 

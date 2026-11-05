@@ -36,6 +36,7 @@ The sidebar groups the pages: **Today** (what changed, and the agent map), **Res
 - **Stock:** one company in depth.
   - The chart compares the stock with its sector index and the Nifty 50, both set to 100 at the start, with key filings marked.
   - Tabs: Unusual days, Results, Shareholding, Events (with red flags), Earnings calls, Order book, Filings, News, Bulk/block deals, How it reacted, Corporate actions.
+- **Research brief:** one stock on one page, conclusion first; explained in its own section below.
 - **Week by week:** one stock's last 12, 24 or 52 weeks, explained in its own section below.
 - **Filings:** every exchange filing, searchable by stock, type, words and date. Select one to read its text.
 - **News:** headlines about your stocks, with the AI's relevance and importance, and links to the articles.
@@ -50,6 +51,22 @@ The sidebar groups the pages: **Today** (what changed, and the agent map), **Res
   - **Today, live:** each box shows whether its job is running, worked or failed, its next run, and its AI calls and cost today; a faint line traces the path of each job running now; a feed explains each of today's runs in plain words.
   - **Replay the last 7 days:** press Play to watch information move through the system, today's or the week's, at 10 minutes, an hour or six hours a second; drag the slider to jump to a time. Each run lights up its box, a thin line traces the information from source to memory or from memory through Claude and back, and the feed narrates it.
 - **Guide:** this page.
+
+## Research brief
+
+One stock on one page, laid out like a research note: the conclusion first, then a fold for each part of the research, opened only when you need it.
+
+- **The lede:** the stock and the date, a one-line headline (valuation against its own history, the balance sheet), a line on the latest quarter, short stances (valuation, balance sheet, last quarter, what's next, red flags) and a ruled row of key numbers: trailing P/E, EPS growth, debt to equity and the next date. A note says what the brief is built from.
+- **Evidence badges** on every figure: **Filed** (as filed, from an XBRL file or the exchange), **Read by AI** (read from a filing by an agent, QA passed), **Market** (prices and NSE's index files), **Stale** (older than a half year) and **Not disclosed** (the filings don't carry it).
+- **The folds:**
+  1. **Valuation:** the trailing P/E week by week against the middle 80% of its own last three years (shaded) and its median, the sector index's and the Nifty 50's P/E, the close, trailing EPS (the four quarters it adds up, adjusted for bonus issues and splits) and the market cap.
+  2. **Results:** the last eight quarters, revenue and profit with their growth on the year, margin and EPS.
+  3. **Balance sheet and cash flow:** equity, borrowings, cash, net debt, debt to equity, cash from operations, capex, free cash flow, and cash from operations against profit, from the half-yearly and annual XBRL files, with the tag each came from.
+  4. **Peers:** a card for the stock and each peer (approved on Manage stocks, else the largest in its industry): P/E, one-year price change, latest revenue growth, market cap.
+  5. **What's coming:** board meetings announced, results due (45 days after a quarter, 60 after the year), ex-dates, and management's promises falling due.
+  6. **Red flags** still open.
+
+Trailing P/E is the close over the last four quarters' EPS as they were known on each day; it is left out while EPS is not positive. Balance sheets come with the **xbrl** job; `uv run sna results balance SYMBOL` lists what was read and from which tags.
 
 ## Portfolio
 

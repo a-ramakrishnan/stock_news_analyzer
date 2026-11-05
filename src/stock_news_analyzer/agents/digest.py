@@ -463,6 +463,18 @@ def _briefs(session: Session, since: datetime, until: datetime) -> list[str]:
     return out
 
 
+def _agent_quality(session: Session, until: datetime) -> list[str]:
+    """Alerts from live monitoring: an agent doing worse in the last week than chance explains."""
+    from stock_news_analyzer.monitoring import alerts
+
+    found = alerts(session, until.astimezone(IST).date())
+    if not found:
+        return []
+    out = ["", "## Agent quality", ""]
+    out += [f"- {a.message}. See Monitoring." for a in found]
+    return out
+
+
 def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
     lines = [
         f"# Daily digest, {until.astimezone(IST):%d %b %Y %H:%M} IST",
@@ -490,6 +502,7 @@ def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
     lines += _events(session, since, until)
     lines += _read_across(session, since, until)
     lines += _briefs(session, since, until)
+    lines += _agent_quality(session, until)
 
     owned = dict(session.execute(select(WatchlistItem.isin, WatchlistItem.owned)).all())
     study = set(session.scalars(select(WatchlistItem.isin).where(WatchlistItem.study_only)))

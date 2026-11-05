@@ -414,3 +414,99 @@ def eval_history_chart(runs: list[dict], dark: bool = False) -> go.Figure:
     fig.update_yaxes(range=[0, 105], ticksuffix="%", title=None)
     fig.update_layout(hovermode="closest")
     return _layout(fig, t, 260)
+
+
+def monitor_chart(rows: list[dict], higher_is_better: bool, dark: bool = False) -> go.Figure:
+    """A monitor's 7-day rolling rate, overall and per group (prompt version, model or task),
+    from its daily counts. The rolling window evens out quiet days."""
+    t = theme(dark)
+    fig = go.Figure()
+    if not rows:
+        return _layout(fig, t, 280)
+    df = pd.DataFrame(rows)
+    days = pd.date_range(df["day"].min(), df["day"].max(), freq="D")
+
+    def rolling(frame: pd.DataFrame) -> pd.Series:
+        daily = frame.groupby("day")[["passed", "total"]].sum()
+        daily.index = pd.to_datetime(daily.index)
+        daily = daily.reindex(days, fill_value=0).rolling(7, min_periods=1).sum()
+        return (daily["passed"] / daily["total"].where(daily["total"] > 0)) * 100
+
+    colours = [t.sector, t.nifty, t.muted, t.up, t.down]
+    groups = sorted(df["group"].unique())
+    if len(groups) > 1:
+        for i, g in enumerate(groups[:5]):
+            line = rolling(df[df["group"] == g])
+            fig.add_trace(
+                go.Scatter(
+                    x=line.index,
+                    y=line.values,
+                    mode="lines+markers",
+                    marker=dict(size=4),
+                    name=str(g),
+                    line=dict(color=colours[i % len(colours)], width=1.5, dash="dot"),
+                    hovertemplate="%{x|%d %b}: %{y:.0f}%<extra>" + str(g) + "</extra>",
+                )
+            )
+    overall = rolling(df)
+    fig.add_trace(
+        go.Scatter(
+            x=overall.index,
+            y=overall.values,
+            mode="lines+markers",
+            marker=dict(size=6),
+            name="all",
+            line=dict(color=t.stock, width=2.5),
+            hovertemplate="%{x|%d %b}: %{y:.0f}% (7 days)<extra>all</extra>",
+        )
+    )
+    fig.update_yaxes(range=[0, 105], ticksuffix="%", title=None)
+    start = min(days[0], days[-1] - pd.Timedelta(days=6))  # at least a week across
+    fig.update_xaxes(
+        type="date",
+        tickformat="%d %b",
+        range=[start - pd.Timedelta(hours=12), days[-1] + pd.Timedelta(hours=12)],
+    )
+    fig.update_layout(
+        hovermode="x unified",
+        annotations=[
+            dict(
+                text="higher is better" if higher_is_better else "lower is better",
+                xref="paper",
+                yref="paper",
+                x=0,
+                y=1.08,
+                showarrow=False,
+                font=dict(color=t.muted, size=11),
+            )
+        ],
+    )
+    return _layout(fig, t, 280)
+
+
+def spend_chart(rows: list[dict], dark: bool = False, days: int = 30) -> go.Figure:
+    """AI spend by day over the last `days`, stacked by task."""
+    t = theme(dark)
+    fig = go.Figure()
+    if not rows:
+        return _layout(fig, t, 240)
+    df = pd.DataFrame(rows)
+    totals = df.groupby("task")["cost_usd"].sum().sort_values(ascending=False)
+    colours = [t.stock, t.sector, t.nifty, t.up, t.down, t.muted]
+    for i, task in enumerate(totals.index):
+        part = df[df["task"] == task].sort_values("day")
+        fig.add_trace(
+            go.Bar(
+                x=part["day"],
+                y=part["cost_usd"],
+                name=task,
+                marker_color=colours[i % len(colours)],
+                width=[0.7 * 86_400_000] * len(part),  # a bar is most of a day wide
+                hovertemplate="%{x|%d %b}: $%{y:.3f}<extra>" + task + "</extra>",
+            )
+        )
+    fig.update_layout(barmode="stack", bargap=0.3)
+    fig.update_yaxes(tickprefix="$", title=None)
+    end = pd.Timestamp(max(df["day"])) + pd.Timedelta(hours=12)
+    fig.update_xaxes(type="date", tickformat="%d %b", range=[end - pd.Timedelta(days=days), end])
+    return _layout(fig, t, 240)

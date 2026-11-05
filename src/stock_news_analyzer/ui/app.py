@@ -3763,6 +3763,76 @@ def traces_page() -> None:
             add_to_eval(d, f"trace-{t['call_id']}")
 
 
+def monitoring_page() -> None:
+    from stock_news_analyzer import monitoring as mon
+
+    page_header(
+        "Monitoring",
+        "How the AI agents are doing on real work, from what they already record: quality "
+        "checks passed, quotes found in their sources, your rejections, failed calls. Each "
+        "compares the last 7 days with the 28 before; an alert means a drop chance doesn't "
+        "explain, and it is also in the morning digest.",
+        "agent-evals",
+    )
+    names = {job: name for job, name, _, _ in agent_map.THINKERS}
+    with Session(engine()) as session:
+        states = mon.statuses(session)
+    raised = [s for s in states if s.alert]
+    for s in raised:
+        st.error(s.message + ".", icon=":material/warning:")
+    if not raised:
+        st.success("No agent is doing worse than chance explains.", icon=":material/check:")
+    grid = st.columns(3)
+    for i, s in enumerate(states):
+        m = s.monitor
+        with grid[i % 3].container(border=True):
+            st.markdown(f"**{m.title}**  \n:gray[{names.get(m.agent, 'All agents')}]")
+            delta = (
+                f"{100 * (s.recent - s.base):+.0f} pts on the 28 days before"
+                if s.recent is not None and s.base is not None
+                else None
+            )
+            st.metric(
+                "Last 7 days",
+                "–" if s.recent is None else f"{s.recent:.0%}",
+                delta,
+                delta_color="normal" if m.higher_is_better else "inverse",
+                help=m.about,
+            )
+            st.caption(f"{s.recent_n} items this week, {s.base_n} in the 28 days before")
+            if s.alert:
+                st.markdown(":red-badge[Alert]")
+    st.subheader("Look closer")
+    chosen = st.selectbox(
+        "Monitor",
+        [m.id for m in mon.MONITORS],
+        format_func=lambda i: mon.BY_ID[i].title,
+        key="monitor-pick",
+    )
+    m = mon.BY_ID[chosen]
+    days = st.segmented_control("Days", [30, 90, 180], default=90, key="monitor-days") or 90
+    with Session(engine()) as session:
+        rows = mon.series(session, m, days)
+    st.caption(m.about + (f" Dotted lines: by {m.split}." if m.split else ""))
+    if not rows:
+        st.info("No work recorded in this period yet.")
+    else:
+        st.plotly_chart(
+            charts.monitor_chart(rows, m.higher_is_better, dark()), width="stretch", **PLOT
+        )
+    st.subheader("AI spend")
+    with Session(engine()) as session:
+        spend = mon.spend(session, 30)
+    if spend:
+        total = sum(r["cost_usd"] for r in spend)
+        st.caption(
+            f"\\${total:.2f} over the last 30 days, {sum(r['calls'] for r in spend):,} calls."
+        )
+        st.plotly_chart(charts.spend_chart(spend, dark()), width="stretch", **PLOT)
+    else:
+        st.caption("No AI calls in the last 30 days.")
+
+
 def theme_palette() -> dict[str, str]:
     return PALETTE["dark" if dark() else "light"]
 
@@ -4440,6 +4510,9 @@ PAGES = {
         eval_cases_page, title="Eval cases", icon=":material/fact_check:", url_path="eval-cases"
     ),
     "traces": st.Page(traces_page, title="Traces", icon=":material/timeline:", url_path="traces"),
+    "monitoring": st.Page(
+        monitoring_page, title="Monitoring", icon=":material/monitoring:", url_path="monitoring"
+    ),
     "guide": st.Page(guide_page, title="Guide", icon=":material/help:", url_path="guide"),
 }
 
@@ -4461,7 +4534,7 @@ def setup_needed() -> bool:
 # The sidebar's groups, in order.
 NAV = {
     "Today": ["today", "portfolio", "flags"],
-    "Agents": ["agents", "evals", "eval_cases", "traces"],
+    "Agents": ["agents", "evals", "eval_cases", "traces", "monitoring"],
     "Research": ["research", "stock", "weeks", "ask", "themes", "moves", "evidence"],
     "Library": ["filings", "news"],
     "Set up": ["manage", "settings", "system"],

@@ -15,6 +15,10 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.37 · Nov 5, 2026
+
+- Step 39: experiments. A variant runs with another model or instructions from a file and records what and why (migration 0034); variants compared case by case with a verdict that allows for noise, on the Agent evals page and `sna eval <name> compare`. This completes the LangSmith-style eval platform (steps 35–39). agent-design.md's Evals section.
+
 ### 1.36 · Nov 5, 2026
 
 - Step 38: live monitoring of the agents' quality from production data, with alerts on a Monitoring page and in the digest. agent-design.md's Evals section.

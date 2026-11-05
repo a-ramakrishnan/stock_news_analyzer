@@ -3382,6 +3382,8 @@ def evals_page() -> None:
             "Cost": st.column_config.NumberColumn(format="$%.4f"),
         },
     )
+    if len(o["latest"]) > 1:
+        _eval_compare(spec, o)
     variant = st.segmented_control(
         "Cases of", list(o["latest"]), default=next(iter(o["latest"])), key="evals-variant"
     ) or next(iter(o["latest"]))
@@ -3428,6 +3430,103 @@ def evals_page() -> None:
         f"Run with `uv run sna eval {o['flow']} run`; a variant: `--variant v1 --model ...`. "
         "Results and transcripts are also in `.claude/hillclimb/" + o["flow"] + "/`."
     )
+
+
+VERDICT = {
+    "better": (st.success, ":material/trending_up:"),
+    "worse": (st.error, ":material/trending_down:"),
+    "no clear difference": (st.info, ":material/drag_handle:"),
+    "too few cases to tell": (st.warning, ":material/help:"),
+}
+
+
+def _eval_compare(spec, o: dict) -> None:
+    """Two variants' latest runs compared case by case (an experiment)."""
+    from stock_news_analyzer.evals import framework as fw
+
+    st.markdown("**Compare variants**")
+    variants = list(o["latest"])
+    left, right = st.columns(2)
+    a = left.selectbox("Against", variants, index=0, key="evals-compare-a")
+    rest = [v for v in variants if v != a]
+    b = right.selectbox("This variant", rest, index=0, key="evals-compare-b")
+    with Session(engine()) as session:
+        c = fw.compare(session, spec, o["latest"][a]["id"], o["latest"][b]["id"])
+    labels = {m["id"]: m["label"] for m in spec.metrics}
+    show, icon = VERDICT[c["verdict"]]
+    low, high = c["interval"]
+    show(
+        f"**{b} is {c['verdict']}** than {a}"
+        if c["verdict"] in ("better", "worse")
+        else f"**{b} against {a}: {c['verdict']}.**",
+        icon=icon,
+    )
+    st.caption(
+        f"{labels[spec.metrics[0]['id']]}: {100 * c['difference']:+.1f} points "
+        f"(95% interval {100 * low:+.1f} to {100 * high:+.1f}) over {c['cases']} cases both "
+        f"ran; {len(c['improved'])} better, {len(c['regressed'])} worse, {c['same']} the same."
+        + (f" Why {b}: {c['b']['note']}" if c["b"].get("note") else "")
+    )
+    ca, cb = c["a"], c["b"]
+    rows = [
+        {
+            "": "Model",
+            a: MODEL_NAMES.get(ca["model"], ca["model"]),
+            b: MODEL_NAMES.get(cb["model"], cb["model"]),
+            "Change": "",
+        },
+        {
+            "": "Instructions",
+            a: ca["config"].get("instructions", "not recorded"),
+            b: cb["config"].get("instructions", "not recorded"),
+            "Change": "",
+        },
+    ]
+    for m, label in labels.items():
+        if ca[m] is not None and cb[m] is not None:
+            rows.append(
+                {
+                    "": label,
+                    a: f"{ca[m]:.0%}",
+                    b: f"{cb[m]:.0%}",
+                    "Change": f"{100 * (cb[m] - ca[m]):+.0f} pts",
+                }
+            )
+    rows += [
+        {
+            "": "Cost a case",
+            a: f"${ca['cost_per_case']:.5f}",
+            b: f"${cb['cost_per_case']:.5f}",
+            "Change": f"{(cb['cost_per_case'] / ca['cost_per_case'] - 1):+.0%}"
+            if ca["cost_per_case"]
+            else "",
+        },
+        {
+            "": "Median seconds",
+            a: f"{ca['latency_median'] or 0:.1f}",
+            b: f"{cb['latency_median'] or 0:.1f}",
+            "Change": "",
+        },
+        {"": "Failed calls", a: str(ca["failed_calls"]), b: str(cb["failed_calls"]), "Change": ""},
+    ]
+    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+    for title, group in (("Worse", c["regressed"]), ("Better", c["improved"])):
+        if not group:
+            continue
+        st.markdown(f"**{title} in {b}** ({len(group)})")
+        for x in group[:10]:
+            with st.expander(f"{x['case']}: {x['title']} ({x['a']:.0%} → {x['b']:.0%})"):
+                expected, found_a = _eval_detail(x["a_detail"])
+                _, found_b = _eval_detail(x["b_detail"])
+                cols = st.columns(3)
+                for col, head, lines in (
+                    (cols[0], "Expected", expected),
+                    (cols[1], f"{a} found", found_a),
+                    (cols[2], f"{b} found", found_b),
+                ):
+                    col.markdown(f"**{head}**")
+                    for line in lines or ["nothing"]:
+                        col.markdown(f"- {html.escape(line)}")
 
 
 def _eval_card(job: str, o: dict | None) -> None:

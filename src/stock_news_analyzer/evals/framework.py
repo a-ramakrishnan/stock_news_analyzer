@@ -86,7 +86,9 @@ class Spec:
     def draft(self, llm, case: EvalCase, model: str) -> dict:
         raise NotImplementedError
 
-    def call(self, llm, case: EvalCase, model: str) -> Answer:
+    def call(self, llm, case: EvalCase, model: str, system: str | None = None) -> Answer:
+        """Call the agent on one case. `system`, when given, replaces the agent's instructions
+        (an experiment); otherwise the agent's own entry point is used as is."""
         raise NotImplementedError
 
     def grade(self, case: EvalCase, output: dict) -> dict[str, float]:
@@ -458,6 +460,9 @@ def run(
     mode: str = "agent",
     approve_harness: bool = False,
     flow: Path | None = None,
+    system: str | None = None,
+    system_file: str | None = None,
+    note: str | None = None,
     say=print,
 ) -> dict:
     """Run the agent on every case `reps` times, grade, write results and keep the run;
@@ -486,7 +491,7 @@ def run(
             start = time.monotonic()
             try:
                 with session_factory() as session:
-                    answer = spec.call(llm_factory(session), case, model)
+                    answer = spec.call(llm_factory(session), case, model, system)
                     session.commit()
                 return case, rep, answer, time.monotonic() - start, tries
             except LLMError as exc:
@@ -528,7 +533,7 @@ def run(
                 continue
             scores = spec.grade(case, answer.output)
             trace = [
-                {"role": "system", "content": spec.system},
+                {"role": "system", "content": system or spec.system},
                 {"role": "user", "content": answer.prompt},
                 {"role": "assistant", "content": json.dumps(answer.output, indent=1, default=str)},
             ]
@@ -558,11 +563,32 @@ def run(
             _append(results, row)
     summary = summarize(spec, results, errors)
     (out / "summary.md").write_text(summary["markdown"])
+    config = run_config(spec, model, system, system_file)
+    if variant != "baseline":
+        (out / "change.md").write_text(
+            f"{note or 'A variant'}\n\nModel: {model}. Instructions: {config['instructions']}"
+            + (f" (from {system_file})" if system_file else "")
+            + ".\n"
+        )
     if mode == "agent" and session_factory is not None:
         with session_factory() as session:
-            record(session, spec, variant, model, items, results, errors, summary)
+            run_row = record(session, spec, variant, model, items, results, errors, summary)
+            run_row.config, run_row.note = config, note
             session.commit()
     return summary
+
+
+def run_config(spec: Spec, model: str, system: str | None, system_file: str | None) -> dict:
+    """What a run used: the model, and the agent's own instructions or which others."""
+    if system is None or system == spec.system:
+        return {"model": model, "instructions": "the agent's own"}
+    digest = hashlib.sha256(system.encode()).hexdigest()[:12]
+    return {
+        "model": model,
+        "instructions": f"changed ({digest})",
+        "file": system_file,
+        "system": system,
+    }
 
 
 def summarize(spec: Spec, results: Path, errors: Path) -> dict:
@@ -695,3 +721,160 @@ def runnable(items: list[EvalCase], unverified: bool) -> tuple[list[EvalCase], l
 
 def factory(engine) -> Callable[[], Session]:
     return lambda: Session(engine)
+
+
+# ------------------------------------------------------------------ experiments compared
+
+
+def _by_case(session: Session, run_id: int) -> dict[str, dict]:
+    """A run's cases: the mean of each metric over its graded runs, a detail (from a wrong
+    run when there is one), cost and latency of its attempts, failed calls."""
+    out: dict[str, dict] = {}
+    for r in session.scalars(select(EvalResult).where(EvalResult.run_id == run_id)):
+        c = out.setdefault(
+            r.case_id,
+            {
+                "title": r.title,
+                "grades": [],
+                "detail": None,
+                "cost": [],
+                "latency": [],
+                "errors": 0,
+            },
+        )
+        if r.error:
+            c["errors"] += 1
+            continue
+        c["title"] = c["title"] or r.title
+        c["grades"].append(r.grade or {})
+        c["cost"].append(float(r.cost_usd or 0))
+        if r.latency_s is not None:
+            c["latency"].append(r.latency_s)
+        if c["detail"] is None or (r.grade or {}).get("correct", 1) < 1:
+            c["detail"] = r.detail
+    for c in out.values():
+        keys = {k for g in c["grades"] for k in g}
+        c["mean"] = {k: sum(g.get(k, 0) for g in c["grades"]) / len(c["grades"]) for k in keys}
+    return out
+
+
+def compare(session: Session, spec: Spec, a_id: int, b_id: int) -> dict:
+    """Run B against run A, case by case, on the cases both graded: which got better and which
+    worse, the change in each metric, cost and latency, and a verdict on the headline metric
+    from the paired differences (better or worse only when the 95% interval of the mean
+    difference leaves out zero)."""
+    a_run, b_run = session.get(EvalRun, a_id), session.get(EvalRun, b_id)
+    a, b = _by_case(session, a_id), _by_case(session, b_id)
+    common = sorted(k for k in a.keys() & b.keys() if a[k]["grades"] and b[k]["grades"])
+    head = spec.metrics[0]["id"]
+    diffs = [b[k]["mean"].get(head, 0) - a[k]["mean"].get(head, 0) for k in common]
+    n = len(diffs)
+    mean = sum(diffs) / n if n else 0.0
+    sd = math.sqrt(sum((d - mean) ** 2 for d in diffs) / (n - 1)) if n > 1 else 0.0
+    se = sd / math.sqrt(n) if n else 0.0
+    low, high = mean - 1.96 * se, mean + 1.96 * se
+    if n < 5:
+        verdict = "too few cases to tell"
+    elif low > 0:
+        verdict = "better"
+    elif high < 0:
+        verdict = "worse"
+    else:
+        verdict = "no clear difference"
+
+    def side(data: dict, keys: list[str]) -> dict:
+        metric_ids = [m["id"] for m in spec.metrics]
+        rows = [data[k] for k in keys]
+        cost = [x for r in rows for x in r["cost"]]
+        lat = sorted(x for r in rows for x in r["latency"])
+        return {
+            **{
+                m: (sum(r["mean"].get(m, 0) for r in rows) / len(rows) if rows else None)
+                for m in metric_ids
+            },
+            "cost_per_case": sum(cost) / len(cost) if cost else 0.0,
+            "latency_median": lat[len(lat) // 2] if lat else None,
+            "failed_calls": sum(r["errors"] for r in rows),
+        }
+
+    cases = [
+        {
+            "case": k,
+            "title": b[k]["title"] or a[k]["title"],
+            "a": a[k]["mean"].get(head, 0),
+            "b": b[k]["mean"].get(head, 0),
+            "a_detail": a[k]["detail"] or {},
+            "b_detail": b[k]["detail"] or {},
+        }
+        for k in common
+    ]
+    return {
+        "a": {
+            "id": a_id,
+            "variant": a_run.variant,
+            "model": a_run.model,
+            "config": a_run.config or {},
+            "note": a_run.note,
+            **side(a, common),
+        },
+        "b": {
+            "id": b_id,
+            "variant": b_run.variant,
+            "model": b_run.model,
+            "config": b_run.config or {},
+            "note": b_run.note,
+            **side(b, common),
+        },
+        "cases": len(common),
+        "only_a": sorted(a.keys() - b.keys()),
+        "only_b": sorted(b.keys() - a.keys()),
+        "difference": mean,
+        "interval": (low, high),
+        "verdict": verdict,
+        "improved": sorted((c for c in cases if c["b"] > c["a"]), key=lambda c: c["a"] - c["b"]),
+        "regressed": sorted((c for c in cases if c["b"] < c["a"]), key=lambda c: c["b"] - c["a"]),
+        "same": sum(c["a"] == c["b"] for c in cases),
+    }
+
+
+def latest_runs(session: Session, spec: Spec) -> dict[str, EvalRun]:
+    """The latest run of each variant."""
+    out: dict[str, EvalRun] = {}
+    for r in session.scalars(
+        select(EvalRun)
+        .where(EvalRun.flow == spec.name)
+        .order_by(EvalRun.finished_at.desc(), EvalRun.id.desc())
+    ):
+        out.setdefault(r.variant, r)
+    return out
+
+
+def comparison_markdown(spec: Spec, c: dict) -> str:
+    """A comparison as text, for the terminal."""
+    labels = {m["id"]: m["label"] for m in spec.metrics}
+    a, b = c["a"], c["b"]
+    lines = [
+        f"# {b['variant']} against {a['variant']} ({spec.title}, {c['cases']} cases in both)",
+        "",
+        f"**Verdict: {c['verdict']}.** {labels[spec.metrics[0]['id']]} "
+        f"{100 * c['difference']:+.1f} points (95%: {100 * c['interval'][0]:+.1f} to "
+        f"{100 * c['interval'][1]:+.1f}); {len(c['improved'])} cases better, "
+        f"{len(c['regressed'])} worse, {c['same']} the same.",
+        "",
+        f"| | {a['variant']} | {b['variant']} |",
+        "| --- | --- | --- |",
+        f"| Model | {a['model']} | {b['model']} |",
+        f"| Instructions | {a['config'].get('instructions', 'not recorded')} | "
+        f"{b['config'].get('instructions', 'not recorded')} |",
+        *[f"| {labels[m]} | {a[m]:.0%} | {b[m]:.0%} |" for m in labels if a[m] is not None],
+        f"| Cost a case | ${a['cost_per_case']:.5f} | ${b['cost_per_case']:.5f} |",
+        f"| Median seconds | {a['latency_median'] or 0:.1f} | {b['latency_median'] or 0:.1f} |",
+        f"| Failed calls | {a['failed_calls']} | {b['failed_calls']} |",
+    ]
+    for title, group in (("Worse", c["regressed"]), ("Better", c["improved"])):
+        if group:
+            lines += ["", f"## {title} in {b['variant']}", ""]
+            lines += [f"- {x['case']} ({x['title']}): {x['a']:.0%} → {x['b']:.0%}" for x in group]
+    if b.get("note"):
+        lines += ["", f"Why {b['variant']}: {b['note']}"]
+    return "\n".join(lines) + "\n"

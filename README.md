@@ -51,8 +51,8 @@ New to the system? The [Guide](src/stock_news_analyzer/ui/guide.md) explains wha
 | 36 | Eval cases page: check, correct or exclude each case's answer beside what the agent read, with its history; add any filing to an eval from Filings; an Agents group in the sidebar | done |
 | 37 | Traces of every AI call: what it was sent and answered, the model that served it, how long it took; a Traces page and `sna llm traces`; kept 30 days by default | done |
 | 38 | Live monitoring: nine quality monitors from what the agents record (QA passes, quotes found, your rejections, failed calls...), the last 7 days against the 28 before, alerts on the page and in the digest; AI spend by task | done |
-| 39 | Experiments compared case by case | next |
-| 40 | Trying it on a clean Mac and Windows | |
+| 39 | Experiments: a variant runs with another model or instructions from a file and records what and why; compared with the baseline case by case (better, worse, the same; each score, cost and speed; a verdict that allows for noise) on the page and with `sna eval <name> compare` | done |
+| 40 | Trying it on a clean Mac and Windows | next |
 
 ## Quick start (no Python needed)
 

@@ -3380,6 +3380,10 @@ def _eval_commands(spec) -> typer.Typer:
             "agent", help="agent; or oracle / null to check the grader (no calls, no cost)."
         ),
         unverified: bool = typer.Option(False, help="Also run cases not checked yet."),
+        instructions: str = typer.Option(
+            None, help="A file of instructions to use instead of the agent's (an experiment)."
+        ),
+        note: str = typer.Option(None, help="Why this run, e.g. what the variant changes."),
         approve_harness: bool = typer.Option(
             False, "--approve-harness", help="Accept the current runner and grader (after reading)."
         ),
@@ -3393,6 +3397,14 @@ def _eval_commands(spec) -> typer.Typer:
 
         settings = get_settings()
         model = model or spec.default_model()
+        system = None
+        if instructions:
+            from pathlib import Path
+
+            system = Path(instructions).read_text()
+            if variant == "baseline":
+                typer.echo("Other instructions are a variant: pass --variant v1 (or v2, ...).")
+                raise typer.Exit(1)
         with _eval_spec_session(spec) as session:
             items = [c for c in fw.cases(session, spec) if not only or c.key in only]
             for c in items:
@@ -3422,6 +3434,9 @@ def _eval_commands(spec) -> typer.Typer:
                 workers=workers,
                 mode=mode,
                 approve_harness=approve_harness,
+                system=system,
+                system_file=instructions,
+                note=note,
                 say=typer.echo,
             )
         except fw.HarnessChanged as exc:
@@ -3429,6 +3444,35 @@ def _eval_commands(spec) -> typer.Typer:
             raise typer.Exit(2) from exc
         typer.echo(summary["markdown"])
         typer.echo(f"Details: {spec.flow / variant}")
+
+    @sub.command("instructions")
+    def instructions_cmd() -> None:
+        """Print the agent's instructions, to copy into a file, change, and try as a variant:
+        sna eval <name> instructions > v1.txt, edit it, then
+        sna eval <name> run --variant v1 --instructions v1.txt --note "what changed"."""
+        typer.echo(spec.system)
+
+    @sub.command("compare")
+    def compare(
+        a: str = typer.Argument("baseline", help="The variant to compare against."),
+        b: str = typer.Argument(None, help="The variant to compare (default: the latest other)."),
+    ) -> None:
+        """Compare two variants' latest runs case by case: which cases got better or worse,
+        each metric, cost and speed, and a verdict that allows for noise."""
+        from stock_news_analyzer.evals import framework as fw
+
+        with get_session() as session:
+            latest = fw.latest_runs(session, spec)
+            others = [v for v in latest if v != a]
+            b = b or (others[0] if others else None)
+            if a not in latest or b not in latest:
+                typer.echo(
+                    f"Need runs of both: have {', '.join(latest) or 'none'}. "
+                    f"Run a variant with: sna eval {spec.name} run --variant v1 ..."
+                )
+                raise typer.Exit(1)
+            result = fw.compare(session, spec, latest[a].id, latest[b].id)
+        typer.echo(fw.comparison_markdown(spec, result))
 
     return sub
 

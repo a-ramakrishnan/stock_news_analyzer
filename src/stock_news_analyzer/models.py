@@ -930,6 +930,9 @@ class EvalRun(Base):
     scores: Mapped[dict] = mapped_column(JSONB)
     cost_usd: Mapped[Decimal] = mapped_column(Numeric(10, 5), default=0)
     harness: Mapped[str | None] = mapped_column(String(64))  # digest of the runner and grader
+    # what the run changed: {"model", "instructions": "the agent's own" or a digest, "file"}
+    config: Mapped[dict] = mapped_column(JSONB, default=dict)
+    note: Mapped[str | None] = mapped_column(Text)  # why, in your words
 
 
 class EvalResult(Base):

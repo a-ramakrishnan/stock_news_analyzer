@@ -235,6 +235,21 @@ class ResultsSpec(Spec):
         )
         return [f"{answer.get('basis')} {answer['period_end']}: {figures}"]
 
+    editable = False  # the company's XBRL figures are the answer
+
+    def show(self, case: EvalCase) -> dict:
+        d = case.input
+        doc, _ = _filing(d)
+        return {
+            "heading": d.get("title") or case.key,
+            "facts": [
+                f"{d.get('company')} ({d.get('symbol') or d.get('isin')})",
+                f"filed {str(d.get('published_at'))[:10]}",
+                f"document {d.get('document_id')}",
+            ],
+            "text": reader.excerpt(reader.statement_text(doc)),
+        }
+
     def oracle(self, case: EvalCase) -> dict:
         return dict(case.reference or {})
 

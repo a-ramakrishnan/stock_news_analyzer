@@ -491,3 +491,130 @@ def test_step_34_details_still_show():
     }
     assert _eval_detail(old) == (["capex Rs 14 cr"], ["capex Rs 1,400 cr: Plant"])
     assert _eval_detail({"expected": ["a"], "found": []}) == (["a"], [])
+
+
+# ------------------------------------------------------------------ labelling in the dashboard
+
+
+def test_the_answer_as_a_table_and_back():
+    reference = {
+        "events": [
+            {
+                "event_type": "credit_rating",
+                "value_cr": 450.0,
+                "value_as_written": "Rs. 450 crore",
+                "headline": "Upgraded",
+            }
+        ]
+    }
+    rows = SPEC.editor_rows(reference)
+    assert rows == [
+        {
+            "event_type": "credit_rating",
+            "value_cr": 450.0,
+            "value_as_written": "Rs. 450 crore",
+            "headline": "Upgraded",
+        }
+    ]
+    rows.append(
+        {"event_type": "capex", "value_cr": float("nan"), "value_as_written": "", "headline": None}
+    )
+    rows.append({"event_type": None, "value_cr": 5.0})  # an empty row the editor left
+    back = SPEC.from_editor(rows)
+    assert back["events"][1] == {
+        "event_type": "capex",
+        "value_cr": None,
+        "value_as_written": None,
+        "headline": None,
+    }
+    assert len(back["events"]) == 2 and SPEC.empty() == {"events": []}
+
+
+@pytest.mark.db
+def test_a_filing_is_added_by_hand_once(loaded):  # noqa: F811
+    docs = _seed(loaded)
+    new = SPEC.case_for(loaded, docs["Credit rating"].id)
+    assert new.source == "manual" and new.tags[0] == "added"
+    assert fw.add_case(loaded, SPEC, new).status == "new"
+    assert fw.add_case(loaded, SPEC, SPEC.case_for(loaded, docs["Credit rating"].id)) is None
+    assert SPEC.case_for(loaded, 999999) is None
+    shown = SPEC.show(fw.cases(loaded, SPEC)[0])
+    assert shown["heading"] == "Credit rating" and "Rs. 450 crore" in shown["text"]
+
+
+def _page(test_database_url, monkeypatch, tmp_path, script):
+    from streamlit.testing.v1 import AppTest
+
+    from stock_news_analyzer.config import get_settings
+
+    monkeypatch.setenv("DATABASE_URL", test_database_url)
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    get_settings.cache_clear()
+    at = AppTest.from_string(script, default_timeout=30)
+    at.run()
+    assert not at.exception, at.exception
+    return at
+
+
+def _click(at, label):
+    next(b for b in at.button if b.label == label).click().run()
+    assert not at.exception, at.exception
+
+
+@pytest.mark.db
+def test_checking_cases_on_the_eval_cases_page(loaded, test_database_url, monkeypatch, tmp_path):  # noqa: F811
+    _seed(loaded)
+    added = fw.sample(loaded, SPEC, n=3)
+    for c in added:
+        fw.set_answer(
+            c,
+            {"events": [{"event_type": "credit_rating", "value_cr": 450.0}]},
+            "draft",
+            "claude-opus-5-5",
+        )
+    loaded.commit()
+    keys = sorted(c.key for c in added)
+    at = _page(
+        test_database_url,
+        monkeypatch,
+        tmp_path,
+        "from stock_news_analyzer.ui import app\napp.eval_cases_page()",
+    )
+    assert "0 of 3 checked · 3 drafted" in at.get("progress")[0].proto.text
+    _click(at, "Confirm")  # the first case, as drafted
+    _click(at, "Nothing to find")  # the second: no event after all
+    at.text_input[0].set_value("a duplicate of another filing").run()
+    _click(at, "Exclude")  # the third
+    loaded.expire_all()
+    by_key = {c.key: c for c in fw.cases(loaded, SPEC)}
+    assert by_key[keys[0]].status == "verified"
+    assert by_key[keys[0]].reference["events"][0]["value_cr"] == 450.0
+    assert by_key[keys[1]].reference == {"events": []} and by_key[keys[1]].status == "verified"
+    assert by_key[keys[2]].status == "excluded"
+    assert by_key[keys[2]].note == "a duplicate of another filing"
+    assert by_key[keys[0]].history[-1] == {
+        **by_key[keys[0]].history[-1],
+        "by": "you",
+        "status": "draft",
+    }
+    assert any("Nothing left to check" in s.value for s in at.success)
+
+
+@pytest.mark.db
+def test_the_filings_page_adds_a_filing_to_the_eval(
+    loaded,  # noqa: F811
+    test_database_url,
+    monkeypatch,
+    tmp_path,
+):
+    docs = _seed(loaded)
+    script = (
+        "from stock_news_analyzer.ui import app\n"
+        f"app.add_to_eval({docs['Credit rating'].id}, 'test')\n"
+    )
+    at = _page(test_database_url, monkeypatch, tmp_path, script)
+    _click(at, "Add to the Event Extractor's eval")
+    assert "Added" in at.success[0].value
+    _click(at, "Add to the Event Extractor's eval")
+    assert "Already in the eval" in at.info[0].value
+    assert [c.source for c in fw.cases(loaded, SPEC)] == ["manual"]

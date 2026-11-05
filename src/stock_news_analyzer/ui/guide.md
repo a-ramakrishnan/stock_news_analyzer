@@ -28,7 +28,7 @@ Start the system with **start.command** (Mac) or **start.bat** (Windows) in its 
 
 ## The pages
 
-The sidebar groups the pages: **Today** (what changed, the agent map and the agent evals), **Research** (one stock, questions, themes), **Library** (every filing and article), **Set up** (stocks, settings, system) and **Help**.
+The sidebar groups the pages: **Today** (what changed), **Agents** (how the AI agents work and how well they do), **Research** (one stock, questions, themes), **Library** (every filing and article), **Set up** (stocks, settings, system) and **Help**.
 
 - **Today:** index levels, a card for each stock (Stocks I own first), the latest digest, recent red flags, and whether the morning jobs ran.
 - **Portfolio:** each stock you own with a lean and the evidence behind it, and your sectors against the Nifty 50; explained in its own section below.
@@ -38,7 +38,7 @@ The sidebar groups the pages: **Today** (what changed, the agent map and the age
   - Tabs: Unusual days, Results, Shareholding, Events (with red flags), Earnings calls, Order book, Filings, News, Bulk/block deals, How it reacted, Corporate actions.
 - **Research brief:** one stock on one page, conclusion first; explained in its own section below.
 - **Week by week:** one stock's last 12, 24 or 52 weeks, explained in its own section below.
-- **Filings:** every exchange filing, searchable by stock, type, words and date. Select one to read its text.
+- **Filings:** every exchange filing, searchable by stock, type, words and date. Select one to read its text, or add it to the Event Extractor's eval (for a filing it read wrongly, or one worth testing).
 - **News:** headlines about your stocks, with the AI's relevance and importance, and links to the articles.
 - **Themes:** themes across your companies (data centres, defence, credit and so on), whether they are getting stronger, and **read-across**: an important order or event at one company that may matter to another.
 - **Ask:** questions in plain English, answered from your own data with the sources listed. Earlier questions are kept.
@@ -51,6 +51,7 @@ The sidebar groups the pages: **Today** (what changed, the agent map and the age
   - **Today, live:** each box shows whether its job is running, worked or failed, its next run, and its AI calls and cost today; a faint line traces the path of each job running now; a feed explains each of today's runs in plain words.
   - **Replay the last 7 days:** press Play to watch information move through the system, today's or the week's, at 10 minutes, an hour or six hours a second; drag the slider to jump to a time. Each run lights up its box, a thin line traces the information from source to memory or from memory through Claude and back, and the feed narrates it.
 - **Agent evals:** how well each AI agent does its job, measured on fixed cases; explained in its own section below.
+- **Eval cases:** the cases the agents are measured on, where you check their answers; explained under Agent evals below.
 - **Guide:** this page.
 
 ## Research brief
@@ -167,10 +168,16 @@ An eval measures one AI agent on a fixed set of cases whose answers are known, s
   - An agent whose eval hasn't run says how many cases are checked and what to do next.
   - An agent without an eval says how it could be measured.
 - **Look closer:** an agent's score run by run, one line per variant (the baseline, and any change you try), the latest run of each variant side by side, and its cases, failing ones first. Open a failing case to see what was expected next to what the agent found.
+- **Eval cases:** pick an eval and work through the cases still to check, one at a time.
+  - The left side shows what the agent read; the right shows the expected answer as a table you can edit (type, amount in Rs crore, the amount as written, a headline). Add or delete rows as needed.
+  - **Confirm** saves the answer as checked, **Nothing to find** records that the filing announces no event, and **Exclude** leaves a case out of runs (say why in the note).
+  - Each case's **History** keeps every earlier answer and who changed it.
+  - The Results reader's answers are the companies' own XBRL figures, so its cases only need excluding when a filing doesn't fit.
+  - To add a filing as a case, select it on **Filings** and press **Add to the Event Extractor's eval**.
 - **Running one** (in the project folder, in a terminal), with `events` or `results`:
   1. `uv run sna eval events sample` adds cases from your database.
   2. `uv run sna eval events draft` has Opus draft the answers, for about a cent a case (the Results reader needs no drafts).
-  3. Check the answers.
+  3. Check the answers on **Eval cases**.
   4. `uv run sna eval events run` scores the agent, for well under a dollar.
 
   The page shows the run as soon as it finishes. docs/evals.md has the details.

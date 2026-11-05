@@ -410,6 +410,7 @@ def watchlist_nifty50(
 
     members = securities.parse_index_members(securities.download(securities.NIFTY50_URL))
     with get_session() as session:
+        wl.save_index_members(session, "Nifty 50", members)
         result = wl.add_index_members(session, members, set(index_names(session)))
         typer.echo(
             f"Nifty 50: {len(members)} members; {len(result.added)} added as study-only, "

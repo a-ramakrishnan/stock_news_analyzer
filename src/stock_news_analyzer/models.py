@@ -837,6 +837,18 @@ class Shareholding(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class IndexMember(Base):
+    """An index's constituents as NSE last listed them (`sna watchlist nifty50`)."""
+
+    __tablename__ = "index_members"
+
+    index_name: Mapped[str] = mapped_column(String(64), primary_key=True)
+    isin: Mapped[str] = mapped_column(String(12), primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(32))
+    industry: Mapped[str | None] = mapped_column(Text)  # NSE's, e.g. 'Financial Services'
+    listed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class SavedSetting(Base):
     """A setting saved on the dashboard's Settings page (the API key, budget, models, unusual
     threshold, paused jobs). It takes the place of the same setting in `.env`; see config.py.

@@ -1292,3 +1292,11 @@ def weeks(session: Session, isin: str, count: int = 12) -> list:
     from stock_news_analyzer.agents import weekly
 
     return weekly.weeks(session, isin, count)
+
+
+def portfolio(session: Session) -> dict:
+    """The stocks owned with their leans (agents/portfolio.py), and the sector weights."""
+    from stock_news_analyzer.agents import portfolio as pf
+
+    held = pf.holdings(session)
+    return {"holdings": held, "sectors": pf.sector_weights(session, held)}

@@ -14,6 +14,10 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.27 · Nov 5, 2026
+
+- Step 30, part 3: Portfolio, in the Today group. Each stock owned leans positive, neutral or negative from its recent events, each valued by the event study's evidence for its kind (thin evidence and older events count less), with the move since each event; the portfolio's sectors against the Nifty 50's by market cap (`agents/portfolio.py`, no LLM; `index_members`, migration 0027)
+
 ### 1.26 · Nov 5, 2026
 
 - Week by week, a Research page: one stock's last 12, 24 or 52 weeks, each with its move against the Nifty 50 and the sector, everything that came out, and whether the move went the way the news pointed (`agents/weekly.py`, no LLM)

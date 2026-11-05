@@ -31,6 +31,7 @@ Start the system with **start.command** (Mac) or **start.bat** (Windows) in its 
 The sidebar groups the pages: **Today** (what changed, and the agent map), **Research** (one stock, questions, themes), **Library** (every filing and article), **Set up** (stocks, settings, system) and **Help**.
 
 - **Today:** index levels, a card for each stock (Stocks I own first), the latest digest, recent red flags, and whether the morning jobs ran.
+- **Portfolio:** each stock you own with a lean and the evidence behind it, and your sectors against the Nifty 50; explained in its own section below.
 - **Red flags:** every flag, filtered by severity, period and stock. Select one to dismiss it with a note once you have looked into it, or to open a dismissed one again.
 - **Stock:** one company in depth.
   - The chart compares the stock with its sector index and the Nifty 50, both set to 100 at the start, with key filings marked.
@@ -49,6 +50,17 @@ The sidebar groups the pages: **Today** (what changed, and the agent map), **Res
   - **Today, live:** each box shows whether its job is running, worked or failed, its next run, and its AI calls and cost today; a faint line traces the path of each job running now; a feed explains each of today's runs in plain words.
   - **Replay the last 7 days:** press Play to watch information move through the system, today's or the week's, at 10 minutes, an hour or six hours a second; drag the slider to jump to a time. Each run lights up its box, a thin line traces the information from source to memory or from memory through Claude and back, and the feed narrates it.
 - **Guide:** this page.
+
+## Portfolio
+
+Inputs for shaping the portfolio, not advice: no buy or sell calls.
+
+- **The lean:** each stock you own leans positive, neutral or negative from its events of the last 90 days (results, order wins, events, red flags, deals). Each event counts for the median move against the Nifty 50 that followed events of its kind across every stock followed, over 20 trading days, from **What news does to prices**. A kind with fewer than 10 cases counts in proportion, and an event's weight halves every 45 days. The weighted medians add up to the score: above +1% leans positive, below −1% negative. An open high-severity red flag keeps a lean from being positive.
+- **The reasons:** each event with what such events usually did, how many cases that rests on and how often the stock rose, its weight, and **since then**: how far the stock has already moved against the Nifty 50 after it. A move as big as such events usually bring may already be priced in.
+- **The last 12 weeks** from **Week by week**: the stock's move against the Nifty 50, and how often its moves went the way its news pointed.
+- **Your sectors against the Nifty 50:** your weight in each NSE industry (from the quantities on Manage stocks, or equal weights without them) beside the index's, by market cap, once `uv run sna watchlist nifty50` has saved its members. Over- and underweights show where the portfolio differs from the market.
+
+The lean is only as good as the evidence. With few cases it stays near neutral; it firms up as the Nifty 50's history is read and new events come in.
 
 ## Week by week
 

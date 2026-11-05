@@ -62,6 +62,15 @@ Asked for next: one page per stock showing it week by week, to see whether it be
 
 Tests cover the verdicts, Friday-evening news moving to the next week, off-topic news left out, the tone of news, an event and a filing in the same week, and minor news not counting.
 
+## Part 3: the portfolio
+
+- **`agents/portfolio.py`** (no AI) gives each stock owned a lean. Each of its events of the last 90 days counts for the median move against the Nifty 50 that followed events of its kind across every stock followed, over 20 trading days (the event study). A kind with fewer than 10 cases counts in proportion, and an event's weight halves every 45 days. The weighted medians add up to a score: over +1% leans positive, under −1% negative. An open high-severity red flag keeps a lean from being positive.
+- Beside each event: what such events usually did, the cases behind it and how often the stock rose, its weight, and **since then**, how far the stock has already moved against the Nifty 50 after it, a hint that the news may be priced in. Each card also shows the last 12 weeks from Week by week and open red flags.
+- **Sectors:** the portfolio's weight in each NSE industry (quantity × close, or equal weights when quantities are missing) against the Nifty 50's by BSE market cap. `sna watchlist nifty50` now saves the index's members (`index_members`, migration 0027) for this.
+- **The page,** Portfolio in the Today group, under Today.
+
+The weights come from the evidence itself, so the leans firm up as the Nifty 50's history is read: with few cases they stay near neutral. Tests cover the lean and the red-flag rule, the weights for thin and older evidence, the move since an event, and sector weights with and without quantities.
+
 ## On the Mac
 
 ```

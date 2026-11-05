@@ -1330,12 +1330,16 @@ def briefs(session: Session, isin: str) -> list[dict]:
 
 # --- agent evals --------------------------------------------------------------------
 
-# The agents (by their Agent map job) that have an eval, and its name (`sna eval <flow>`).
-EVAL_FLOWS = {"events": "events"}
-# How each agent without an eval yet could be graded: the Agent evals page says so.
+
+def eval_specs() -> dict:
+    """{agent job on the Agent map: its eval's Spec} (evals/__init__.py)."""
+    from stock_news_analyzer.evals import registry
+
+    return {spec.agent: spec for spec in registry().values()}
+
+
 EVAL_PLANS = {
     "triage": "Relevance, topic and sentiment against your labels, by code.",
-    "results": "Figures read from result PDFs against the XBRL filings, by code.",
     "explain": "Move explanations against a rubric, by a judge model.",
     "concalls": "Guidance and quotes against the transcript, by code and a judge.",
     "promises": "Promises and their status against the calls, by code and a judge.",
@@ -1368,6 +1372,12 @@ def eval_runs(session: Session, flow: str) -> list[dict]:
             "errors": r.errors,
             "cost_usd": float(r.cost_usd or 0),
             **{k: v for k, v in (r.scores or {}).items()},
+            "stats": (r.scores or {}).get("stats")
+            or {
+                k.title(): (r.scores or {}).get(k)
+                for k in ("recall", "precision", "specificity")
+                if (r.scores or {}).get(k) is not None
+            },
         }
         for r in runs
     ]
@@ -1376,15 +1386,21 @@ def eval_runs(session: Session, flow: str) -> list[dict]:
 def eval_overview(session: Session) -> dict[str, dict]:
     """For each agent with an eval: its latest run of each variant (the baseline first), the
     run before the latest baseline (for the change), and the history."""
+    from stock_news_analyzer.evals import framework as fw
+
     out = {}
-    for job, flow in EVAL_FLOWS.items():
+    for job, spec in eval_specs().items():
+        flow = spec.name
         runs = eval_runs(session, flow)
         latest: dict[str, dict] = {}
         for r in runs:
             latest.setdefault(r["variant"], r)
         baseline = [r for r in runs if r["variant"] == "baseline"]
+        items = fw.cases(session, spec)
         out[job] = {
             "flow": flow,
+            "spec": spec,
+            "cases": {st: sum(c.status == st for c in items) for st in fw.STATUSES},
             "runs": runs,
             "latest": dict(sorted(latest.items(), key=lambda kv: kv[0] != "baseline")),
             "current": baseline[0] if baseline else (runs[0] if runs else None),

@@ -948,3 +948,31 @@ class EvalResult(Base):
     detail: Mapped[dict] = mapped_column(JSONB, default=dict)  # expected and found
     latency_s: Mapped[float | None] = mapped_column(Float)
     cost_usd: Mapped[Decimal] = mapped_column(Numeric(10, 5), default=0)
+
+
+class EvalCase(Base):
+    """One case of an agent's eval (evals/framework.py): its input as the agent receives it,
+    frozen; the expected answer (`reference`); and its status: 'new' (no answer yet), 'draft'
+    (an answer drafted, not checked), 'verified' (checked by you, or taken from an exact
+    source such as XBRL) or 'excluded' (left out of runs). Every earlier answer and status is
+    kept in `history`."""
+
+    __tablename__ = "eval_cases"
+    __table_args__ = (UniqueConstraint("dataset", "key", name="eval_cases_dataset_key"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    dataset: Mapped[str] = mapped_column(String(32), index=True)  # the eval, e.g. 'events'
+    key: Mapped[str] = mapped_column(String(64))  # e.g. 'doc14036'
+    source: Mapped[str] = mapped_column(String(32))  # sample, rejected, manual, trace, file
+    title: Mapped[str | None] = mapped_column(Text)
+    tags: Mapped[list] = mapped_column(JSONB, default=list)
+    input: Mapped[dict] = mapped_column(JSONB)
+    reference: Mapped[dict | None] = mapped_column(JSONB)
+    status: Mapped[str] = mapped_column(String(16), default="new")
+    drafted_by: Mapped[str | None] = mapped_column(String(64))
+    note: Mapped[str | None] = mapped_column(Text)
+    history: Mapped[list] = mapped_column(JSONB, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

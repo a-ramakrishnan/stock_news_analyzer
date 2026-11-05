@@ -1971,6 +1971,161 @@ ITEM_LABELS = {
 }
 
 
+LEAN_TAG = {"positive": "good", "neutral": "", "negative": "bad"}
+
+
+def portfolio_page() -> None:
+    from stock_news_analyzer.agents import portfolio as pf
+    from stock_news_analyzer.agents import study
+
+    page_header(
+        "Portfolio",
+        "Each stock you own with a lean (positive, neutral or negative) and the evidence "
+        "behind it: its recent events, what such events usually did to prices, and how far "
+        "it has moved since. Then your sectors against the Nifty 50's. Inputs for your "
+        "decisions, not advice.",
+        "portfolio",
+    )
+    data = load("portfolio")
+    held = data["holdings"]
+    if not held:
+        no_data("No stocks marked as owned. Tick **I own it** on Manage stocks.")
+        return
+    leans = {k: sum(h.lean == k for h in held) for k in ("positive", "neutral", "negative")}
+    stat_tiles(
+        [
+            ("Stocks owned", str(len(held)), "marked I own it"),
+            ("Leaning positive", str(leans["positive"]), "recent events point up"),
+            ("Neutral", str(leans["neutral"]), "mixed, or little evidence yet"),
+            ("Leaning negative", str(leans["negative"]), "recent events point down"),
+        ]
+    )
+    with st.expander("How the lean is worked out", icon=":material/info:"):
+        st.markdown(
+            f"""
+- Each event of the last **{pf.LOOKBACK} days** (results, order wins, events, red flags,
+  deals) counts for what followed events of its kind across every stock followed: the
+  median move against the Nifty 50 over **{pf.HORIZON} trading days**, from
+  **What news does to prices**.
+- **Thin evidence counts less:** a kind with fewer than {study.FEW} cases counts in
+  proportion (4 cases: 40%). **Older events count less:** an event's weight halves every
+  {pf.HALF_LIFE:.0f} days.
+- The weighted medians add up to the **score**. Above +{pf.THRESHOLD:.0%} the lean is
+  positive, below −{pf.THRESHOLD:.0%} negative, otherwise neutral. An open high-severity red
+  flag keeps a lean from being positive.
+- **Since then** is how far the stock has already moved against the Nifty 50 after the
+  event. If it already moved as much as such events usually bring, the news may be priced
+  in.
+- The lean is only as good as the evidence: it firms up as the Nifty 50's history is read.
+  It says what usually followed such news, not what will happen, and is not advice.
+"""
+        )
+
+    def change(v, _row):
+        return f'<span class="{trend(v)}">{signed(v, 1)}</span>' if not blank(v) else esc(None)
+
+    for h in held:
+        with st.container(border=True, key=f"card-hold-{h.isin}"):
+            value = f" · {h.quantity:,.0f} shares, ₹{h.value:,.0f}" if h.value else ""
+            close = f"Close ₹{h.close:,.2f}" if h.close is not None else "No price yet"
+            weeks = h.weeks
+            moved = weeks.get("In line with the news", 0) + weeks.get("Against the news", 0)
+            in_line = weeks.get("In line with the news", 0)
+            without = weeks.get("Moved without news", 0)
+            news_weeks = (
+                f"{in_line} of {moved} week{'s' if moved > 1 else ''} that moved with news "
+                "went its way"
+                if moved
+                else "no week moved with news"
+            )
+            st.html(
+                f'<div class="sna-card-head"><div><span class="sna-mono sna-symbol">'
+                f'{esc(h.symbol)}</span> <span class="sna-muted">{esc(h.name)}</span></div>'
+                f"<div>{tag('leans ' + h.lean, LEAN_TAG[h.lean])} "
+                f'<span class="sna-muted">score {signed(h.score, 1)}</span></div></div>'
+                f"<p>{close}{value} · last 12 weeks "
+                f'<span class="{trend(h.move_12w)}">{signed(h.move_12w, 1)}</span> vs Nifty 50'
+                f" · {news_weeks}, {without} moved without news</p>"
+            )
+            for f in h.flags:
+                st.html(
+                    f'<div class="sna-flag"><span class="sna-dot {f.severity}"></span>'
+                    f"<b>Open red flag</b> · {esc(f.title)}</div>"
+                )
+            if not h.reasons:
+                st.caption(
+                    f"No results, order wins, events or deals in the last {pf.LOOKBACK} days: "
+                    "nothing to lean on."
+                )
+                continue
+            html_table(
+                [
+                    {
+                        "when": f"{r.case.at.astimezone(IST):%d %b}",
+                        "kind": r.case.kind,
+                        "detail": r.case.detail,
+                        "median": r.median,
+                        "evidence": (
+                            f"{r.cases} cases, {r.up:.0%} rose" if r.up is not None else "no cases"
+                        ),
+                        "weight": r.weight,
+                        "since": r.since,
+                    }
+                    for r in h.reasons[:8]
+                ],
+                [
+                    ("Date", "when", None),
+                    ("Event", "kind", lambda v, r: esc(v)),
+                    ("What happened", "detail", None),
+                    (f"Usually, {pf.HORIZON} days>", "median", change),
+                    ("Evidence", "evidence", None),
+                    ("Weight>", "weight", lambda v, r: f"{v:.0%}"),
+                    ("Since then>", "since", change),
+                ],
+            )
+
+    section_title("Your sectors against the Nifty 50")
+    sectors = data["sectors"]
+    no_index = all(r["nifty"] is None for r in sectors)
+    no_values = all(h.value is None for h in held)
+    notes = []
+    if no_values:
+        notes.append(
+            "Without quantities (Manage stocks) and prices for every stock, each counts equally."
+        )
+    if no_index:
+        notes.append("Run uv run sna watchlist nifty50 to compare with the index.")
+    else:
+        notes.append("The Nifty 50 by market cap (BSE's figures), not NSE's free-float weights.")
+    st.caption(" ".join(notes))
+
+    def weight(v, _row):
+        if blank(v):
+            return esc(None)
+        return (
+            f'<div style="display:flex;align-items:center;gap:.5rem"><span>{v:.0%}</span>'
+            f'<span style="height:8px;border-radius:4px;width:{90 * v:.0f}px;'
+            'background:var(--sna-accent-text);opacity:.75"></span></div>'
+        )
+
+    def gap(_v, row):
+        if row["nifty"] is None:
+            return esc(None)
+        d = row["mine"] - row["nifty"]
+        word = "over" if d > 0.005 else "under" if d < -0.005 else "about even"
+        return f"{signed(d, 0).replace('%', ' pts')} {word}" if word != "about even" else word
+
+    html_table(
+        sectors,
+        [
+            ("Industry", "industry", None),
+            ("Yours", "mine", weight),
+            ("Nifty 50", "nifty", weight),
+            ("Difference", "mine", gap),
+        ],
+    )
+
+
 def weeks_page() -> None:
     from stock_news_analyzer.agents import weekly
 
@@ -3054,6 +3209,9 @@ stock_page = st.Page(stock_page_body, title="Stock", icon=":material/show_chart:
 PAGES = {
     "today": st.Page(today_page, title="Today", icon=":material/today:", default=True),
     "flags": st.Page(flags_page, title="Red flags", icon=":material/flag:", url_path="flags"),
+    "portfolio": st.Page(
+        portfolio_page, title="Portfolio", icon=":material/work:", url_path="portfolio"
+    ),
     "stock": stock_page,
     "filings": st.Page(
         filings_page, title="Filings", icon=":material/description:", url_path="filings"
@@ -3105,7 +3263,7 @@ def setup_needed() -> bool:
 
 # The sidebar's groups, in order.
 NAV = {
-    "Today": ["today", "flags", "agents"],
+    "Today": ["today", "portfolio", "flags", "agents"],
     "Research": ["stock", "weeks", "ask", "themes", "moves", "evidence"],
     "Library": ["filings", "news"],
     "Set up": ["manage", "settings", "system"],

@@ -118,6 +118,7 @@ def test_charts_build(loaded):  # noqa: F811
     "page",
     [
         "today_page",
+        "portfolio_page",
         "flags_page",
         "stock_page_body",
         "weeks_page",
@@ -150,6 +151,7 @@ def test_every_page_renders(loaded, test_database_url, monkeypatch, tmp_path, pa
     assert not at.exception, at.exception
     assert at.title[0].value in {
         "Today",
+        "Portfolio",
         "Red flags",
         "Larsen & Toubro Limited",
         "Week by week",
@@ -182,7 +184,7 @@ def test_main_registers_every_page():
         "st.markdown(str(sum(len(p) for p in groups.values())))\n"
     )
     at.run()
-    assert not at.exception and at.markdown[-1].value == "15"
+    assert not at.exception and at.markdown[-1].value == "16"
     assert at.markdown[-2].value == "Today,Research,Library,Set up,Help"
 
 
@@ -196,7 +198,7 @@ def test_guide_sections():
     slugs = [guide.slug(t) for t in parts]
     assert len(set(slugs)) == len(slugs) and "keeping-it-running" in slugs
     assert "what-news-does-to-prices" in slugs  # the evidence page's help link
-    assert "week-by-week" in slugs
+    assert "week-by-week" in slugs and "portfolio" in slugs
     # Every page's help link points at a section that exists.
     app = (guide.GUIDE_FILE.parent / "app.py").read_text()
     import re
@@ -213,7 +215,7 @@ def test_guide_opens_at_the_linked_section():
     at.run()
     assert not at.exception
     opened = [e.label for e in at.expander if e.proto.expanded]
-    assert opened == ["Words used"] and len(at.expander) == 13
+    assert opened == ["Words used"] and len(at.expander) == 14
     assert any("Book-to-bill" in m.value for m in at.markdown)
 
 

@@ -129,6 +129,10 @@ def test_watchlist_nifty50_adds_study_only_stocks(session, test_database_url, mo
     assert "6 members; 5 added as study-only, 0 already on the watchlist" in result.stdout
     assert "Not in the master list: NOTHERE" in result.stdout
     session.expire_all()
+    from stock_news_analyzer.models import IndexMember
+
+    saved = {m.symbol for m in session.query(IndexMember).filter_by(index_name="Nifty 50")}
+    assert len(saved) == 6 and "NOTHERE" in saved  # the list as NSE gave it
     assert {c.nse_symbol for i, c in wl.list_items(session) if i.study_only} == {
         "LT",
         "KARURVYSYA",

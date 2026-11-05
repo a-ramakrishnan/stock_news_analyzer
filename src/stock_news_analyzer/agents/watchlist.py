@@ -16,7 +16,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from stock_news_analyzer.models import Company, CompanyPeer, WatchlistItem
+from stock_news_analyzer.models import Company, CompanyPeer, IndexMember, WatchlistItem
 from stock_news_analyzer.sources.securities import BseSecurity, NseSecurity
 
 COMMODITIES = {"gold": "GOLD", "silver": "SILVER"}
@@ -344,6 +344,16 @@ class IndexAddResult:
     added: list[Company]
     present: list[Company]  # already on the watchlist: left as they are
     unknown: list[str]  # symbols not in the master list (run `sna securities refresh`)
+
+
+def save_index_members(session: Session, index_name: str, members: list) -> None:
+    """Replace the stored list of an index's members with NSE's latest."""
+    session.query(IndexMember).filter_by(index_name=index_name).delete()
+    for m in members:
+        session.add(
+            IndexMember(index_name=index_name, isin=m.isin, symbol=m.symbol, industry=m.industry)
+        )
+    session.commit()
 
 
 def add_index_members(

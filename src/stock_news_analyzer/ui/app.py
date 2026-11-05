@@ -3279,6 +3279,173 @@ def agents_page() -> None:
         live_agent_map()
 
 
+def _pct(value) -> str:
+    return "–" if value is None else f"{value:.0%}"
+
+
+def evals_page() -> None:
+    page_header(
+        "Agent evals",
+        "How well each AI agent does its job, measured on fixed cases whose answers you have "
+        "checked: the share it gets fully right, how many cases pass and fail, and how that "
+        "changes run by run. Agents without an eval yet show how they could be measured.",
+        "agent-evals",
+    )
+    with Session(engine()) as session:
+        overview = queries.eval_overview(session)
+    measured = {job: o for job, o in overview.items() if o["current"]}
+    current = [o["current"] for o in measured.values()]
+    cols = st.columns(4)
+    cols[0].metric("Agents with an eval", f"{len(measured)} of {len(agent_map.THINKERS)}")
+    cols[1].metric("Cases passing", sum(r.get("passed", 0) for r in current))
+    cols[2].metric("Cases failing", sum(r.get("failed", 0) for r in current))
+    last = max((r["finished_at"] for r in current), default=None)
+    cols[3].metric("Last run", f"{last.astimezone(IST):%d %b, %H:%M}" if last else "–")
+
+    st.subheader("The agents")
+    grid = st.columns(3)
+    agents = sorted(agent_map.THINKERS, key=lambda a: a[0] not in measured)  # measured first
+    for i, (job, name, model, _) in enumerate(agents):
+        with grid[i % 3].container(border=True):
+            o = overview.get(job)
+            run = o["current"] if o else None
+            st.markdown(f"**{name}**  \n:gray[{model}]")
+            if run is None:
+                st.markdown(
+                    ":gray-badge[No eval yet]"
+                    if job not in queries.EVAL_FLOWS
+                    else ":orange-badge[Eval not run yet]"
+                )
+                st.caption(queries.EVAL_PLANS.get(job, "Cases and checked answers to come."))
+                continue
+            before = o["previous"]
+            delta = (
+                f"{100 * (run.get('correct', 0) - before.get('correct', 0)):+.0f} pts"
+                if before
+                else None
+            )
+            st.metric(
+                "Fully correct",
+                f"{run.get('correct', 0):.0%}",
+                delta,
+                help=f"±{run.get('margin', 0):.0%} at 95%: a change smaller than this may be "
+                "chance.",
+            )
+            total = run.get("passed", 0) + run.get("failed", 0)
+            st.progress(run.get("passed", 0) / total if total else 0.0)
+            st.caption(
+                f"{run.get('passed', 0)} of {total} cases pass every run · "
+                f"recall {_pct(run.get('recall'))}, precision {_pct(run.get('precision'))}, "
+                f"specificity {_pct(run.get('specificity'))}"
+            )
+            if run["cases_verified"] < run["cases"]:
+                st.markdown(
+                    f":orange-badge[{run['cases'] - run['cases_verified']} answers not checked]"
+                )
+            if run["errors"]:
+                calls = "call" if run["errors"] == 1 else "calls"
+                st.markdown(f":red-badge[{run['errors']} failed {calls}]")
+
+    if not measured:
+        st.info(
+            "No eval has run yet. The Event Extractor's is ready: `uv run sna eval events "
+            "sample`, then `draft`, check the answers, and `run` (the Guide has the steps)."
+        )
+        return
+
+    st.subheader("Look closer")
+    names = {job: name for job, name, _, _ in agent_map.THINKERS}
+    job = st.selectbox(
+        "Agent", list(measured), format_func=lambda j: names.get(j, j), key="evals-agent"
+    )
+    o = measured[job]
+    st.plotly_chart(charts.eval_history_chart(o["runs"], dark()), width="stretch", **PLOT)
+    st.dataframe(
+        pd.DataFrame(
+            [
+                {
+                    "Variant": r["variant"],
+                    "Model": r["model"],
+                    "Prompt": r["prompt_version"],
+                    "Run": r["finished_at"].astimezone(IST),
+                    "Correct": r.get("correct"),
+                    "±": r.get("margin"),
+                    "Passing": r.get("passed"),
+                    "Failing": r.get("failed"),
+                    "Detect": r.get("detect"),
+                    "Types F1": r.get("types"),
+                    "Amounts": r.get("amounts"),
+                    "Quotes found": r.get("quotes"),
+                    "Cost": r["cost_usd"],
+                }
+                for r in o["latest"].values()
+            ]
+        ),
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "Run": st.column_config.DatetimeColumn(format="D MMM, HH:mm"),
+            **{
+                k: st.column_config.NumberColumn(format="percent")
+                for k in ("Correct", "±", "Detect", "Types F1", "Amounts", "Quotes found")
+            },
+            "Cost": st.column_config.NumberColumn(format="$%.4f"),
+        },
+    )
+    variant = st.segmented_control(
+        "Cases of", list(o["latest"]), default=next(iter(o["latest"])), key="evals-variant"
+    ) or next(iter(o["latest"]))
+    run = o["latest"][variant]
+    with Session(engine()) as session:
+        cases = queries.eval_cases(session, run["id"])
+    failing = [c for c in cases if not c["passing"]]
+    only = st.toggle(f"Only the {len(failing)} failing cases", value=bool(failing))
+    shown = failing if only else cases
+    st.dataframe(
+        pd.DataFrame(
+            [
+                {
+                    "Case": c["case"],
+                    "Filing": c["title"],
+                    "Kind": ", ".join(c["tags"]),
+                    "Right": f"{c['right']} of {c['runs']}",
+                    "Detect": c.get("detect"),
+                    "Types F1": c.get("types"),
+                    "Amounts": c.get("amounts"),
+                    "Quotes found": c.get("quotes"),
+                    "Failed calls": len(c["errors"]),
+                }
+                for c in shown
+            ]
+        ),
+        hide_index=True,
+        width="stretch",
+        column_config={
+            k: st.column_config.NumberColumn(format="percent")
+            for k in ("Detect", "Types F1", "Amounts", "Quotes found")
+        },
+    )
+    for c in failing[:12]:
+        with st.expander(f"{c['case']}: {c['title']} ({c['right']} of {c['runs']} right)"):
+            detail = c["detail"] or {}
+            left, right = st.columns(2)
+            left.markdown("**Expected**")
+            right.markdown("**Found (a wrong run)**")
+            for col, key in ((left, "expected_events"), (right, "found_events")):
+                events = detail.get(key) or []
+                if not events:
+                    col.caption("No event.")
+                for e in events:
+                    value = f" · Rs {e['value_cr']:,g} crore" if e.get("value_cr") else ""
+                    col.markdown(f"- `{e['event_type']}`{value}  \n  {e.get('headline', '')}")
+            for err in c["errors"]:
+                st.caption(f"Failed call: {err}")
+    st.caption(
+        f"Run with `uv run sna eval {o['flow']} run`; a variant: `--variant v1 --model ...`. "
+        "Results and transcripts are also in `.claude/hillclimb/" + o["flow"] + "/`."
+    )
+
+
 def theme_palette() -> dict[str, str]:
     return PALETTE["dark" if dark() else "light"]
 
@@ -3942,6 +4109,7 @@ PAGES = {
     "agents": st.Page(
         agents_page, title="Agent map", icon=":material/account_tree:", url_path="agents"
     ),
+    "evals": st.Page(evals_page, title="Agent evals", icon=":material/rule:", url_path="evals"),
     "guide": st.Page(guide_page, title="Guide", icon=":material/help:", url_path="guide"),
 }
 
@@ -3962,7 +4130,7 @@ def setup_needed() -> bool:
 
 # The sidebar's groups, in order.
 NAV = {
-    "Today": ["today", "portfolio", "flags", "agents"],
+    "Today": ["today", "portfolio", "flags", "agents", "evals"],
     "Research": ["research", "stock", "weeks", "ask", "themes", "moves", "evidence"],
     "Library": ["filings", "news"],
     "Set up": ["manage", "settings", "system"],

@@ -9,7 +9,9 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     DateTime,
+    Float,
     ForeignKey,
+    Integer,
     Numeric,
     String,
     Text,
@@ -904,3 +906,45 @@ class SavedSetting(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class EvalRun(Base):
+    """One run of an agent's eval (`sna eval <flow> run`): the variant, the model, and the
+    scores over every graded case of that variant so far. Kept for the history."""
+
+    __tablename__ = "eval_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    flow: Mapped[str] = mapped_column(String(32), index=True)  # the agent's eval, e.g. 'events'
+    variant: Mapped[str] = mapped_column(String(32))  # baseline, v1, ...
+    model: Mapped[str] = mapped_column(String(64))
+    prompt_version: Mapped[str | None] = mapped_column(String(32))
+    finished_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    cases: Mapped[int] = mapped_column(Integer)
+    cases_verified: Mapped[int] = mapped_column(Integer)
+    attempts: Mapped[int] = mapped_column(Integer)  # graded case runs
+    errors: Mapped[int] = mapped_column(Integer, default=0)  # failed calls, not scored
+    # {metric: mean}, plus margin, recall, precision, specificity, passed, failed
+    scores: Mapped[dict] = mapped_column(JSONB)
+    cost_usd: Mapped[Decimal] = mapped_column(Numeric(10, 5), default=0)
+    harness: Mapped[str | None] = mapped_column(String(64))  # digest of the runner and grader
+
+
+class EvalResult(Base):
+    """One graded run of one case (or a failed call: `error` set, `grade` empty)."""
+
+    __tablename__ = "eval_results"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("eval_runs.id", ondelete="CASCADE"), index=True)
+    case_id: Mapped[str] = mapped_column(String(64))
+    rep: Mapped[int] = mapped_column(Integer)
+    title: Mapped[str | None] = mapped_column(Text)
+    tags: Mapped[list] = mapped_column(JSONB, default=list)
+    grade: Mapped[dict | None] = mapped_column(JSONB)
+    error: Mapped[str | None] = mapped_column(Text)
+    detail: Mapped[dict] = mapped_column(JSONB, default=dict)  # expected and found
+    latency_s: Mapped[float | None] = mapped_column(Float)
+    cost_usd: Mapped[Decimal] = mapped_column(Numeric(10, 5), default=0)

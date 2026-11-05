@@ -42,6 +42,12 @@ New to the system? The [Guide](src/stock_news_analyzer/ui/guide.md) explains wha
 | 27 | Packaging: start and stop scripts for Mac and Windows, everything in one `docker compose up` (database changes applied on start), the dashboard reachable from this computer only, an example watchlist, MIT licence, no command hints left on the dashboard; a prebuilt image published by GitHub Actions | done |
 | 28 | Ready for others: the author's watchlist out of the repository, the prebuilt image pulled by default, release 0.1.0 ([release notes](docs/releases/0.1.0.md)) | done |
 | 29 | Dashboard redesigned from a Lovable design: light and dark themes, IBM Plex fonts, cards, number tiles, tables whose text wraps, tags for AI-written text, the same header on every page | done |
+| 30 | Decision inputs (no LLM): What news does to prices (an event study over every result, order, event, flag and deal), Week by week for one stock, a Portfolio page with a lean per owned stock; the Nifty 50 as study-only stocks | done |
+| 31 | Research brief: one stock's research on one page with evidence badges (valuation, balance sheet, peers, what's coming), a Sonnet view with every number checked, versions and what changed, refreshed for owned stocks at 07:57 | done |
+| 32 | Shared data for other projects: read-only `shared` views and a `research_reader` login ([contract](docs/shared-data.md)) | done |
+| 33 | Evals, starting with the Event Extractor: 40 filings with answers you check, scored by code (`sna eval events`, [docs/evals.md](docs/evals.md)) | done |
+| 34 | Agent evals page: each AI agent's score, passing and failing cases and history, next to the Agent map | done |
+| 35 | Trying it on a clean Mac and Windows | next |
 
 ## Quick start (no Python needed)
 
@@ -624,11 +630,12 @@ make ui
 | Settings | The Anthropic API key, the monthly AI budget and this month's spend, the models, the unusual-day threshold, and which scheduled jobs run. Saved values take the place of `.env`; the scheduler picks them up within a minute |
 | System | Run any job now, with its progress shown; schedule, stored data, recent runs and errors |
 | Agent map | How an agentic system works, on this one: perceive, plan, think, remember, act, guardrails, observe. **Today, live**: each job running, ok or failed, its next run, AI calls and cost, a narrated feed of today's runs; **Replay**: play the last 7 days (or today) back, with lines drawn along each run's path, play, speed and a time slider |
+| Agent evals | How well each AI agent does its job: the share of eval cases it gets fully right with its margin and change, cases passing and failing, recall, precision and specificity; its score run by run per variant, its cases failing first with what was expected and found; how agents without an eval could be graded |
 | Guide | How to use the system: getting started, a daily routine, each page, the words used, AI use and cost, problems. Every page links to its part |
 
 ## Evals
 
-`sna eval events` measures the Event Extractor on 40 filings from your database with answers you've checked: does it find the events, of the right types and amounts, with real quotes? See [docs/evals.md](docs/evals.md).
+`sna eval events` measures the Event Extractor on 40 filings from your database with answers you've checked: does it find the events, of the right types and amounts, with real quotes? Each run shows on the **Agent evals** page: every agent's score, its passing and failing cases and its history. See [docs/evals.md](docs/evals.md).
 
 ## Other commands
 

@@ -160,14 +160,17 @@ These work without any AI: collecting filings and news, prices and unusual days,
 
 ## Agent evals
 
-An eval measures one AI agent on a fixed set of cases whose answers you have checked, so you can tell whether a change (a new prompt, a cheaper model) made it better or worse instead of guessing. The first is for the Event Extractor, which reads filings into events; the others follow one by one.
+An eval measures one AI agent on a fixed set of cases whose answers are known, so you can tell whether a change (a new prompt, a cheaper model) made it better or worse instead of guessing. Two agents have one: the **Event Extractor** (filings into events; answers drafted by Opus and checked by you) and the **Results reader** (figures from results PDFs; the answers are the companies' own XBRL figures, so nothing needs checking).
 
-- **The cards:** one per AI agent. One with an eval shows the share of cases it gets **fully correct** (the events found, their types and amounts all right), the change since the last run, how many cases pass every run and how many fail, and recall (filings with events it caught), precision (events it reported that were real) and specificity (routine filings it left alone). Hover on the score for its margin: with 40 cases run three times it is about ±9 points, so a smaller change may be chance. A badge says when some answers are not checked yet or calls failed. An agent without an eval says how it could be measured.
+- **The cards:** one per AI agent.
+  - An agent whose eval has run shows the share of cases it gets **fully correct**, the change since the last run, how many cases pass every run and how many fail, and figures such as recall (filings with events it caught), precision (events it reported that were real) and specificity (routine filings it left alone). Hover on the score for its margin: with 40 cases run three times it is about ±9 points, so a smaller change may be chance. A badge says when some answers are not checked yet or calls failed.
+  - An agent whose eval hasn't run says how many cases are checked and what to do next.
+  - An agent without an eval says how it could be measured.
 - **Look closer:** an agent's score run by run, one line per variant (the baseline, and any change you try), the latest run of each variant side by side, and its cases, failing ones first. Open a failing case to see what was expected next to what the agent found.
-- **Running one** (in the project folder, in a terminal):
-  1. `uv run sna eval events sample` picks 40 filings from your database.
-  2. `uv run sna eval events draft` has Opus draft each answer, for about $0.30.
-  3. Check each file in `evals/events/cases/` and set `verified: true`.
+- **Running one** (in the project folder, in a terminal), with `events` or `results`:
+  1. `uv run sna eval events sample` adds cases from your database.
+  2. `uv run sna eval events draft` has Opus draft the answers, for about a cent a case (the Results reader needs no drafts).
+  3. Check the answers.
   4. `uv run sna eval events run` scores the agent, for well under a dollar.
 
   The page shows the run as soon as it finishes. docs/evals.md has the details.

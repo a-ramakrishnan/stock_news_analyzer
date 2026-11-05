@@ -1,0 +1,158 @@
+from datetime import date
+from decimal import Decimal
+
+import pytest
+from sqlalchemy.orm import Session
+from test_concalls import LT
+from test_llm import FakeAnthropic, settings
+from test_orchestrator import loaded  # noqa: F401  (fixture)
+from test_results import Q1, Q2, answer, replying, results_filing
+
+from stock_news_analyzer.agents import results as rs
+from stock_news_analyzer.evals import framework as fw
+from stock_news_analyzer.evals import results as re_eval
+from stock_news_analyzer.llm import LLM
+from stock_news_analyzer.models import QuarterlyResult
+
+SPEC = re_eval.SPEC
+
+
+def xbrl_q2(session, basis="consolidated"):
+    """The quarter as the company filed it in XBRL: Rs 67,000 crore revenue, 4,400 profit."""
+    session.add(
+        QuarterlyResult(
+            isin=LT,
+            period="Q2 FY27",
+            period_end=date(2026, 9, 30),
+            months=3,
+            basis=basis,
+            primary=True,
+            revenue_cr=Decimal("67000"),
+            other_income_cr=Decimal("1200"),
+            finance_costs_cr=Decimal("900"),
+            depreciation_cr=Decimal("1100"),
+            pbt_cr=Decimal("6000"),
+            pat_cr=Decimal("4400"),
+            eps=Decimal("31.20"),
+            unit="crore",
+            as_written={},
+            model=rs.XBRL,
+        )
+    )
+    session.commit()
+
+
+@pytest.mark.db
+def test_sample_takes_xbrl_quarters_with_a_results_pdf(loaded):  # noqa: F811
+    xbrl_q2(loaded)
+    filing = results_filing(loaded)
+    added = fw.sample(loaded, SPEC, n=5)
+    loaded.commit()
+    assert len(added) == 1
+    case = added[0]
+    assert case.key == "LT-202609" and case.status == "verified"  # the XBRL is the answer
+    assert case.drafted_by == "xbrl" and case.tags == ["consolidated", "Q2 FY27"]
+    assert case.input["document_id"] == filing.id
+    assert case.reference == {
+        "period_end": "2026-09-30",
+        "months": 3,
+        "basis": "consolidated",
+        "revenue": 67000.0,
+        "other_income": 1200.0,
+        "finance_costs": 900.0,
+        "depreciation": 1100.0,
+        "pbt": 6000.0,
+        "pat": 4400.0,
+        "eps": 31.2,
+    }
+    assert fw.sample(loaded, SPEC, n=5) == []  # nothing new
+
+
+def _run_one(session, case, reply, tmp_path):
+    client = FakeAnthropic(reply)
+    session.refresh(case)
+    session.expunge(case)
+    bind = session.get_bind()
+    summary = fw.run(
+        lambda: Session(bind),
+        lambda s: LLM(s, client=client, settings=settings()),
+        SPEC,
+        [case],
+        model="claude-haiku-5-5",
+        reps=1,
+        flow=tmp_path,
+        approve_harness=True,
+        say=lambda _: None,
+    )
+    return summary, client
+
+
+@pytest.mark.db
+def test_a_quarter_read_right_from_the_pdf(loaded, tmp_path):  # noqa: F811
+    xbrl_q2(loaded)
+    results_filing(loaded)
+    case = fw.sample(loaded, SPEC, n=1)[0]
+    loaded.commit()
+    summary, client = _run_one(loaded, case, replying(answer([Q2, Q1])), tmp_path)
+    assert summary["mean"] == {
+        "correct": 1.0,
+        "basis": 1.0,
+        "revenue": 1.0,
+        "pat": 1.0,
+        "eps": 1.0,
+        "fields": 1.0,
+        "found": 1.0,
+    }
+    prompt = client.requests[0]["messages"][0]["content"]
+    assert "Probably results for Q2 FY27" in prompt and "Revenue from operations" in prompt
+
+
+@pytest.mark.db
+def test_mistakes_are_caught(loaded, tmp_path):  # noqa: F811
+    xbrl_q2(loaded)
+    results_filing(loaded)
+    case = fw.sample(loaded, SPEC, n=1)[0]
+    loaded.commit()
+    output = {
+        "is_results": True,
+        "basis": "consolidated",
+        "period_end": "2026-09-30",
+        **{f: case.reference[f] for f in re_eval.FIELDS},
+    }
+    assert SPEC.grade(case, output)["correct"] == 1
+    crore_for_lakh = {**output, "revenue": 670.0, "pat": 44.0}  # read lakh as crore
+    g = SPEC.grade(case, crore_for_lakh)
+    assert g["correct"] == 0 and g["revenue"] == 0 and g["pat"] == 0 and g["eps"] == 1
+    assert g["fields"] == pytest.approx(5 / 7, abs=1e-3)
+    rounded = {**output, "revenue": 67003.0}  # within 0.1%: a rounded statement
+    assert SPEC.grade(case, rounded)["revenue"] == 1
+    standalone = {**output, "basis": "standalone"}
+    assert SPEC.grade(case, standalone)["correct"] == 0
+    missing = {"is_results": True, "basis": "consolidated"}  # quarter not found
+    g = SPEC.grade(case, missing)
+    assert g == {
+        "correct": 0.0,
+        "basis": 1.0,
+        "revenue": 0.0,
+        "pat": 0.0,
+        "eps": 0.0,
+        "fields": 0.0,
+        "found": 0.0,
+    }
+    assert SPEC.describe(missing) == ["quarter not found"]
+    assert SPEC.describe(output) == [
+        "consolidated 2026-09-30: revenue 67,000.00, PAT 4,400.00, EPS 31.20"
+    ]
+    assert SPEC.grade(case, SPEC.oracle(case))["correct"] == 1
+    assert SPEC.grade(case, SPEC.null(case))["correct"] == 0
+
+
+@pytest.mark.db
+def test_a_figure_not_in_the_text_counts_as_missing(loaded, tmp_path):  # noqa: F811
+    xbrl_q2(loaded)
+    results_filing(loaded)
+    case = fw.sample(loaded, SPEC, n=1)[0]
+    loaded.commit()
+    made_up = Q2.model_copy(update={"pat": "4,41,000.00"})  # not in the statement
+    summary, _ = _run_one(loaded, case, replying(answer([made_up])), tmp_path)
+    assert summary["mean"]["pat"] == 0 and summary["mean"]["revenue"] == 1

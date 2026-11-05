@@ -15,6 +15,10 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.33 · Nov 5, 2026
+
+- Step 35: a general eval framework (datasets in the database with history, a spec per agent, shared runner, commands and page; migration 0032) and the Results reader's eval, graded against the companies' XBRL figures. agent-design.md's Evals section, with steps 36–39 planned (labelling in the dashboard, traces, live monitoring, experiments compared). The clean Mac and Windows test becomes step 40.
+
 ### 1.32 · Nov 5, 2026
 
 - Steps 33–34: evals. agent-design.md gains an Evals section: the Event Extractor's eval (40 filings with answers you check, scored by code on fully correct, detect, types, amounts and quotes, three runs a case), every run kept in the database (migration 0031) and shown on a new **Agent evals** page next to the Agent map, the guardrails on the eval itself, and which agents follow and how each could be graded. design.md's tech stack. Trying it on a clean Mac and Windows becomes step 35.

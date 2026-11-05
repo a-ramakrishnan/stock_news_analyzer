@@ -3283,112 +3283,161 @@ def holdings_moves(
         typer.echo(holdings.describe(m))
 
 
-eval_app = typer.Typer(help="Evaluations of the AI agents (docs/evals.md).", no_args_is_help=True)
-app.add_typer(eval_app, name="eval")
-eval_events_app = typer.Typer(
-    help="The Event Extractor's eval: filings with checked answers, scored by code.",
+eval_app = typer.Typer(
+    help="Evaluations of the AI agents: cases with checked answers, graded by code "
+    "(docs/evals.md).",
     no_args_is_help=True,
 )
-eval_app.add_typer(eval_events_app, name="events")
+app.add_typer(eval_app, name="eval")
 
 
-@eval_events_app.command("sample")
-def eval_events_sample(
-    with_events: int = typer.Option(25, help="Filings the agent found events in."),
-    without: int = typer.Option(15, help="Filings it found none in."),
-    seed: int = typer.Option(7, help="Random seed (the same seed picks the same filings)."),
-) -> None:
-    """Freeze filings from your database into cases (evals/events/cases/), spread over the
-    event types, with the filings whose events you rejected first. Adds to what is there."""
-    from stock_news_analyzer.evals import events as ev
+def _eval_spec_session(spec):
+    """A session on the database, with the eval's case files read in the first time (an
+    empty dataset and files on disk)."""
+    from stock_news_analyzer.evals import framework as fw
 
-    with get_session() as session:
-        paths = ev.sample(session, with_events, without, seed)
-    typer.echo(f"Wrote {len(paths)} cases to {ev.CASES}. Next: sna eval events draft")
-
-
-@eval_events_app.command("draft")
-def eval_events_draft(
-    model: str = typer.Option("claude-opus-5-5", help="The model that drafts the answers."),
-) -> None:
-    """Draft the expected events of cases that have none yet, with a stronger model than the
-    one under test (about a cent a filing with Opus). You then check each case file and set
-    `verified: true`."""
-    from stock_news_analyzer.evals import events as ev
-    from stock_news_analyzer.llm import LLM
-
-    cases = ev.load_cases()
-    with get_session() as session:
-        llm = LLM(session)
-        n = ev.draft(llm, cases, model, say=typer.echo)
+    session = get_session()
+    if not fw.cases(session, spec) and spec.folder.exists() and any(spec.folder.glob("*.yaml")):
+        n = fw.import_files(session, spec)
         session.commit()
-    typer.echo(f"Drafted {n}. Now check them: sna eval events show, then edit the case files.")
+        typer.echo(f"Read {n} cases from {spec.folder} into the database.")
+    return session
 
 
-@eval_events_app.command("show")
-def eval_events_show() -> None:
-    """The cases and their expected events as a table (also written to evals/events/cases.md)."""
-    from stock_news_analyzer.evals import events as ev
+def _eval_commands(spec) -> typer.Typer:
+    """The commands of one eval: sample, draft, show, run, import, export."""
+    sub = typer.Typer(help=f"The {spec.title}'s eval.", no_args_is_help=True)
 
-    text = ev.overview(ev.load_cases())
-    (ev.CASES.parent / "cases.md").write_text(text + "\n")
-    typer.echo(text)
+    @sub.command("sample")
+    def sample(
+        n: int = typer.Option(spec.default_n, help="How many cases to add."),
+        seed: int = typer.Option(7, help="Random seed (the same seed picks the same cases)."),
+    ) -> None:
+        """Add cases from your database (none already in the eval)."""
+        from stock_news_analyzer.evals import framework as fw
 
+        with _eval_spec_session(spec) as session:
+            added = fw.sample(session, spec, n, seed)
+            session.commit()
+            waiting = sum(c.status == "new" for c in added)
+        typer.echo(f"Added {len(added)} cases to the {spec.name} eval.")
+        if waiting:
+            typer.echo(f"Next: sna eval {spec.name} draft (answers for {waiting} cases).")
 
-@eval_events_app.command("run")
-def eval_events_run(
-    variant: str = typer.Option("baseline", help="Results folder: baseline, v1, v2, ..."),
-    model: str = typer.Option(None, help="Model under test (default: the agent's own)."),
-    reps: int = typer.Option(3, help="Runs of each case (more: a steadier score)."),
-    only: list[str] = typer.Option([], "--case", help="Only these case ids (a pilot)."),
-    workers: int = typer.Option(4, help="Calls at once."),
-    timeout_s: float = typer.Option(120, help="Ceiling on one call, in seconds."),
-    mode: str = typer.Option(
-        "agent", help="agent; or oracle / null to check the grader (no calls, no cost)."
-    ),
-    unverified: bool = typer.Option(False, help="Also run cases you haven't checked yet."),
-    approve_harness: bool = typer.Option(
-        False, "--approve-harness", help="Accept the current runner and grader (after reading)."
-    ),
-) -> None:
-    """Run the Event Extractor on the cases, grade by code, write the results and a summary
-    (.claude/hillclimb/events/<variant>/)."""
-    import anthropic
+    @sub.command("draft")
+    def draft(
+        model: str = typer.Option("claude-opus-5-5", help="The model that drafts the answers."),
+    ) -> None:
+        """Draft answers for cases that have none, with a stronger model than the one under
+        test, for you to check (on the Agent evals page, or in the exported files)."""
+        from stock_news_analyzer.evals import framework as fw
+        from stock_news_analyzer.llm import LLM
 
-    from stock_news_analyzer.evals import events as ev
-    from stock_news_analyzer.llm import LLM
+        if not spec.needs_checking:
+            typer.echo(f"The {spec.name} eval's answers come with its cases; nothing to draft.")
+            return
+        with _eval_spec_session(spec) as session:
+            n = fw.draft(session, spec, LLM(session), model, say=typer.echo)
+        typer.echo(f"Drafted {n}.")
 
-    settings = get_settings()
-    model = model or settings.llm_model_triage
-    cases = [c for c in ev.load_cases() if not only or c.id in only]
-    skipped = [c.id for c in cases if not c.verified]
-    if skipped and not unverified and mode == "agent":
-        typer.echo(
-            f"{len(skipped)} cases aren't checked yet (verified: true): {', '.join(skipped[:8])}"
-            f"{' ...' if len(skipped) > 8 else ''}. Check them, or pass --unverified for a pilot."
+    @sub.command("show")
+    def show() -> None:
+        """The cases and their answers as a table."""
+        from stock_news_analyzer.evals import framework as fw
+
+        with _eval_spec_session(spec) as session:
+            typer.echo(fw.overview(spec, fw.cases(session, spec)))
+
+    @sub.command("export")
+    def export() -> None:
+        """Write the cases to evals/<name>/cases/*.yaml, to keep them in git."""
+        from stock_news_analyzer.evals import framework as fw
+
+        with _eval_spec_session(spec) as session:
+            n = fw.export(session, spec)
+        typer.echo(f"Wrote {n} cases to {spec.folder}.")
+
+    @sub.command("import")
+    def import_() -> None:
+        """Read evals/<name>/cases/*.yaml into the database: new cases added, changed answers
+        updated (the earlier answer kept in the case's history)."""
+        from stock_news_analyzer.evals import framework as fw
+
+        with get_session() as session:
+            n = fw.import_files(session, spec)
+            session.commit()
+        typer.echo(f"{n} cases added or changed.")
+
+    @sub.command("run")
+    def run(
+        variant: str = typer.Option("baseline", help="Results folder: baseline, v1, v2, ..."),
+        model: str = typer.Option(None, help="Model under test (default: the agent's own)."),
+        reps: int = typer.Option(3, help="Runs of each case (more: a steadier score)."),
+        only: list[str] = typer.Option([], "--case", help="Only these cases (a pilot)."),
+        workers: int = typer.Option(4, help="Calls at once."),
+        timeout_s: float = typer.Option(120, help="Ceiling on one call, in seconds."),
+        mode: str = typer.Option(
+            "agent", help="agent; or oracle / null to check the grader (no calls, no cost)."
+        ),
+        unverified: bool = typer.Option(False, help="Also run cases not checked yet."),
+        approve_harness: bool = typer.Option(
+            False, "--approve-harness", help="Accept the current runner and grader (after reading)."
+        ),
+    ) -> None:
+        """Run the agent on the cases, grade by code, keep the run (the Agent evals page) and
+        write results and a summary (.claude/hillclimb/<name>/<variant>/)."""
+        import anthropic
+
+        from stock_news_analyzer.evals import framework as fw
+        from stock_news_analyzer.llm import LLM
+
+        settings = get_settings()
+        model = model or spec.default_model()
+        with _eval_spec_session(spec) as session:
+            items = [c for c in fw.cases(session, spec) if not only or c.key in only]
+            for c in items:
+                session.expunge(c)
+        chosen, waiting = fw.runnable(items, unverified or mode != "agent")
+        if waiting and not unverified and mode == "agent":
+            typer.echo(
+                f"{len(waiting)} cases aren't checked yet: {', '.join(waiting[:8])}"
+                f"{' ...' if len(waiting) > 8 else ''}. Check them, or pass --unverified."
+            )
+            raise typer.Exit(1)
+        if not chosen:
+            typer.echo(f"No cases to run. Start with: sna eval {spec.name} sample")
+            raise typer.Exit(1)
+        client = anthropic.Anthropic(
+            api_key=settings.anthropic_api_key or None, timeout=timeout_s, max_retries=2
         )
-        raise typer.Exit(1)
-    if not cases:
-        typer.echo("No cases. Start with: sna eval events sample")
-        raise typer.Exit(1)
-    client = anthropic.Anthropic(
-        api_key=settings.anthropic_api_key or None, timeout=timeout_s, max_retries=2
-    )
-    try:
-        summary = ev.run(
-            get_session,
-            lambda session: LLM(session, client=client),
-            cases,
-            variant=variant,
-            model=model,
-            reps=reps,
-            workers=workers,
-            mode=mode,
-            approve_harness=approve_harness,
-            say=typer.echo,
-        )
-    except ev.HarnessChanged as exc:
-        typer.echo(f"Not run: {exc}.")
-        raise typer.Exit(2) from exc
-    typer.echo(summary["markdown"])
-    typer.echo(f"Details: {ev.FLOW / variant}")
+        try:
+            summary = fw.run(
+                get_session,
+                lambda session: LLM(session, client=client),
+                spec,
+                chosen,
+                variant=variant,
+                model=model,
+                reps=reps,
+                workers=workers,
+                mode=mode,
+                approve_harness=approve_harness,
+                say=typer.echo,
+            )
+        except fw.HarnessChanged as exc:
+            typer.echo(f"Not run: {exc}.")
+            raise typer.Exit(2) from exc
+        typer.echo(summary["markdown"])
+        typer.echo(f"Details: {spec.flow / variant}")
+
+    return sub
+
+
+def _register_evals() -> None:
+    from stock_news_analyzer.evals import registry
+
+    for name, spec in registry().items():
+        eval_app.add_typer(_eval_commands(spec), name=name)
+
+
+_register_evals()

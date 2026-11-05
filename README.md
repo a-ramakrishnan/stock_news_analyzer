@@ -47,7 +47,12 @@ New to the system? The [Guide](src/stock_news_analyzer/ui/guide.md) explains wha
 | 32 | Shared data for other projects: read-only `shared` views and a `research_reader` login ([contract](docs/shared-data.md)) | done |
 | 33 | Evals, starting with the Event Extractor: 40 filings with answers you check, scored by code (`sna eval events`, [docs/evals.md](docs/evals.md)) | done |
 | 34 | Agent evals page: each AI agent's score, passing and failing cases and history, next to the Agent map | done |
-| 35 | Trying it on a clean Mac and Windows | next |
+| 35 | A general eval framework (datasets in the database with history, a spec per agent, shared runner and commands); the Results reader's eval, graded against XBRL | done |
+| 36 | Labelling eval cases in the dashboard | next |
+| 37 | Traces of every AI call | |
+| 38 | Live monitoring of the agents' quality | |
+| 39 | Experiments compared case by case | |
+| 40 | Trying it on a clean Mac and Windows | |
 
 ## Quick start (no Python needed)
 
@@ -635,7 +640,7 @@ make ui
 
 ## Evals
 
-`sna eval events` measures the Event Extractor on 40 filings from your database with answers you've checked: does it find the events, of the right types and amounts, with real quotes? Each run shows on the **Agent evals** page: every agent's score, its passing and failing cases and its history. See [docs/evals.md](docs/evals.md).
+`sna eval <agent>` measures an AI agent on cases with checked answers: the Event Extractor on 40 filings (does it find the events, of the right types and amounts, with real quotes?) and the Results reader on results PDFs against the companies' XBRL figures. Each run shows on the **Agent evals** page: every agent's score, its passing and failing cases and its history. See [docs/evals.md](docs/evals.md).
 
 ## Other commands
 

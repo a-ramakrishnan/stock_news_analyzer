@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.32 · Nov 5, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.33 · Nov 5, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -629,10 +629,12 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 
 An agent's quality is measured, not judged by feel: each AI agent gets an eval, a fixed set of cases whose answers a person has checked, a runner that calls the agent's real entry point on each, and a grader. Prompt and model changes are kept only when the eval shows they help by more than its margin. One agent at a time, starting with the one the most pages rest on.
 
-- **Event Extractor (built, steps 33–34):** 40 filings frozen from the database (25 the agent found events in, spread over the types, the ones you rejected first; 15 routine), answers drafted by Opus and checked by you, scored by code on Haiku's raw answer before the QA Checker: fully correct (the headline), detect, types F1, amounts within 1%, quotes found; recall, precision and specificity on the filings; three runs a case, about ±9 points at 95%. `sna eval events sample / draft / show / run`; docs/evals.md.
+- **The framework (step 35):** each eval is a dataset of cases in the database (`eval_cases`: the input frozen, the expected answer, its status from new to draft to verified or excluded, and the history of every earlier answer), a target (the agent's own entry point) and graders, written as a `Spec` per agent. The runner, the commands (`sna eval <name> sample | draft | show | run | export | import`), the record of runs and the page are shared. Cases are kept in git as YAML by export and import.
+- **Event Extractor (steps 33–35):** 40 filings frozen from the database (25 the agent found events in, spread over the types, the ones you rejected first; 15 routine), answers drafted by Opus and checked by you, scored by code on Haiku's raw answer before the QA Checker: fully correct (the headline), detect, types F1, amounts within 1%, quotes found; recall, precision and specificity on the filings; three runs a case, about ±9 points at 95%.
+- **Results reader (step 35):** quarters with XBRL figures and a results PDF, at most two per company; the reader's answer for the quarter, converted and filtered as it is stored, against XBRL: correct (basis, revenue and profit within 0.1%), each figure, all figures, quarter found. No labelling: the company's own XBRL is the answer.
 - **Every run is kept** in `eval_runs` and `eval_results` (migration 0031), so the **Agent evals** page can show each agent's score, its passing and failing cases and its history beside the Agent map, though the eval runs outside Docker. The runner also writes results, transcripts and a summary under `.claude/hillclimb/<agent>/`.
 - **Guardrails on the eval itself:** failed calls are kept apart from wrong answers; the served model is checked against the one asked for; a changed runner or grader needs your approval before it scores again; oracle and null modes check the grader for free.
-- **Next, by how each could be graded:** the Results reader against the XBRL filings (exact, by code), News triage against your labels, Order books against the filings, then the prose agents (Move explainer, Earnings calls, Research briefs, Ask) by a rubric and a judge model.
+- **Next (steps 36–39, LangSmith-style):** labelling cases in the dashboard; traces of every AI call; live monitoring of quality from production (QA pass rates, quotes found, your accept and reject rate, per agent and prompt version, with alerts); experiments compared case by case. Then evals for News triage against your labels and Order books against the filings, and the prose agents (Move explainer, Earnings calls, Research briefs, Ask) by a rubric and a judge model.
 
 ## Build-in-public plan
 

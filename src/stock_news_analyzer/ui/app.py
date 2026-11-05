@@ -3296,7 +3296,7 @@ def evals_page() -> None:
     measured = {job: o for job, o in overview.items() if o["current"]}
     current = [o["current"] for o in measured.values()]
     cols = st.columns(4)
-    cols[0].metric("Agents with an eval", f"{len(measured)} of {len(agent_map.THINKERS)}")
+    cols[0].metric("Agents with an eval", f"{len(overview)} of {len(agent_map.THINKERS)}")
     cols[1].metric("Cases passing", sum(r.get("passed", 0) for r in current))
     cols[2].metric("Cases failing", sum(r.get("failed", 0) for r in current))
     last = max((r["finished_at"] for r in current), default=None)
@@ -3304,52 +3304,16 @@ def evals_page() -> None:
 
     st.subheader("The agents")
     grid = st.columns(3)
-    agents = sorted(agent_map.THINKERS, key=lambda a: a[0] not in measured)  # measured first
+    agents = sorted(agent_map.THINKERS, key=lambda a: (a[0] not in measured, a[0] not in overview))
     for i, (job, name, model, _) in enumerate(agents):
         with grid[i % 3].container(border=True):
-            o = overview.get(job)
-            run = o["current"] if o else None
             st.markdown(f"**{name}**  \n:gray[{model}]")
-            if run is None:
-                st.markdown(
-                    ":gray-badge[No eval yet]"
-                    if job not in queries.EVAL_FLOWS
-                    else ":orange-badge[Eval not run yet]"
-                )
-                st.caption(queries.EVAL_PLANS.get(job, "Cases and checked answers to come."))
-                continue
-            before = o["previous"]
-            delta = (
-                f"{100 * (run.get('correct', 0) - before.get('correct', 0)):+.0f} pts"
-                if before
-                else None
-            )
-            st.metric(
-                "Fully correct",
-                f"{run.get('correct', 0):.0%}",
-                delta,
-                help=f"±{run.get('margin', 0):.0%} at 95%: a change smaller than this may be "
-                "chance.",
-            )
-            total = run.get("passed", 0) + run.get("failed", 0)
-            st.progress(run.get("passed", 0) / total if total else 0.0)
-            st.caption(
-                f"{run.get('passed', 0)} of {total} cases pass every run · "
-                f"recall {_pct(run.get('recall'))}, precision {_pct(run.get('precision'))}, "
-                f"specificity {_pct(run.get('specificity'))}"
-            )
-            if run["cases_verified"] < run["cases"]:
-                st.markdown(
-                    f":orange-badge[{run['cases'] - run['cases_verified']} answers not checked]"
-                )
-            if run["errors"]:
-                calls = "call" if run["errors"] == 1 else "calls"
-                st.markdown(f":red-badge[{run['errors']} failed {calls}]")
+            _eval_card(job, overview.get(job))
 
     if not measured:
         st.info(
-            "No eval has run yet. The Event Extractor's is ready: `uv run sna eval events "
-            "sample`, then `draft`, check the answers, and `run` (the Guide has the steps)."
+            "No eval has run yet. Each agent's card above says what to do next; the Guide "
+            "has the steps."
         )
         return
 
@@ -3359,6 +3323,9 @@ def evals_page() -> None:
         "Agent", list(measured), format_func=lambda j: names.get(j, j), key="evals-agent"
     )
     o = measured[job]
+    spec = o["spec"]
+    metric_ids = [m["id"] for m in spec.metrics]
+    labels = {m["id"]: m["label"] for m in spec.metrics}
     st.plotly_chart(charts.eval_history_chart(o["runs"], dark()), width="stretch", **PLOT)
     st.dataframe(
         pd.DataFrame(
@@ -3368,14 +3335,11 @@ def evals_page() -> None:
                     "Model": r["model"],
                     "Prompt": r["prompt_version"],
                     "Run": r["finished_at"].astimezone(IST),
-                    "Correct": r.get("correct"),
+                    **{labels[k]: r.get(k) for k in metric_ids},
                     "±": r.get("margin"),
                     "Passing": r.get("passed"),
                     "Failing": r.get("failed"),
-                    "Detect": r.get("detect"),
-                    "Types F1": r.get("types"),
-                    "Amounts": r.get("amounts"),
-                    "Quotes found": r.get("quotes"),
+                    **(r.get("stats") or {}),
                     "Cost": r["cost_usd"],
                 }
                 for r in o["latest"].values()
@@ -3387,7 +3351,7 @@ def evals_page() -> None:
             "Run": st.column_config.DatetimeColumn(format="D MMM, HH:mm"),
             **{
                 k: st.column_config.NumberColumn(format="percent")
-                for k in ("Correct", "±", "Detect", "Types F1", "Amounts", "Quotes found")
+                for k in [*labels.values(), "±", *(o["current"].get("stats") or {})]
             },
             "Cost": st.column_config.NumberColumn(format="$%.4f"),
         },
@@ -3406,13 +3370,10 @@ def evals_page() -> None:
             [
                 {
                     "Case": c["case"],
-                    "Filing": c["title"],
-                    "Kind": ", ".join(c["tags"]),
+                    "Title": c["title"],
+                    "Tags": ", ".join(c["tags"]),
                     "Right": f"{c['right']} of {c['runs']}",
-                    "Detect": c.get("detect"),
-                    "Types F1": c.get("types"),
-                    "Amounts": c.get("amounts"),
-                    "Quotes found": c.get("quotes"),
+                    **{labels[k]: c.get(k) for k in metric_ids[1:]},
                     "Failed calls": len(c["errors"]),
                 }
                 for c in shown
@@ -3421,29 +3382,89 @@ def evals_page() -> None:
         hide_index=True,
         width="stretch",
         column_config={
-            k: st.column_config.NumberColumn(format="percent")
-            for k in ("Detect", "Types F1", "Amounts", "Quotes found")
+            labels[k]: st.column_config.NumberColumn(format="percent") for k in metric_ids[1:]
         },
     )
     for c in failing[:12]:
         with st.expander(f"{c['case']}: {c['title']} ({c['right']} of {c['runs']} right)"):
-            detail = c["detail"] or {}
+            expected, found = _eval_detail(c["detail"] or {})
             left, right = st.columns(2)
             left.markdown("**Expected**")
             right.markdown("**Found (a wrong run)**")
-            for col, key in ((left, "expected_events"), (right, "found_events")):
-                events = detail.get(key) or []
-                if not events:
-                    col.caption("No event.")
-                for e in events:
-                    value = f" · Rs {e['value_cr']:,g} crore" if e.get("value_cr") else ""
-                    col.markdown(f"- `{e['event_type']}`{value}  \n  {e.get('headline', '')}")
+            for col, lines in ((left, expected), (right, found)):
+                if not lines:
+                    col.caption("Nothing.")
+                for line in lines:
+                    col.markdown(f"- {html.escape(line)}")
             for err in c["errors"]:
                 st.caption(f"Failed call: {err}")
     st.caption(
         f"Run with `uv run sna eval {o['flow']} run`; a variant: `--variant v1 --model ...`. "
         "Results and transcripts are also in `.claude/hillclimb/" + o["flow"] + "/`."
     )
+
+
+def _eval_card(job: str, o: dict | None) -> None:
+    """One agent's card on the Agent evals page."""
+    run = o["current"] if o else None
+    if o is None:
+        st.markdown(":gray-badge[No eval yet]")
+        st.caption(queries.EVAL_PLANS.get(job, "Cases and checked answers to come."))
+        return
+    counts = o["cases"]
+    total = sum(v for k, v in counts.items() if k != "excluded")
+    if run is None:
+        st.markdown(":orange-badge[Eval not run yet]")
+        if not total:
+            st.caption(f"No cases yet: `sna eval {o['flow']} sample`.")
+        else:
+            st.caption(
+                f"{total} cases: {counts['verified']} checked, {counts['draft']} drafted, "
+                f"{counts['new']} without an answer. "
+                + (
+                    f"Next: `sna eval {o['flow']} run`."
+                    if counts["verified"]
+                    else f"Next: check the answers, then `sna eval {o['flow']} run`."
+                )
+            )
+        return
+    before = o["previous"]
+    head = o["spec"].metrics[0]["id"]
+    delta = f"{100 * (run.get(head, 0) - before.get(head, 0)):+.0f} pts" if before else None
+    st.metric(
+        "Fully correct",
+        f"{run.get(head, 0):.0%}",
+        delta,
+        help=f"±{run.get('margin', 0):.0%} at 95%: a change smaller than this may be chance.",
+    )
+    cases_run = run.get("passed", 0) + run.get("failed", 0)
+    st.progress(run.get("passed", 0) / cases_run if cases_run else 0.0)
+    stats = ", ".join(f"{k.lower()} {_pct(v)}" for k, v in (run.get("stats") or {}).items())
+    st.caption(
+        f"{run.get('passed', 0)} of {cases_run} cases pass every run"
+        + (f" · {stats}" if stats else "")
+    )
+    if run["cases_verified"] < run["cases"]:
+        st.markdown(f":orange-badge[{run['cases'] - run['cases_verified']} answers not checked]")
+    if run["errors"]:
+        calls = "call" if run["errors"] == 1 else "calls"
+        st.markdown(f":red-badge[{run['errors']} failed {calls}]")
+
+
+def _eval_detail(detail: dict) -> tuple[list[str], list[str]]:
+    """A wrong run's expected and found answers as lines (runs from step 34 kept events)."""
+    if "expected" in detail or "found" in detail:
+        return list(detail.get("expected") or []), list(detail.get("found") or [])
+
+    def lines(events):
+        return [
+            f"{e['event_type']}"
+            + (f" Rs {e['value_cr']:,g} cr" if e.get("value_cr") is not None else "")
+            + (f": {e['headline']}" if e.get("headline") else "")
+            for e in events or []
+        ]
+
+    return lines(detail.get("expected_events")), lines(detail.get("found_events"))
 
 
 def theme_palette() -> dict[str, str]:

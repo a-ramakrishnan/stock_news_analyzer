@@ -201,21 +201,29 @@ def sample(
 
 def draft(llm, cases: list[Case], model: str = DRAFT_MODEL, say=print) -> int:
     """Draft the expected events of unverified cases that have no draft yet, with a stronger
-    model than the one under test, for you to check."""
+    model than the one under test, for you to check. Each draft is saved as it comes; an API
+    error stops the run there, to be continued by running it again."""
+    from stock_news_analyzer.llm import LLMError
+
     done = 0
     for case in cases:
         exp = case.data.setdefault("expected", {})
         if case.verified or exp.get("drafted_by"):
             continue
-        answer = llm.structured(
-            "eval-draft",
-            model,
-            agent.SYSTEM,
-            agent._prompt([case.filing()]),
-            agent.EventsAnswer,
-            effort="high",
-            max_tokens=agent.MAX_TOKENS,
-        )
+        try:
+            answer = llm.structured(
+                "eval-draft",
+                model,
+                agent.SYSTEM,
+                agent._prompt([case.filing()]),
+                agent.EventsAnswer,
+                effort="high",
+                max_tokens=agent.MAX_TOKENS,
+            )
+        except LLMError as exc:
+            say(f"Stopped at {case.id}: {exc}")
+            say(f"{done} drafted this time; run draft again to continue from {case.id}.")
+            return done
         found = answer.filings[0].events if answer.filings else []
         exp["events"] = [
             {
@@ -246,18 +254,27 @@ def overview(cases: list[Case]) -> str:
             f"{e['event_type']}" + (f" Rs {e['value_cr']:g} cr" if e.get("value_cr") else "")
             for e in c.expected
         )
+        if not exp and not c.verified and not (d.get("expected") or {}).get("drafted_by"):
+            exp = "*not drafted*"
         lines.append(
             f"| {c.id} | {d.get('symbol') or d['isin']} | {str(d['published_at'])[:10]} | "
             f"{d.get('doc_type')} | {d.get('stratum')} | {exp or 'none'} | "
             f"{'yes' if c.verified else 'no'} |"
         )
-    strata = Counter(c.data.get("stratum", "").split(":")[0] for c in cases)
+    strata = Counter(
+        "no event then"
+        if c.data.get("stratum") == "found:none"
+        else "rejected by you"
+        if str(c.data.get("stratum")).startswith("rejected:")
+        else "events then"
+        for c in cases
+    )
     with_events = sum(1 for c in cases if c.expected)
     lines += [
         "",
         f"{len(cases)} cases: {with_events} with expected events, {len(cases) - with_events} "
-        f"without; {sum(c.verified for c in cases)} checked. Strata: "
-        + ", ".join(f"{k} {v}" for k, v in sorted(strata.items())),
+        f"without; {sum(c.verified for c in cases)} checked. What the agent said when it read "
+        "them: " + ", ".join(f"{k} {v}" for k, v in sorted(strata.items())),
     ]
     return "\n".join(lines)
 

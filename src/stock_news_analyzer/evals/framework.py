@@ -104,6 +104,32 @@ class Spec:
         """Extra numbers over all graded runs (e.g. recall), labelled; none by default."""
         return {}
 
+    # --- for labelling in the dashboard (the Eval cases page) ---------------------------
+
+    editable = True  # answers can be edited on the page (False: they come with the case)
+    # The answer as a table: [{"name", "label", "kind": select|number|text, "options"}]
+    editor_columns: list[dict] = []
+
+    def editor_rows(self, reference: dict | None) -> list[dict]:
+        """An answer as the page's table rows."""
+        return []
+
+    def from_editor(self, rows: list[dict]) -> dict:
+        """The page's table rows back as an answer."""
+        return {}
+
+    def empty(self) -> dict | None:
+        """The answer meaning "nothing to find" (e.g. no event), if there is one."""
+        return None
+
+    def show(self, case: EvalCase) -> dict:
+        """What the agent read, for the page: {"heading", "facts": [str], "text"}."""
+        return {"heading": case.title or case.key, "facts": [], "text": json.dumps(case.input)}
+
+    def case_for(self, session: Session, ref: int) -> "NewCase | None":
+        """One item (e.g. a filing by id) as a case, to add it to the eval by hand."""
+        return None
+
     def oracle(self, case: EvalCase) -> dict:
         """An output the grader must score as fully right (to test the grader)."""
         return dict(case.reference or {})
@@ -184,6 +210,30 @@ def sample(session: Session, spec: Spec, n: int | None = None, seed: int = 7) ->
         taken.add(new.key)
     session.flush()
     return added
+
+
+def add_case(session: Session, spec: Spec, new: NewCase) -> EvalCase | None:
+    """Add one case by hand (from the dashboard); None if it is already in the eval."""
+    exists = session.scalar(
+        select(EvalCase).where(EvalCase.dataset == spec.name, EvalCase.key == new.key)
+    )
+    if exists is not None:
+        return None
+    case = EvalCase(
+        dataset=spec.name,
+        key=new.key,
+        source=new.source,
+        title=new.title,
+        tags=new.tags,
+        input=new.input,
+        reference=new.reference,
+        status="new" if new.reference is None else "draft",
+        drafted_by=new.drafted_by,
+        history=[],
+    )
+    session.add(case)
+    session.flush()
+    return case
 
 
 def draft(session: Session, spec: Spec, llm, model: str, say=print) -> int:

@@ -1413,8 +1413,34 @@ def filings_table(df: pd.DataFrame, key: str) -> None:
         st.markdown(f"**{doc['title']}**")
         st.caption(f"{doc['exchange']} · {doc['type']} · {doc['published']:%d %b %Y %H:%M} IST")
         st.text_area("Extracted text", text or "(no text extracted)", height=320, key=f"text-{key}")
+        add_to_eval(int(doc["id"]), key)
     else:
         st.caption("Select a row to read the filing's text.")
+
+
+def add_to_eval(document_id: int, key: str) -> None:
+    """A button that adds a filing to the Event Extractor's eval, to be checked on Eval
+    cases (for a filing it read wrongly, or an interesting one)."""
+    from stock_news_analyzer.evals import framework as fw
+    from stock_news_analyzer.evals.events import SPEC
+
+    if not st.button(
+        "Add to the Event Extractor's eval",
+        key=f"add-eval-{key}-{document_id}",
+        help="Make this filing a case the Event Extractor is measured on; you then give its "
+        "right answer on Eval cases.",
+    ):
+        return
+    with Session(engine()) as session:
+        new = SPEC.case_for(session, document_id)
+        added = fw.add_case(session, SPEC, new) if new else None
+        session.commit()
+    if new is None:
+        st.warning("This filing isn't linked to a company.")
+    elif added is None:
+        st.info("Already in the eval.")
+    else:
+        st.success("Added. Give its answer on **Eval cases**.")
 
 
 def news_table(df: pd.DataFrame) -> None:
@@ -3427,6 +3453,8 @@ def _eval_card(job: str, o: dict | None) -> None:
                     else f"Next: check the answers, then `sna eval {o['flow']} run`."
                 )
             )
+        if counts["draft"] or counts["new"]:
+            st.page_link(PAGES["eval_cases"], label="Check the cases", icon=":material/fact_check:")
         return
     before = o["previous"]
     head = o["spec"].metrics[0]["id"]
@@ -3465,6 +3493,175 @@ def _eval_detail(detail: dict) -> tuple[list[str], list[str]]:
         ]
 
     return lines(detail.get("expected_events")), lines(detail.get("found_events"))
+
+
+EVAL_SHOW = {
+    "To check": ("new", "draft"),
+    "Checked": ("verified",),
+    "Excluded": ("excluded",),
+    "All": ("new", "draft", "verified", "excluded"),
+}
+STATUS_BADGE = {
+    "new": ":gray-badge[No answer yet]",
+    "draft": ":orange-badge[Drafted, not checked]",
+    "verified": ":green-badge[Checked]",
+    "excluded": ":red-badge[Excluded]",
+}
+
+
+def eval_cases_page() -> None:
+    from stock_news_analyzer.evals import framework as fw
+    from stock_news_analyzer.evals import registry
+
+    page_header(
+        "Eval cases",
+        "The cases each agent is measured on, and their expected answers. Check each drafted "
+        "answer against what the agent read: confirm it, correct it, or exclude a case that "
+        "doesn't belong. Every earlier answer is kept.",
+        "agent-evals",
+    )
+    specs = registry()
+    left, right = st.columns([2, 3], vertical_alignment="bottom")
+    name = left.selectbox(
+        "Eval", list(specs), format_func=lambda n: specs[n].title, key="eval-cases-name"
+    )
+    spec = specs[name]
+    show = (
+        right.segmented_control("Show", list(EVAL_SHOW), default="To check", key="eval-cases-show")
+        or "To check"
+    )
+    with Session(engine()) as session:
+        items = fw.cases(session, spec)
+        counts = {s: sum(c.status == s for c in items) for s in fw.STATUSES}
+        live = len(items) - counts["excluded"]
+        st.progress(
+            counts["verified"] / live if live else 0.0,
+            text=f"{counts['verified']} of {live} checked · {counts['draft']} drafted · "
+            f"{counts['new']} without an answer · {counts['excluded']} excluded",
+        )
+        queue = [c for c in items if c.status in EVAL_SHOW[show]]
+        if not items:
+            st.info(f"No cases yet: `uv run sna eval {name} sample` adds them.")
+            return
+        if not queue:
+            st.success("Nothing left to check." if show == "To check" else "No cases here.")
+            return
+        keys = [c.key for c in queue]
+        pos_key = f"eval-case-{name}-{show}"
+        current = st.session_state.get(pos_key)
+        index = keys.index(current) if current in keys else 0
+        nav = st.columns([1, 4, 1], vertical_alignment="center")
+        if nav[0].button("← Previous", disabled=index == 0, width="stretch"):
+            index -= 1
+        if nav[2].button("Next →", disabled=index >= len(keys) - 1, width="stretch"):
+            index += 1
+        index = keys.index(
+            nav[1].selectbox(
+                "Case",
+                keys,
+                index=index,
+                label_visibility="collapsed",
+                format_func=lambda k: (
+                    f"{keys.index(k) + 1} of {len(keys)}: "
+                    + (next(c.title for c in queue if c.key == k) or k)
+                ),
+                key=f"{pos_key}-pick-{index}",
+            )
+        )
+        case = queue[index]
+        st.session_state[pos_key] = case.key
+        _eval_case(session, spec, case, keys[index + 1] if index + 1 < len(keys) else None, pos_key)
+
+
+def _eval_case(session, spec, case, next_key, pos_key) -> None:
+    """One case: what the agent read, and its answer to check."""
+    from stock_news_analyzer.evals import framework as fw
+
+    shown = spec.show(case)
+    reading, answering = st.columns([1, 1], gap="large")
+    with reading:
+        st.markdown(f"**{html.escape(shown['heading'])}**")
+        st.caption(" · ".join(f for f in shown["facts"] if f))
+        if case.tags:
+            st.caption("Tags: " + ", ".join(case.tags))
+        with st.container(height=520):
+            st.text(shown["text"] or "(no text)")
+    with answering:
+        st.markdown(
+            f"{STATUS_BADGE[case.status]} "
+            + (f":gray[drafted by {case.drafted_by}]" if case.drafted_by else "")
+        )
+        if not spec.editable:
+            st.markdown("**Expected answer** (from an exact source)")
+            for line in spec.describe(case.reference) or ["nothing"]:
+                st.markdown(f"- {html.escape(line)}")
+            rows = None
+        else:
+            st.markdown("**Expected answer**")
+            config = {}
+            for col in spec.editor_columns:
+                if col["kind"] == "select":
+                    config[col["name"]] = st.column_config.SelectboxColumn(
+                        col["label"], options=col["options"], required=True
+                    )
+                elif col["kind"] == "number":
+                    config[col["name"]] = st.column_config.NumberColumn(col["label"])
+                else:
+                    config[col["name"]] = st.column_config.TextColumn(col["label"])
+            edited = st.data_editor(
+                pd.DataFrame(
+                    spec.editor_rows(case.reference),
+                    columns=[c["name"] for c in spec.editor_columns],
+                ),
+                num_rows="dynamic",
+                hide_index=True,
+                width="stretch",
+                column_config=config,
+                key=f"editor-{case.dataset}-{case.key}",
+            )
+            rows = edited.astype(object).where(edited.notna(), None).to_dict("records")
+            if case.status == "new":
+                st.caption("No draft yet: add the events yourself, or run `sna eval draft`.")
+        note = st.text_input("Note", case.note or "", key=f"note-{case.dataset}-{case.key}")
+
+        def act(reference, status, label):
+            fw.set_answer(case, reference, status, "you", note or None)
+            session.commit()
+            st.session_state[pos_key] = next_key
+            st.toast(f"{case.key}: {label}")
+            st.rerun()
+
+        buttons = st.columns(3)
+        if spec.editable:
+            if buttons[0].button(
+                "Confirm",
+                type="primary",
+                width="stretch",
+                help="The answer above is right (with any edits you made).",
+            ):
+                act(spec.from_editor(rows), "verified", "checked")
+            empty = spec.empty()
+            if empty is not None and buttons[1].button(
+                "Nothing to find",
+                width="stretch",
+                help="The right answer is no event at all.",
+            ):
+                act(empty, "verified", "checked: nothing to find")
+        elif case.status == "excluded" and buttons[0].button("Include again", width="stretch"):
+            act(case.reference, "verified", "included again")
+        if case.status != "excluded" and buttons[2].button(
+            "Exclude", width="stretch", help="Leave this case out of runs (say why in the note)."
+        ):
+            act(case.reference, "excluded", "excluded")
+        if case.history:
+            with st.expander(f"History ({len(case.history)})"):
+                for h in reversed(case.history):
+                    st.caption(
+                        f"{h.get('at', '')[:16].replace('T', ' ')} · by {h.get('by')}: was "
+                        f"{h.get('status')}" + (f" · {h['note']}" if h.get("note") else "")
+                    )
+                    for line in spec.describe(h.get("reference")) or ["nothing"]:
+                        st.caption(f"  {html.escape(line)}")
 
 
 def theme_palette() -> dict[str, str]:
@@ -4131,6 +4328,9 @@ PAGES = {
         agents_page, title="Agent map", icon=":material/account_tree:", url_path="agents"
     ),
     "evals": st.Page(evals_page, title="Agent evals", icon=":material/rule:", url_path="evals"),
+    "eval_cases": st.Page(
+        eval_cases_page, title="Eval cases", icon=":material/fact_check:", url_path="eval-cases"
+    ),
     "guide": st.Page(guide_page, title="Guide", icon=":material/help:", url_path="guide"),
 }
 
@@ -4151,7 +4351,8 @@ def setup_needed() -> bool:
 
 # The sidebar's groups, in order.
 NAV = {
-    "Today": ["today", "portfolio", "flags", "agents", "evals"],
+    "Today": ["today", "portfolio", "flags"],
+    "Agents": ["agents", "evals", "eval_cases"],
     "Research": ["research", "stock", "weeks", "ask", "themes", "moves", "evidence"],
     "Library": ["filings", "news"],
     "Set up": ["manage", "settings", "system"],

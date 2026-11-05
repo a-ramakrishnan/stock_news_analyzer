@@ -13,6 +13,13 @@ Every agent's eval is built the same way (`src/stock_news_analyzer/evals/framewo
 | **Graders** | Code that scores the answer against the expected one; the first metric is the headline |
 | **Runs** | Each run's scores and every case's result are kept in `eval_runs` and `eval_results` and shown on the **Agent evals** page. Results, transcripts and a summary also go to `.claude/hillclimb/<eval>/<variant>/`. |
 
+**Checking answers** happens on the dashboard's **Eval cases** page (Agents group):
+- what the agent read is shown beside the expected answer as an editable table
+- **Confirm**, **Nothing to find** and **Exclude**, with a note
+- each case's history of earlier answers
+
+The **Filings** page adds any filing to the Event Extractor's eval. The YAML files are only for keeping the cases in git.
+
 An agent gets an eval by adding a `Spec` (`evals/<name>.py`, registered in `evals/__init__.py`). The spec says:
 - how to sample cases from your database
 - how to draft an answer for you to check (or that the answers come with the cases)

@@ -278,6 +278,54 @@ class EventsSpec(Spec):
             out.append(f"{e['event_type']}{value}{headline}")
         return out
 
+    editor_columns = [
+        {
+            "name": "event_type",
+            "label": "Type",
+            "kind": "select",
+            "options": list(extractor.EVENT_TYPES),
+        },
+        {"name": "value_cr", "label": "Rs crore", "kind": "number"},
+        {"name": "value_as_written", "label": "As written", "kind": "text"},
+        {"name": "headline", "label": "Headline", "kind": "text"},
+    ]
+
+    def editor_rows(self, reference: dict | None) -> list[dict]:
+        return [
+            {c["name"]: e.get(c["name"]) for c in self.editor_columns}
+            for e in (reference or {}).get("events") or []
+        ]
+
+    def from_editor(self, rows: list[dict]) -> dict:
+        events = []
+        for r in rows:
+            kind = r.get("event_type")
+            if not kind or kind not in extractor.EVENT_TYPES:
+                continue
+            value = r.get("value_cr")
+            value = None if value is None or value != value else float(value)  # NaN: none
+            text = {k: (r.get(k) or None) for k in ("value_as_written", "headline")}
+            events.append({"event_type": kind, "value_cr": value, **text})
+        return {"events": events}
+
+    def empty(self) -> dict:
+        return {"events": []}
+
+    def show(self, case: EvalCase) -> dict:
+        d = case.input
+        doc, _ = filing(d)
+        return {
+            "heading": d.get("title") or case.key,
+            "facts": [
+                f"{d.get('company')} ({d.get('symbol') or d.get('isin')})",
+                f"filed {str(d.get('published_at'))[:10]}",
+                d.get("doc_type") or "",
+                f"document {d.get('document_id')}",
+            ],
+            # what the agent reads: the title, subject and the start of the text
+            "text": extractor.filing_text(doc),
+        }
+
     def oracle(self, case: EvalCase) -> dict:
         events = (case.reference or {}).get("events") or []
         return {"events": [{**e, "quote": None, "value_as_written": None} for e in events]}

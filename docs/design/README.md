@@ -15,6 +15,10 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.34 · Nov 5, 2026
+
+- Step 36: labelling eval cases in the dashboard. An Eval cases page (what the agent read beside the editable expected answer; Confirm, Nothing to find, Exclude; history) and Add to the eval on Filings; an Agents group in the sidebar. agent-design.md's Evals section.
+
 ### 1.33 · Nov 5, 2026
 
 - Step 35: a general eval framework (datasets in the database with history, a spec per agent, shared runner, commands and page; migration 0032) and the Results reader's eval, graded against the companies' XBRL figures. agent-design.md's Evals section, with steps 36–39 planned (labelling in the dashboard, traces, live monitoring, experiments compared). The clean Mac and Windows test becomes step 40.

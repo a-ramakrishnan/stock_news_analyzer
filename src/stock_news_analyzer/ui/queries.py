@@ -1300,3 +1300,10 @@ def portfolio(session: Session) -> dict:
 
     held = pf.holdings(session)
     return {"holdings": held, "sectors": pf.sector_weights(session, held)}
+
+
+def research(session: Session, isin: str):
+    """The facts behind a stock's research brief (agents/research.py)."""
+    from stock_news_analyzer.agents import research as rs
+
+    return rs.facts(session, isin)

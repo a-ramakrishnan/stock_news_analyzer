@@ -2045,6 +2045,32 @@ def _probe_integrated(client, company, index: str, out_dir) -> None:
             typer.echo(f"  {d.published_at:%d %b %Y} {d.doc_type}: {str(d.raw)[:600]}")
 
 
+@results_app.command("balance")
+def results_balance(symbol: str = typer.Argument(..., help="NSE symbol.")) -> None:
+    """The balance sheets and cash flows read from a stock's XBRL files, with the tag each
+    figure came from (to check them against the filings)."""
+    from sqlalchemy import select
+
+    from stock_news_analyzer.models import BalanceSheet
+
+    with get_session() as session:
+        company = _companies_or_exit(session, symbol)[0]
+        rows = session.scalars(
+            select(BalanceSheet)
+            .where(BalanceSheet.isin == company.isin)
+            .order_by(BalanceSheet.period_end.desc())
+        ).all()
+        if not rows:
+            typer.echo("None yet: they come with the xbrl job (sna run xbrl).")
+            return
+        for r in rows:
+            typer.echo(f"{r.period_end} ({r.months} months, {r.basis})")
+            for f in ("equity", "borrowings", "cash", "total_assets", "cfo", "capex"):
+                value = getattr(r, f"{f}_cr")
+                shown = f"Rs {value:,.0f} cr" if value is not None else "not in the file"
+                typer.echo(f"  {f:<13} {shown:<22} {r.as_written.get(f, '')}")
+
+
 @results_app.command("probe")
 def results_probe(
     symbol: str = typer.Argument(..., help="NSE symbol."),

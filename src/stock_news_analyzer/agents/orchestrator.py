@@ -198,7 +198,7 @@ def job_xbrl(session: Session) -> str:
     result = xbrl_results.import_results(session, ExchangeClient())
     summary = (
         f"{result.periods} result periods from XBRL ({result.corrected} corrected a PDF "
-        f"reading), {result.skipped} already from XBRL"
+        f"reading), {result.balance_sheets} balance sheets, {result.skipped} already from XBRL"
     )
     if result.errors:
         raise JobError(summary, result.errors)

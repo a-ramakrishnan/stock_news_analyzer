@@ -23,7 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from stock_news_analyzer.agents.results import FIELDS, RESULT_DAYS, XBRL, period_label, periods
-from stock_news_analyzer.models import Company, QuarterlyResult, WatchlistItem
+from stock_news_analyzer.models import BalanceSheet, Company, QuarterlyResult, WatchlistItem
 from stock_news_analyzer.sources import xbrl
 from stock_news_analyzer.sources.announcements import IST
 from stock_news_analyzer.sources.exchange_http import SME_SERIES, ExchangeError
@@ -59,6 +59,34 @@ TAGS = {
         "BasicEarningsPerShare",
     ),
 }
+# Balance sheet lines (at the period end) and cash flow lines (over the half year or year),
+# from the half-yearly and annual statements in the same files. Filers use the same Ind AS
+# names under different prefixes; the first tag found wins. Borrowings add up the
+# non-current and current lines when they are filed apart.
+BALANCE_TAGS = {
+    "equity": ("EquityAttributableToOwnersOfParent", "Equity", "TotalEquity"),
+    "cash": ("CashAndCashEquivalents", "CashAndBankBalances"),
+    "total_assets": ("Assets", "TotalAssets", "EquityAndLiabilities"),
+}
+BORROWING_PARTS = (
+    ("BorrowingsNoncurrent", "NoncurrentBorrowings", "LongTermBorrowings"),
+    ("BorrowingsCurrent", "CurrentBorrowings", "ShortTermBorrowings"),
+)
+BORROWING_TOTAL = ("Borrowings",)
+CASH_FLOW_TAGS = {
+    "cfo": (
+        "CashFlowsFromUsedInOperatingActivities",
+        "NetCashFlowsFromUsedInOperatingActivities",
+        "NetCashFlowFromOperatingActivities",
+    ),
+    "capex": (
+        "PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities",
+        "PurchaseOfPropertyPlantAndEquipment",
+        "PurchaseOfTangibleAssets",
+    ),
+}
+BALANCE_MONTHS = {9: 6, 3: 12}  # September: a half year's cash flow; March: the year's
+
 # A bank's revenue is its total income (interest earned plus other income), as the Results
 # Reader records it.
 BANK_REVENUE = ("Income",)
@@ -79,6 +107,7 @@ class XbrlResult:
     corrected: int = 0  # replaced a Results Reader figure that differed by more than 1%
     skipped: int = 0  # already from XBRL
     rejected: int = 0  # quarters found to be half years, put back to the PDF reading
+    balance_sheets: int = 0  # half year and year ends with a balance sheet or cash flow
     errors: list[str] = field(default_factory=list)
 
 
@@ -221,6 +250,88 @@ def figures(content: bytes, bank: bool, context: str = CONTEXT) -> dict[str, tup
     return out
 
 
+def balance_figures(content: bytes, end: date) -> dict[str, tuple[Decimal, str]]:
+    """{field: (Rs crore, the tag)} for the balance sheet at `end` and the cash flow for the
+    half year or year to `end`. Empty when the file has no balance sheet."""
+    months = BALANCE_MONTHS.get(end.month)
+    if not months:
+        return {}
+    at_end = {cid for cid, day in xbrl.instants(content).items() if day == end.isoformat()}
+    spans = [
+        cid
+        for cid, (start, stop, dims) in xbrl.periods(content).items()
+        if not dims
+        and start
+        and stop == end.isoformat()
+        and _months(date.fromisoformat(start), end) == months
+    ]
+    point: dict[str, str] = {}
+    flow: dict[str, str] = {}
+    for tag, ctx, value in xbrl.facts(content):
+        if ctx in at_end:
+            point.setdefault(tag, value)
+        elif ctx in spans:
+            flow.setdefault(tag, value)
+
+    def first(facts: dict[str, str], tags: tuple[str, ...]):
+        for tag in tags:
+            try:
+                return Decimal(facts[tag]) / RUPEES_PER_CRORE, tag
+            except (KeyError, ArithmeticError):
+                continue
+        return None
+
+    out = {}
+    for f, tags in BALANCE_TAGS.items():
+        if (found := first(point, tags)) is not None:
+            out[f] = found
+    parts = [first(point, tags) for tags in BORROWING_PARTS]
+    if any(parts):
+        found = [p for p in parts if p]
+        out["borrowings"] = (sum(p[0] for p in found), "+".join(p[1] for p in found))
+    elif (total := first(point, BORROWING_TOTAL)) is not None:
+        out["borrowings"] = total
+    for f, tags in CASH_FLOW_TAGS.items():
+        if (found := first(flow, tags)) is not None:
+            value, tag = found
+            out[f] = (abs(value) if f == "capex" else value, tag)  # capex filed as negative
+    return out
+
+
+def _store_balance(session, company, filing: dict, found: dict) -> bool:
+    """Write a half year's or year's balance sheet. A file without one is recorded too, with
+    no figures, so it isn't downloaded again for it. True if any figure was found."""
+    if filing["end"].month not in BALANCE_MONTHS or filing["months"] == 3:
+        return False
+    end = filing["end"]
+    row = session.scalars(
+        select(BalanceSheet).where(
+            BalanceSheet.isin == company.isin, BalanceSheet.period_end == end
+        )
+    ).first() or BalanceSheet(isin=company.isin, period_end=end)
+    session.add(row)
+    row.months = BALANCE_MONTHS[end.month]
+    row.basis = "consolidated" if filing["consolidated"] else "standalone"
+    for f, (value, _) in found.items():
+        setattr(row, f"{f}_cr", round(value, 2))
+    row.as_written = {f: tag for f, (_, tag) in found.items()}
+    row.source = filing["xbrl"]
+    return bool(found)
+
+
+def _balance_done(session, isin: str, filing: dict) -> bool:
+    """A balance sheet is due from this filing (a half year or year end) and is stored."""
+    if filing["end"].month not in BALANCE_MONTHS or filing["months"] == 3:
+        return True  # a quarter's filing: no balance sheet to read
+    return bool(
+        session.scalar(
+            select(BalanceSheet.id).where(
+                BalanceSheet.isin == isin, BalanceSheet.period_end == filing["end"]
+            )
+        )
+    )
+
+
 def _store(session, company, filing: dict, months: int, found: dict) -> bool:
     """Write one period; True if it replaced a Results Reader figure off by more than 1%.
 
@@ -337,15 +448,20 @@ def import_results(
             result.errors.append(f"{company.nse_symbol} integrated filings: {exc}")
         stored = 0
         for filing in todo:
-            if _done(session, company.isin, filing):
+            results_done = _done(session, company.isin, filing)
+            if results_done and _balance_done(session, company.isin, filing):
                 result.skipped += 1
                 continue
             try:
                 _, content, _ = client.download("nse", [filing["xbrl"]])
                 spans = contexts_for(content, filing)
                 found = [(m, figures(content, filing["bank"], c)) for m, c in spans]
+                balance = balance_figures(content, filing["end"])
             except (ExchangeError, ValueError, SyntaxError) as exc:
                 result.errors.append(f"{company.nse_symbol} {filing['end']}: {exc}")
+                continue
+            result.balance_sheets += _store_balance(session, company, filing, balance)
+            if results_done:
                 continue
             if not found:
                 result.errors.append(

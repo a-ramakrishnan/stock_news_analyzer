@@ -225,6 +225,43 @@ h1{letter-spacing:-.01em}
 .sna-dot.warn{background:var(--sna-medium)}
 .sna-dot.bad{background:var(--sna-high)}
 .sna-week p{margin:.2rem 0 .6rem}
+/* The research brief, in the briefing grammar: a lede (eyebrow, verdict, summary, stances,
+   ruled key numbers, a callout), then numbered folds; every figure wears an evidence badge. */
+.sna-lede{padding:.2rem 0 .8rem}
+.sna-eyebrow{font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;color:var(--sna-muted)}
+.sna-lede-title{font-size:1.7rem;font-weight:700;line-height:1.25;margin:.35rem 0 .4rem}
+.sna-lede-sub{color:var(--sna-muted);margin:0 0 .8rem;max-width:60rem}
+.sna-stances{display:flex;flex-wrap:wrap;gap:.5rem;margin:.2rem 0 1rem}
+.sna-stance{border:1px solid var(--sna-border);border-radius:999px;padding:.25rem .75rem;
+  font-size:.85rem;background:var(--sna-card)}
+.sna-stance b{margin-right:.35rem}
+.sna-ruled{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+  border-top:1px solid var(--sna-border);border-bottom:1px solid var(--sna-border);
+  margin:.4rem 0 1rem}
+.sna-ruled>div{padding:.7rem .8rem;border-right:1px solid var(--sna-border)}
+.sna-ruled>div:last-child{border-right:none}
+.sna-ruled .v{font-size:1.35rem;font-weight:700;font-family:"IBM Plex Mono",ui-monospace,monospace}
+.sna-ruled .l{font-size:.8rem;color:var(--sna-muted)}
+.sna-callout{border-left:3px solid var(--sna-accent-text);background:var(--sna-card);
+  padding:.6rem .9rem;border-radius:0 8px 8px 0;margin:.4rem 0 1rem;font-size:.9rem}
+.sna-callout.warn{border-left-color:var(--sna-medium)}
+.sna-ev{font-size:.68rem;border-radius:999px;padding:.05rem .45rem;margin-left:.35rem;
+  border:1px solid var(--sna-border);color:var(--sna-muted);white-space:nowrap;
+  vertical-align:middle}
+.sna-ev.filed{color:var(--sna-up);border-color:var(--sna-up)}
+.sna-ev.ai{color:var(--sna-accent-text);border-color:var(--sna-accent-text)}
+.sna-ev.stale{color:var(--sna-medium);border-color:var(--sna-medium)}
+.sna-ev.nd{border-style:dashed}
+.sna-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:.75rem}
+.sna-ecard{border:1px solid var(--sna-border);border-radius:10px;padding:.8rem;
+  background:var(--sna-card)}
+.sna-ecard.subject{border-color:var(--sna-accent-text)}
+.sna-ecard .t{font-weight:700;margin:.15rem 0}
+.sna-ecard .s{display:flex;gap:1rem;margin-top:.5rem;font-size:.85rem}
+.sna-ecard .s b{display:block;font-family:"IBM Plex Mono",ui-monospace,monospace}
+.sna-timeline{list-style:none;padding:0;margin:0}
+.sna-timeline li{display:flex;gap:1rem;padding:.45rem 0;border-bottom:1px solid var(--sna-border)}
+.sna-timeline li .d{min-width:6.5rem;font-family:"IBM Plex Mono",ui-monospace,monospace}
 .sna-week ul{margin:.2rem 0 .8rem;padding-left:1.1rem}
 .sna-week li{margin:.15rem 0}
 .sna-meter{display:inline-flex;gap:2px;vertical-align:middle}
@@ -1972,6 +2009,296 @@ ITEM_LABELS = {
 
 
 LEAN_TAG = {"positive": "good", "neutral": "", "negative": "bad"}
+EVIDENCE_CLASS = {
+    "Filed": "filed",
+    "Read by AI": "ai",
+    "Market": "",
+    "Stale": "stale",
+    "Not disclosed": "nd",
+    "Not tracked": "nd",
+}
+
+
+def evidence(badge: str) -> str:
+    """A small badge saying how far a figure can be trusted (agents/research.py)."""
+    return f'<span class="sna-ev {EVIDENCE_CLASS.get(badge, "")}">{html.escape(badge)}</span>'
+
+
+def amount(value, unit: str) -> str:
+    if value is None:
+        return '<span class="sna-muted">–</span>'
+    if unit == "cr":
+        return f"₹{value:,.0f} cr".replace("₹-", "−₹")
+    if unit == "x":
+        return f"{value:.2f}×"
+    if unit == "%":
+        return signed(value, 1)
+    return f"{value:,.2f}"
+
+
+def research_page() -> None:
+    from stock_news_analyzer.agents import research as rs
+
+    page_header(
+        "Research brief",
+        "One stock on one page, conclusion first: the key numbers, then a fold for each part "
+        "of the research. Every figure says where it came from and how far it can be trusted.",
+        "research-brief",
+    )
+    s = stock_picker("brief-stock", include_all=False)
+    if s is None:
+        no_data("No stocks yet. Add them on the Manage stocks page.")
+        return
+    f = load("research", isin=s["isin"])
+    v = f.valuation
+    today = datetime.now(IST).date()
+
+    # --- the lede ------------------------------------------------------------------
+    headline, stances = brief_lede(f)
+    quarters_with_data = sum(1 for q in f.quarters if q["revenue"] is not None)
+    since = f"{f.first_filing.astimezone(IST):%b %Y}" if f.first_filing else "–"
+    latest = f.quarters[0] if f.quarters else None
+    sub_line = (
+        f"Latest quarter ({latest['period']}): revenue {signed(latest['revenue_growth'], 0)} and "
+        f"profit {signed(latest['pat_growth'], 0)} on the year; margin "
+        f"{latest['margin']:.1%}."
+        if latest and latest["margin"] is not None
+        else "No quarterly results stored yet."
+    )
+    stance_html = "".join(
+        f'<span class="sna-stance"><b>{html.escape(k)}</b>{html.escape(t)}</span>'
+        for k, t in stances
+    )
+
+    def ruled(value: str, label: str, badge: str) -> str:
+        return (
+            f'<div><div class="v">{value}</div><div class="l">{label}{evidence(badge)}</div></div>'
+        )
+
+    debt_equity = next((b for b in f.balance if b.label == "Debt to equity"), None)
+    nxt = f.coming[0] if f.coming else None
+    stats = "".join(
+        [
+            ruled(
+                f"{v.pe:.1f}" if v.pe else "–",
+                "P/E, trailing" + (f" · median {v.pe_median:.0f}" if v.pe_median else ""),
+                rs.MARKET if v.pe else rs.NOT_DISCLOSED,
+            ),
+            ruled(
+                signed(v.eps_growth, 0) if v.eps_growth is not None else "–",
+                "EPS growth, trailing year",
+                rs.FILED if v.eps_growth is not None else rs.NOT_DISCLOSED,
+            ),
+            ruled(
+                f"{debt_equity.value:.2f}×"
+                if debt_equity and debt_equity.value is not None
+                else "–",
+                "Debt to equity",
+                debt_equity.badge if debt_equity else rs.NOT_DISCLOSED,
+            ),
+            ruled(
+                f"{nxt.day:%d %b}" if nxt else "–",
+                (nxt.what if nxt else "nothing announced"),
+                nxt.badge if nxt else rs.NOT_DISCLOSED,
+            ),
+        ]
+    )
+    st.html(
+        f'<div class="sna-lede"><div class="sna-eyebrow">{esc(f.symbol)} · {esc(f.name)} · NSE'
+        f"{' · ' + esc(f.industry) if f.industry else ''} · brief of {today:%d %b %Y}</div>"
+        f'<div class="sna-lede-title">{esc(headline)}</div>'
+        f'<p class="sna-lede-sub">{sub_line}</p>'
+        f'<div class="sna-stances">{stance_html}</div>'
+        f'<div class="sna-ruled">{stats}</div>'
+        f'<div class="sna-callout">Built from {f.filings:,} filings and {f.news:,} news articles '
+        f"since {since}, {quarters_with_data} quarters of results and NSE's daily prices. Each "
+        "figure carries its evidence: <b>Filed</b> as filed (XBRL or the exchange), <b>Read by "
+        "AI</b> from a filing, <b>Market</b> from prices, <b>Stale</b> older than a half year, "
+        "<b>Not disclosed</b> when the filings don't carry it.</div></div>"
+    )
+
+    # --- the folds -----------------------------------------------------------------
+    with st.expander(f"1. Valuation · P/E {v.pe:.1f}" if v.pe else "1. Valuation · no P/E"):
+        if v.note:
+            st.caption(f"No P/E: {v.note}.")
+        if v.series:
+            st.plotly_chart(charts.pe_chart(v, dark()), width="stretch", **PLOT)
+        rows = [
+            ("Close", f"₹{v.close:,.2f} on {v.close_date:%d %b}" if v.close else None, rs.MARKET),
+            ("Trailing EPS", f"₹{v.eps_ttm:,.2f}" if v.eps_ttm is not None else None, rs.FILED),
+            ("P/E", f"{v.pe:.1f}" if v.pe else None, rs.MARKET),
+            (
+                f"Its own range, {val_years()} years",
+                f"{v.pe_low:.0f} to {v.pe_high:.0f}, median {v.pe_median:.0f}; today higher than "
+                f"{v.pe_percentile:.0%} of days"
+                if v.pe_median and v.pe_percentile is not None
+                else None,
+                rs.MARKET,
+            ),
+            (
+                f"{v.sector_index or 'Sector index'} P/E",
+                f"{v.sector_pe:.1f} (its median {v.sector_pe_median:.1f})" if v.sector_pe else None,
+                rs.MARKET,
+            ),
+            (
+                "Nifty 50 P/E",
+                f"{v.nifty_pe:.1f} (its median {v.nifty_pe_median:.1f})" if v.nifty_pe else None,
+                rs.MARKET,
+            ),
+            (
+                "Market cap",
+                f"₹{v.market_cap_cr:,.0f} cr" if v.market_cap_cr else None,
+                rs.MARKET,
+            ),
+        ]
+        brief_kv(rows)
+        if v.quarters:
+            st.caption(
+                "Trailing EPS = "
+                + " + ".join(f"{q.eps:.2f} ({q.end:%b %Y})" for q in v.quarters)
+                + ", adjusted for any bonus issue or split since."
+            )
+
+    with st.expander(f"2. Results · {len(f.quarters)} quarters"):
+        if not f.quarters:
+            st.caption("No quarterly results stored yet.")
+        else:
+
+            def change(x, _row):
+                return (
+                    f'<span class="{trend(x)}">{signed(x, 0)}</span>' if not blank(x) else esc(None)
+                )
+
+            html_table(
+                f.quarters,
+                [
+                    ("Quarter", "period", lambda x, r: f"{esc(x)}{evidence(r['badge'])}"),
+                    ("Revenue>", "revenue", lambda x, r: amount(x, "cr")),
+                    ("On the year>", "revenue_growth", change),
+                    ("Profit>", "pat", lambda x, r: amount(x, "cr")),
+                    ("On the year >", "pat_growth", change),
+                    ("Margin>", "margin", lambda x, r: f"{x:.1%}" if not blank(x) else esc(None)),
+                    ("EPS>", "eps", lambda x, r: f"₹{x:,.2f}" if not blank(x) else esc(None)),
+                ],
+            )
+
+    end = f"{f.balance_end:%d %b %Y}" if f.balance_end else "none stored"
+    with st.expander(f"3. Balance sheet and cash flow · {end}"):
+        if not f.balance:
+            st.caption(
+                "None stored yet: balance sheets come from the half-yearly and annual XBRL "
+                "files, with the xbrl job."
+            )
+        else:
+            html_table(
+                [b.__dict__ for b in f.balance],
+                [
+                    ("Line", "label", None),
+                    ("Value>", "value", lambda x, r: amount(x, r["unit"])),
+                    ("Evidence", "badge", lambda x, r: evidence(x)),
+                    ("From", "note", lambda x, r: f'<span class="sna-muted">{esc(x)}</span>'),
+                ],
+            )
+            if f.balance[0].source:
+                st.caption(f"As at {end}, from {f.balance[0].source}")
+
+    basis = {"approved": "your approved peers", "industry": "the largest in its NSE industry"}
+    with st.expander(f"4. Peers · {max(len(f.peers) - 1, 0)} companies"):
+        st.caption(
+            f"Against {basis.get(f.peer_basis, 'no peers yet')}; set peers on Manage stocks."
+        )
+        cards = []
+        for p in f.peers:
+            cards.append(
+                f'<div class="sna-ecard{" subject" if p.is_subject else ""}">'
+                f'<div class="sna-eyebrow">NSE · {esc(p.symbol)}'
+                f"{' · this stock' if p.is_subject else ''}</div>"
+                f'<div class="t">{esc(p.name)}</div>{evidence(p.badge)}'
+                f'<div class="s"><span><b>{f"{p.pe:.1f}" if p.pe else "–"}</b>P/E</span>'
+                f'<span><b class="{trend(p.return_1y)}">{signed(p.return_1y, 0)}</b>1 year</span>'
+                f'<span><b class="{trend(p.revenue_growth)}">{signed(p.revenue_growth, 0)}</b>'
+                f"revenue{', ' + esc(p.period) if p.period else ''}</span></div>"
+                f'<div class="sna-muted" style="font-size:.8rem;margin-top:.4rem">'
+                f"{f'₹{p.market_cap_cr:,.0f} cr market cap' if p.market_cap_cr else ''}</div></div>"
+            )
+        st.html(f'<div class="sna-cards">{"".join(cards)}</div>')
+
+    with st.expander(f"5. What's coming · {len(f.coming)} dates"):
+        if not f.coming:
+            st.caption("Nothing announced for the next four months.")
+        else:
+            items = "".join(
+                f'<li><span class="d">{c.day:%a %d %b}</span><span>{esc(c.what)}'
+                f"{evidence(c.badge)}</span></li>"
+                for c in f.coming
+            )
+            st.html(f'<ul class="sna-timeline">{items}</ul>')
+
+    with st.expander(f"6. Red flags · {len(f.flags)} open"):
+        if not f.flags:
+            st.caption("No open red flags.")
+        for flag in f.flags:
+            st.html(
+                f'<div class="sna-flag"><span class="sna-dot {flag.severity}"></span>'
+                f"{flag.flagged_on:%d %b %Y} · {esc(flag.kind.replace('_', ' '))} · "
+                f"{esc(flag.title)}</div>"
+            )
+
+
+def val_years() -> int:
+    from stock_news_analyzer.agents import valuation
+
+    return valuation.YEARS
+
+
+def brief_kv(rows: list[tuple[str, str | None, str]]) -> None:
+    from stock_news_analyzer.agents import research as rs
+
+    html_table(
+        [{"k": k, "v": v, "b": b if v is not None else rs.NOT_DISCLOSED} for k, v, b in rows],
+        [
+            ("", "k", lambda x, r: f"<b>{esc(x)}</b>"),
+            ("", "v", None),
+            ("Evidence", "b", lambda x, r: evidence(x)),
+        ],
+    )
+
+
+def brief_lede(f) -> tuple[str, list[tuple[str, str]]]:
+    """The brief's headline and stances, from the facts alone (the AI-written view comes on
+    top later): what the valuation, the balance sheet and the calendar say."""
+    v = f.valuation
+    parts, stances = [], []
+    if v.pe and v.pe_median:
+        side = "below" if v.pe < v.pe_median else "above"
+        parts.append(f"P/E {v.pe:.0f}, {side} its {val_years()}-year median of {v.pe_median:.0f}")
+        stances.append(
+            ("Valuation", f"{side} its own history ({v.pe_percentile:.0%} of days lower)")
+        )
+    elif v.pe:
+        parts.append(f"P/E {v.pe:.0f}")
+    de = next((b for b in f.balance if b.label == "Debt to equity"), None)
+    net = next((b for b in f.balance if b.label == "Net debt"), None)
+    if net and net.value is not None:
+        if net.value < 0:
+            parts.append("net cash on the balance sheet")
+            stances.append(("Balance sheet", "net cash"))
+        elif de and de.value is not None:
+            parts.append(f"debt {de.value:.1f}× equity")
+            word = (
+                "leveraged" if de.value > 1 else "moderate debt" if de.value > 0.3 else "low debt"
+            )
+            stances.append(("Balance sheet", f"{word}, {de.value:.2f}× equity"))
+    latest = f.quarters[0] if f.quarters else None
+    if latest and latest["pat_growth"] is not None:
+        stances.append(("Last quarter", f"profit {signed(latest['pat_growth'], 0)} on the year"))
+    if f.coming:
+        c = f.coming[0]
+        stances.append(("Next", f"{c.what.lower()} {c.day:%d %b}"))
+    if f.flags:
+        stances.append(("Watch", f"{len(f.flags)} open red flag{'s' if len(f.flags) > 1 else ''}"))
+    headline = "; ".join(parts) + "." if parts else f"{f.name}: the facts so far."
+    return headline[:1].upper() + headline[1:], stances[:4]
 
 
 def portfolio_page() -> None:
@@ -3219,6 +3546,9 @@ PAGES = {
     "news": st.Page(news_page, title="News", icon=":material/newspaper:", url_path="news"),
     "themes": st.Page(themes_page, title="Themes", icon=":material/hub:", url_path="themes"),
     "ask": st.Page(ask_page, title="Ask", icon=":material/question_answer:", url_path="ask"),
+    "research": st.Page(
+        research_page, title="Research brief", icon=":material/description:", url_path="research"
+    ),
     "weeks": st.Page(
         weeks_page, title="Week by week", icon=":material/calendar_view_week:", url_path="weeks"
     ),
@@ -3264,7 +3594,7 @@ def setup_needed() -> bool:
 # The sidebar's groups, in order.
 NAV = {
     "Today": ["today", "portfolio", "flags", "agents"],
-    "Research": ["stock", "weeks", "ask", "themes", "moves", "evidence"],
+    "Research": ["research", "stock", "weeks", "ask", "themes", "moves", "evidence"],
     "Library": ["filings", "news"],
     "Set up": ["manage", "settings", "system"],
     "Help": ["guide"],

@@ -48,3 +48,18 @@ def periods(content: bytes) -> dict[str, tuple[str | None, str | None, bool]]:
         dims = any(d.tag.rsplit("}", 1)[-1] == "explicitMember" for d in el.iter())
         out[el.get("id")] = (found.get("startDate"), found.get("endDate"), dims)
     return out
+
+
+def instants(content: bytes) -> dict[str, str]:
+    """{context id: its date} for the contexts that are a single date with no dimensions:
+    a balance sheet's."""
+    root = ET.fromstring(content)
+    out = {}
+    for el in root.iter():
+        if el.tag.rsplit("}", 1)[-1] != "context" or not el.get("id"):
+            continue
+        found = {d.tag.rsplit("}", 1)[-1]: d.text for d in el.iter()}
+        if "explicitMember" in found or not found.get("instant"):
+            continue
+        out[el.get("id")] = found["instant"].strip()
+    return out

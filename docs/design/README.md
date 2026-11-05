@@ -6,6 +6,7 @@
 | [agent-design.md](agent-design.md) | The agent team, LLMs and costs, tools, data requirements, hosting, the agent-by-agent build guide, the build-in-public plan |
 | [sharing.md](sharing.md) | Making it usable by others: a simple install, a fuller dashboard, and an in-app Guide; the order of work |
 | [ui-brief.md](ui-brief.md) | A brief for designing the dashboard in Lovable: each page, what it shows, with sample data; the designs are then rebuilt in Streamlit |
+| [research-brief.md](research-brief.md) | The Research brief: one stock's complete research on one page, in the briefing grammar of Robyn's research results; its facts, evidence badges and folds, and the plan for the AI-written view |
 | [lovable-prompts.md](lovable-prompts.md) | The brief as ready-to-paste Lovable prompts, in order: project rules, then the pages a few at a time |
 
 These files are the reference for the design. Change them in a pull request like code: edit the text, bump the version line at the top of each changed file, and add an entry below.
@@ -13,6 +14,10 @@ These files are the reference for the design. Change them in a pull request like
 Versions: a minor bump (1.1) for corrections and decisions that fit the existing plan, a major bump (2.0) when the plan itself changes, such as agents added or dropped, or the architecture changed. Building agents in a different order is a minor change.
 
 ## Changes
+
+### 1.28 · Nov 5, 2026
+
+- research-brief.md 1.0: the Research brief, after the briefing grammar of Robyn's research results (lede with verdict, stances and ruled key numbers; numbered folds; an evidence badge on every figure; entity cards; Observed → Read; decision cards; sources). Step 31.1 built: point-in-time trailing P/E against its own history, the sector and the Nifty (`agents/valuation.py`); balance sheets and cash flows from the half-yearly and annual XBRL (`balance_sheets`, migration 0028); peers and what's coming (`agents/research.py`); the page. design.md's dashboard, agent-design.md's Reporter. Trying it on a clean Mac and Windows becomes step 32
 
 ### 1.27 · Nov 5, 2026
 

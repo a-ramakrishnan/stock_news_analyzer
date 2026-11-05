@@ -335,3 +335,50 @@ def weekly_chart(weeks: list, dark: bool = False) -> go.Figure:
     fig.update_xaxes(tickformat="%d %b")
     fig.update_yaxes(tickformat="+.0%")
     return _layout(fig, t, 300)
+
+
+def pe_chart(v, dark: bool = False) -> go.Figure:
+    """A stock's trailing P/E week by week, with the middle 80% of its own history shaded,
+    its median dashed, and the sector's and the Nifty 50's P/E today as labelled lines."""
+    t = theme(dark)
+    fig = go.Figure()
+    if not v.series:
+        return _layout(fig, t, 260)
+    days = [d for d, _ in v.series]
+    if v.pe_low is not None and v.pe_high is not None:
+        fig.add_hrect(
+            y0=v.pe_low, y1=v.pe_high, fillcolor=t.grid, opacity=0.9, line_width=0, layer="below"
+        )
+    fig.add_trace(
+        go.Scatter(
+            x=days,
+            y=[pe for _, pe in v.series],
+            mode="lines",
+            name="P/E",
+            line=dict(color=t.stock, width=2),
+            hovertemplate="%{x|%d %b %Y}: P/E %{y:.1f}<extra></extra>",
+        )
+    )
+    if v.pe_median is not None:
+        fig.add_hline(
+            y=v.pe_median,
+            line=dict(color=t.muted, width=1, dash="dash"),
+            annotation_text=f"its median {v.pe_median:.0f}",
+            annotation_position="top left",
+            annotation_font_color=t.muted,
+        )
+    for value, label, colour in (
+        (v.sector_pe, v.sector_index or "sector", t.sector),
+        (v.nifty_pe, "Nifty 50", t.nifty),
+    ):
+        if value is not None:
+            fig.add_hline(
+                y=value,
+                line=dict(color=colour, width=1, dash="dot"),
+                annotation_text=f"{label} {value:.0f}",
+                annotation_position="bottom right",
+                annotation_font_color=colour,
+            )
+    fig.update_layout(showlegend=False)
+    fig.update_xaxes(tickformat="%b %Y")
+    return _layout(fig, t, 260)

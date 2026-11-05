@@ -441,6 +441,28 @@ def _read_across(session: Session, since: datetime, until: datetime) -> list[str
     return lines
 
 
+def _briefs(session: Session, since: datetime, until: datetime) -> list[str]:
+    """New Research brief views: the verdict and what changed."""
+    from stock_news_analyzer.models import ResearchBrief
+
+    rows = session.execute(
+        select(ResearchBrief, Company.nse_symbol)
+        .join(Company, Company.isin == ResearchBrief.isin)
+        .where(ResearchBrief.created_at >= since, ResearchBrief.created_at < until)
+        .order_by(Company.nse_symbol, ResearchBrief.created_at)
+    ).all()
+    if not rows:
+        return []
+    out = ["", "## Research briefs", ""]
+    for b, symbol in rows:
+        changed = b.view.get("changed")
+        out.append(
+            f"- **{symbol}**: {b.view.get('verdict')}"
+            + (f" *What changed:* {changed}" if changed else "")
+        )
+    return out
+
+
 def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
     lines = [
         f"# Daily digest, {until.astimezone(IST):%d %b %Y %H:%M} IST",
@@ -467,6 +489,7 @@ def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
     lines += _holdings(session, since, until)
     lines += _events(session, since, until)
     lines += _read_across(session, since, until)
+    lines += _briefs(session, since, until)
 
     owned = dict(session.execute(select(WatchlistItem.isin, WatchlistItem.owned)).all())
     study = set(session.scalars(select(WatchlistItem.isin).where(WatchlistItem.study_only)))

@@ -66,6 +66,11 @@ class View(BaseModel):
     peers: list[Note] = Field(description="One for each peer listed in the facts.")
     decisions: list[Decision] = Field(description="Three to five.")
     decide_now: list[str] = Field(description="Up to four short questions to settle now.")
+    changed: str = Field(
+        default="",
+        description="What changed since your previous view, in one or two sentences; empty "
+        "when no previous view is given.",
+    )
 
 
 SYSTEM = """You write the view in a research brief on one Indian listed company, for a private
@@ -95,7 +100,9 @@ The view:
   (observed), then what it means (read).
 - subject: why the stock matters and its key risk; peers: the same for each peer listed.
 - decisions: three to five cards tagged Review now, Watch, Hold steady or Check.
-- decide_now: up to four short questions the investor should settle now."""
+- decide_now: up to four short questions the investor should settle now.
+- changed: when your previous view and the facts that changed since are given, say in one
+  or two sentences what changed and whether it moves the view; otherwise leave it empty."""
 
 
 # --- the facts as numbered lines ----------------------------------------------------------
@@ -310,6 +317,7 @@ def _texts(view: View) -> list[tuple[str, str]]:
     for i, d in enumerate(view.decisions):
         out += [(f"decision {i}", d.title), (f"decision {i}", d.why)]
     out += [(f"decide {i}", q) for i, q in enumerate(view.decide_now)]
+    out += [("changed", view.changed)]
     return out
 
 
@@ -356,6 +364,9 @@ def drop(view: View, problems: dict[str, list[str]], fallback: str) -> tuple[Vie
                 }
             )
         setattr(v, attr, [x for i, x in enumerate(items) if i not in bad])
+    if "changed" in problems:
+        dropped.append({"part": "changed", "text": v.changed, "numbers": problems["changed"]})
+        v.changed = ""
     if "subject" in problems:
         dropped.append(
             {"part": "subject", "text": v.subject.model_dump_json(), "numbers": problems["subject"]}
@@ -367,13 +378,92 @@ def drop(view: View, problems: dict[str, list[str]], fallback: str) -> tuple[Vie
 # --- writing the view ---------------------------------------------------------------------------
 
 
-def prompt(f: rs.Facts, lines: list[tuple[str, str]]) -> str:
+def prompt(f: rs.Facts, lines: list[tuple[str, str]], previous: ResearchBrief | None = None) -> str:
     peers = ", ".join(p.symbol for p in f.peers if not p.is_subject) or "none"
     body = "\n".join(f"{i} {text}" for i, text in lines)
-    return (
+    text = (
         f"Company: {f.name} ({f.symbol}). Peers to cover: {peers}.\n\n"
-        f"Facts ({len(lines)}):\n{body}\n\nWrite the view."
+        f"Facts ({len(lines)}):\n{body}\n"
     )
+    if previous is not None:
+        v = previous.view
+        d = diff_facts(previous.facts, lines)
+        changes = [f'- {k}: was "{old}", now "{new}"' for k, old, new in d["changed"][:15]]
+        changes += [f"- new: {t}" for t in d["added"][:10]]
+        changes += [f"- gone: {t}" for t in d["removed"][:10]]
+        stances = "; ".join(f"{s['label']}: {s['text']}" for s in v.get("stances", []))
+        text += (
+            f"\nYour previous view, written {previous.created_at.astimezone(IST):%d %b %Y}: "
+            f'"{v.get("verdict", "")}" Stances: {stances}.\n'
+            "Facts that changed since then:\n"
+            + ("\n".join(changes) if changes else "- none")
+            + "\n"
+        )
+    return text + "\nWrite the view."
+
+
+# --- what changed --------------------------------------------------------------------------
+
+UNCOMPARED = ("Company",)  # changes every day: not a change worth reporting
+
+
+def fact_key(text: str) -> str:
+    """What a fact line is about, stable from one brief to the next: its label before the
+    colon ('Results Q2 FY27 (to 30 Sep 2026, consolidated)', 'Peer BEL (...)'), or the words
+    before its first figure ('Trailing P/E', 'Close')."""
+    body = re.sub(r"^\[[^\]]*\]\s*", "", text)
+    if ":" in body:
+        return body.split(":", 1)[0].strip()
+    return re.split(r"[\d₹(+−-]", body, maxsplit=1)[0].strip() or body
+
+
+def _keyed(facts) -> dict[str, str]:
+    """{key: text}; a key shared by several lines (two promises) keys each by its full text."""
+    texts = [x[1] for x in facts]
+    keys = [fact_key(t) for t in texts]
+    out = {}
+    for k, t in zip(keys, texts, strict=True):
+        out[k if keys.count(k) == 1 else re.sub(r"^\[[^\]]*\]\s*", "", t)] = t
+    return {k: t for k, t in out.items() if k not in UNCOMPARED}
+
+
+def _plain(text: str) -> str:
+    return re.sub(r"^\[[^\]]*\]\s*", "", text)
+
+
+def diff_facts(old, new, filed_only: bool = False) -> dict[str, list]:
+    """How two briefs' facts differ: {changed: [(key, old text, new text)], added: [text],
+    removed: [text]}. `filed_only` leaves out Market facts, which move with every close."""
+    a, b = _keyed(old), _keyed(new)
+    if filed_only:
+        a = {k: t for k, t in a.items() if not t.startswith(f"[{rs.MARKET}]")}
+        b = {k: t for k, t in b.items() if not t.startswith(f"[{rs.MARKET}]")}
+    return {
+        "changed": [(k, _plain(a[k]), _plain(b[k])) for k in b if k in a and a[k] != b[k]],
+        "added": [_plain(b[k]) for k in b if k not in a],
+        "removed": [_plain(a[k]) for k in a if k not in b],
+    }
+
+
+def diff_views(old: dict, new: dict) -> list[str]:
+    """What changed in the view itself, in words."""
+    out = []
+    if old.get("verdict") != new.get("verdict"):
+        out.append(f'Verdict: was "{old.get("verdict")}"')
+    before = {s["label"]: s["text"] for s in old.get("stances", [])}
+    after = {s["label"]: s["text"] for s in new.get("stances", [])}
+    for label in after:
+        if label not in before:
+            out.append(f"New stance: {label}, {after[label]}")
+    for label in before:
+        if label not in after:
+            out.append(f"Stance dropped: {label}, {before[label]}")
+    old_tags = {d["title"]: d["tag"] for d in old.get("decisions", [])}
+    for d in new.get("decisions", []):
+        was = old_tags.get(d["title"])
+        if was and was != d["tag"]:
+            out.append(f"{d['title']}: {was} → {d['tag']}")
+    return out
 
 
 def write(
@@ -395,11 +485,19 @@ def write(
     )
     f = rs.facts(session, isin, today)
     lines = fact_lines(f, today)
-    known = allowed(lines)
+    previous = latest(session, isin)
+    # The previous facts' numbers are allowed too: "changed" may say what a figure was.
+    known = allowed(lines) + (allowed(previous.facts) if previous else [])
     fallback = _fallback_verdict(f)
     say(f"Asking {model} for the view on {len(lines)} facts...")
     view = llm.structured(
-        "brief", model, SYSTEM, prompt(f, lines), View, effort="medium", max_tokens=MAX_TOKENS
+        "brief",
+        model,
+        SYSTEM,
+        prompt(f, lines, previous),
+        View,
+        effort="medium",
+        max_tokens=MAX_TOKENS,
     )
     say("Checking every number against the facts...")
     problems = check(view, known)
@@ -407,7 +505,7 @@ def write(
         listed = ", ".join(sorted({n for ns in problems.values() for n in ns}))
         say(f"{len(problems)} parts used numbers not in the facts ({listed}); asking once more...")
         retry = (
-            prompt(f, lines)
+            prompt(f, lines, previous)
             + f"\n\nYour last answer used numbers that are not among the facts: {listed}. "
             "Write the view again using only the facts' numbers, as written or rounded."
         )
@@ -464,3 +562,99 @@ def estimate(lines: list[tuple[str, str]], model: str) -> Decimal:
     inp, out = PRICES.get(model, PRICES["claude-sonnet-5-5"])
     tokens_in = Decimal(sum(len(t) for _, t in lines) / 4 + 1200)
     return (tokens_in * inp + Decimal(2500) * out) / Decimal(1_000_000)
+
+
+# --- keeping the briefs of the stocks owned current ----------------------------------------
+
+REFRESH_LIMIT = 5  # views written per scheduled run
+MAJOR_EVENT = 4  # an event this important (or more) since the last view calls for a new one
+
+
+def due(session: Session, isin: str) -> str | None:
+    """Why a stock's brief needs a new view, or None: no view yet, new results or a
+    balance sheet, a new red flag, or a major event since the last view."""
+    from sqlalchemy import func
+
+    from stock_news_analyzer.agents import qa
+    from stock_news_analyzer.models import BalanceSheet, Event, QuarterlyResult, RedFlag
+
+    last = latest(session, isin)
+    if last is None:
+        return "no view yet"
+    since = last.created_at
+    checks = (
+        (
+            "new results",
+            select(func.count(QuarterlyResult.id)).where(
+                QuarterlyResult.isin == isin, QuarterlyResult.updated_at > since
+            ),
+        ),
+        (
+            "a new balance sheet",
+            select(func.count(BalanceSheet.id)).where(
+                BalanceSheet.isin == isin,
+                BalanceSheet.updated_at > since,
+                BalanceSheet.as_written != {},
+            ),
+        ),
+        (
+            "a new red flag",
+            select(func.count(RedFlag.id)).where(RedFlag.isin == isin, RedFlag.created_at > since),
+        ),
+        (
+            "a major event",
+            select(func.count(Event.id)).where(
+                Event.isin == isin,
+                Event.created_at > since,
+                Event.importance >= MAJOR_EVENT,
+                Event.duplicate_of.is_(None),
+                qa.shown(),
+            ),
+        ),
+    )
+    for why, query in checks:
+        if session.scalar(query):
+            return why
+    return None
+
+
+def refresh(
+    session: Session,
+    llm: LLM,
+    limit: int = REFRESH_LIMIT,
+    progress: Callable[[str], None] | None = None,
+) -> tuple[list[tuple[str, str, ResearchBrief]], list[str]]:
+    """Write a new view for each stock owned whose brief is due (see `due`), at most `limit`.
+    Returns ([(symbol, why, brief)], errors)."""
+    from stock_news_analyzer.llm import BudgetExceeded, LLMError
+    from stock_news_analyzer.models import Company, WatchlistItem
+
+    say = progress or (lambda _line: None)
+    owned = (
+        session.execute(
+            select(Company)
+            .join(WatchlistItem, WatchlistItem.isin == Company.isin)
+            .where(WatchlistItem.owned)
+            .order_by(Company.nse_symbol)
+        )
+        .scalars()
+        .all()
+    )
+    written, errors = [], []
+    for company in owned:
+        if len(written) >= limit:
+            break
+        why = due(session, company.isin)
+        if why is None:
+            continue
+        symbol = company.nse_symbol or company.isin
+        say(f"{symbol}: {why}")
+        try:
+            written.append((symbol, why, write(session, llm, company.isin, progress=say)))
+        except BudgetExceeded as exc:
+            errors.append(f"{symbol}: {exc}")
+            break
+        except LLMError as exc:
+            session.rollback()
+            errors.append(f"{symbol}: {exc}")
+    return written, errors

@@ -65,6 +65,7 @@ THINKERS = [
     ("promises", "Promise ledger", "Sonnet", ["promises"]),
     ("orders", "Order books", "Haiku · Sonnet", ["orders", "order_book"]),
     ("themes", "Themes, read-across", "Haiku", ["themes"]),
+    ("briefs", "Research briefs", "Sonnet", ["brief"]),
     ("ask", "Ask (when you ask)", "Sonnet", ["ask"]),
 ]
 RULES = [("flags", "Red-flag rules", "no AI: events, holdings, late results")]

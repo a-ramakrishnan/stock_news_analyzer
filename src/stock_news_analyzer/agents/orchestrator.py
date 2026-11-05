@@ -252,6 +252,21 @@ def job_events(session: Session) -> str:
     return summary
 
 
+def job_briefs(session: Session) -> str:
+    from stock_news_analyzer.agents import brief
+    from stock_news_analyzer.llm import LLM
+
+    if not get_settings().anthropic_api_key:
+        return NO_KEY
+    written, errors = brief.refresh(session, LLM(session))
+    cost = sum(float(b.cost_usd) for _, _, b in written)
+    names = ", ".join(f"{s} ({why})" for s, why, _ in written) or "none due"
+    summary = f"{len(written)} research briefs written: {names}; ${cost:.4f}"
+    if errors:
+        raise JobError(summary, errors)
+    return summary
+
+
 def job_flags(session: Session) -> str:
     from stock_news_analyzer.agents import redflags
 
@@ -369,6 +384,7 @@ JOBS: dict[str, Callable[[Session], str]] = {
     "promises": job_promises,
     "orders": job_orders,
     "securities": job_securities,
+    "briefs": job_briefs,
     "digest": job_digest,
 }
 # `sna run all`: collect, then judge, then measure, then report.
@@ -389,6 +405,7 @@ RUN_ALL = (
     "themes",
     "flags",
     "bullion",
+    "briefs",
     "digest",
 )
 

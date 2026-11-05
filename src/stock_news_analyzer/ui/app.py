@@ -1652,7 +1652,9 @@ def ask_page() -> None:
     )
     with st.form("ask", border=False):
         question = st.text_area(
-            "Your question", placeholder="Which of my companies raised guidance this year?"
+            "Your question",
+            value=st.session_state.pop("ask-prefill", ""),
+            placeholder="Which of my companies raised guidance this year?",
         )
         name_col, button_col = st.columns([3, 1], vertical_alignment="bottom")
         save = name_col.text_input(
@@ -2111,7 +2113,18 @@ def research_page() -> None:
         load.clear()
         st.rerun()
     view = chosen["view"] if chosen else None
-    known = dict(chosen["facts"]) if chosen else {}
+    known = {x[0]: x[1] for x in chosen["facts"]} if chosen else {}
+    if chosen:
+        now = bf.diff_facts(chosen["facts"], bf.fact_lines(f, today), filed_only=True)
+        moved = len(now["changed"]) + len(now["added"]) + len(now["removed"])
+        if moved:
+            examples = [k for k, _, _ in now["changed"][:3]] + now["added"][:2]
+            st.info(
+                f"{moved} fact{'s' if moved > 1 else ''} changed since this view was written"
+                f" ({'; '.join(e[:60] for e in examples)}). Write a new view to bring it up "
+                "to date.",
+                icon=":material/update:",
+            )
 
     def cite(ids: list[str]) -> str:
         return " ".join(
@@ -2205,7 +2218,13 @@ def research_page() -> None:
         f"since {since}, {quarters_with_data} quarters of results and NSE's daily prices. Each "
         "figure carries its evidence: <b>Filed</b> as filed (XBRL or the exchange), <b>Read by "
         "AI</b> from a filing, <b>Market</b> from prices, <b>Stale</b> older than a half year, "
-        f"<b>Not disclosed</b> when the filings don't carry it.{written_note}</div></div>"
+        f"<b>Not disclosed</b> when the filings don't carry it.{written_note}</div>"
+        + (
+            f'<div class="sna-callout warn"><b>What changed</b> {esc(view["changed"])}</div>'
+            if view and view.get("changed")
+            else ""
+        )
+        + "</div>"
     )
 
     # --- the folds -----------------------------------------------------------------
@@ -2232,6 +2251,39 @@ def research_page() -> None:
             if subject["key_risk"]:
                 cards += f'<div class="sna-callout warn">Key risk: {esc(subject["key_risk"])}</div>'
             st.html(cards)
+
+    if chosen:
+        older = [b for b in versions if b["created_at"] < chosen["created_at"]]
+        if older:
+            before = older[0]
+            d = bf.diff_facts(before["facts"], chosen["facts"])
+            words = bf.diff_views(before["view"], chosen["view"])
+            count = len(d["changed"]) + len(d["added"]) + len(d["removed"])
+            with fold(
+                "What changed",
+                f"since {before['created_at'].astimezone(IST):%d %b} · {count} "
+                f"fact{'' if count == 1 else 's'}",
+            ):
+                if words:
+                    st.html(
+                        '<ul class="sna-check">'
+                        + "".join(f"<li>{esc(w)}</li>" for w in words)
+                        + "</ul>"
+                    )
+                if d["changed"]:
+                    html_table(
+                        [{"k": k, "was": a, "now": b} for k, a, b in d["changed"]],
+                        [("Fact", "k", None), ("Was", "was", None), ("Now", "now", None)],
+                    )
+                for label, items in (("New", d["added"]), ("Gone", d["removed"])):
+                    if items:
+                        st.html(
+                            f'<p><b>{label}</b></p><ul class="sna-check">'
+                            + "".join(f"<li>{esc(t)}</li>" for t in items)
+                            + "</ul>"
+                        )
+                if not (words or count):
+                    st.caption("Nothing changed.")
 
     with fold("Valuation", f"P/E {v.pe:.1f}" if v.pe else "no P/E"):
         if v.note:
@@ -2453,6 +2505,21 @@ def research_page() -> None:
                 f"{extra}</div>"
             )
         st.html(f'<div class="sna-cards">{"".join(cards)}</div>')
+        buttons = st.columns(min(len(f.peers), 4) or 1)
+        for i, p in enumerate(f.peers):
+            if buttons[i % len(buttons)].button(
+                f"Ask about {p.symbol}", key=f"ask-{f.isin}-{p.symbol}", icon=":material/forum:"
+            ):
+                st.session_state["ask-prefill"] = (
+                    f"What should I know about {p.name} ({p.symbol}) from its filings, results "
+                    "and news of the last year"
+                    + (
+                        "?"
+                        if p.is_subject
+                        else f", and how does it compare with {f.name} ({f.symbol})?"
+                    )
+                )
+                st.switch_page(PAGES["ask"])
 
     h = f.lean
     with fold("What moves this stock", f"leans {h.lean}" if h else "no evidence yet"):

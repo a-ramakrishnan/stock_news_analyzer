@@ -68,6 +68,8 @@ One stock on one page, laid out like a research note: the conclusion first, then
 
 **The view:** press **Write the view** (it needs an API key) and the analysis model writes, from the facts on the page only, a one-line verdict, a short summary, three stances (Favor, Watch, Avoid, Check), what the facts show and what they mean (**Observed → Read**, each citing the facts it rests on: hover a citation such as F12 to read it), why the stock and each peer matter and their key risk, and decision cards (Review now, Watch, Hold steady, Check) with the decisions to make now. Every number it writes is checked against the facts; anything with a number that isn't among them is dropped and listed under **Sources**, which shows all the facts the model was given. One view costs a few cents; each is kept, and earlier ones can be picked from **View**. It is an input for your decisions, not advice.
 
+**Keeping it current:** for the stocks you own, the scheduler writes a new view at 07:57 when there are new results, a new balance sheet, a red flag or a major event since the last one, and the 08:00 digest lists it. A new view is told what changed since the previous one and says so under the headline (**What changed**); the **What changed** fold compares it with the previous view, fact by fact. When filed facts have changed since the view you are reading was written, a note says so. **Ask about** buttons under the peers open **Ask** with a question about that company filled in.
+
 With a view, the brief gains the folds **The view**, **What to watch and decide** and **Sources**; it always has **Order book**, **Management** (promises kept and missed, management changes), **Ownership** (five quarters of shareholding) and **What moves this stock** (its lean and last 12 weeks).
 
 Trailing P/E is the close over the last four quarters' EPS as they were known on each day; it is left out while EPS is not positive. Balance sheets come with the **xbrl** job; `uv run sna results balance SYMBOL` lists what was read and from which tags.
@@ -171,7 +173,7 @@ All times are India time. Everything is fetched from public websites by your own
 
 ## Keeping it running
 
-- **The morning jobs** run from 07:10 to 08:00 and the digest is ready at 08:00. Your computer must be on and Docker Desktop running then; the start script starts the scheduler.
+- **The morning jobs** run from 07:10 to 08:00 (new Research brief views for the stocks you own at 07:57) and the digest is ready at 08:00. Your computer must be on and Docker Desktop running then; the start script starts the scheduler.
 - **If the computer was off,** nothing is lost: the next run picks up whatever was filed in between. Prices and deals also run at 07:05 and 07:06 the next morning, in case the computer was asleep in the evening.
 - **To catch up,** press **Catch up** on **System** or the **Agent map**. It appears when a job missed its scheduled run (shown in amber on the map), and runs each missed job in order, each from where it last stopped.
 - **To see what ran,** open **System**, or the job health on **Today**.

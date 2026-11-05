@@ -201,21 +201,29 @@ def sample(
 
 def draft(llm, cases: list[Case], model: str = DRAFT_MODEL, say=print) -> int:
     """Draft the expected events of unverified cases that have no draft yet, with a stronger
-    model than the one under test, for you to check."""
+    model than the one under test, for you to check. Each draft is saved as it comes; an API
+    error stops the run there, to be continued by running it again."""
+    from stock_news_analyzer.llm import LLMError
+
     done = 0
     for case in cases:
         exp = case.data.setdefault("expected", {})
         if case.verified or exp.get("drafted_by"):
             continue
-        answer = llm.structured(
-            "eval-draft",
-            model,
-            agent.SYSTEM,
-            agent._prompt([case.filing()]),
-            agent.EventsAnswer,
-            effort="high",
-            max_tokens=agent.MAX_TOKENS,
-        )
+        try:
+            answer = llm.structured(
+                "eval-draft",
+                model,
+                agent.SYSTEM,
+                agent._prompt([case.filing()]),
+                agent.EventsAnswer,
+                effort="high",
+                max_tokens=agent.MAX_TOKENS,
+            )
+        except LLMError as exc:
+            say(f"Stopped at {case.id}: {exc}")
+            say(f"{done} drafted this time; run draft again to continue from {case.id}.")
+            return done
         found = answer.filings[0].events if answer.filings else []
         exp["events"] = [
             {
@@ -246,18 +254,27 @@ def overview(cases: list[Case]) -> str:
             f"{e['event_type']}" + (f" Rs {e['value_cr']:g} cr" if e.get("value_cr") else "")
             for e in c.expected
         )
+        if not exp and not c.verified and not (d.get("expected") or {}).get("drafted_by"):
+            exp = "*not drafted*"
         lines.append(
             f"| {c.id} | {d.get('symbol') or d['isin']} | {str(d['published_at'])[:10]} | "
             f"{d.get('doc_type')} | {d.get('stratum')} | {exp or 'none'} | "
             f"{'yes' if c.verified else 'no'} |"
         )
-    strata = Counter(c.data.get("stratum", "").split(":")[0] for c in cases)
+    strata = Counter(
+        "no event then"
+        if c.data.get("stratum") == "found:none"
+        else "rejected by you"
+        if str(c.data.get("stratum")).startswith("rejected:")
+        else "events then"
+        for c in cases
+    )
     with_events = sum(1 for c in cases if c.expected)
     lines += [
         "",
         f"{len(cases)} cases: {with_events} with expected events, {len(cases) - with_events} "
-        f"without; {sum(c.verified for c in cases)} checked. Strata: "
-        + ", ".join(f"{k} {v}" for k, v in sorted(strata.items())),
+        f"without; {sum(c.verified for c in cases)} checked. What the agent said when it read "
+        "them: " + ", ".join(f"{k} {v}" for k, v in sorted(strata.items())),
     ]
     return "\n".join(lines)
 
@@ -503,6 +520,8 @@ def run(
                     "found": len(found),
                     "verified": case.verified,
                     "mode": mode,
+                    "expected_events": [_brief(e) for e in case.expected],
+                    "found_events": [_brief(e) for e in found],
                 },
             }
             if call is not None:
@@ -510,7 +529,79 @@ def run(
             _append(results, row)
     summary = summarize(results, errors)
     (out / "summary.md").write_text(summary["markdown"])
+    if mode == "agent" and session_factory is not None:
+        with session_factory() as session:
+            record(session, variant, model, cases, results, errors, summary)
+            session.commit()
     return summary
+
+
+def record(session, variant, model, cases, results: Path, errors: Path, summary: dict):
+    """Keep this run in the database (eval_runs, eval_results) for the Agent evals page:
+    the scores over every graded run of the variant so far, and each case's runs."""
+    from stock_news_analyzer.models import EvalResult, EvalRun
+
+    rows = _rows(results)
+    errs = _rows(errors)
+    graded = {(r["prompt_id"], r["rep"]) for r in rows}
+    open_errors = [e for e in errs if (e["prompt_id"], e["rep"]) not in graded]
+    run = EvalRun(
+        flow="events",
+        variant=variant,
+        model=model,
+        prompt_version=agent.PROMPT_VERSION,
+        cases=len(cases),
+        cases_verified=sum(c.verified for c in cases),
+        attempts=len(rows),
+        errors=len(open_errors),
+        scores={
+            **summary["mean"],
+            "margin": summary["margin"],
+            "recall": summary["recall"],
+            "precision": summary["precision"],
+            "specificity": summary["specificity"],
+            "passed": summary["passed"],
+            "failed": summary["failed"],
+        },
+        cost_usd=Decimal(str(round(summary["cost_usd"], 5))),
+        harness=harness_digest(),
+    )
+    session.add(run)
+    session.flush()
+    for r in rows:
+        session.add(
+            EvalResult(
+                run_id=run.id,
+                case_id=r["prompt_id"],
+                rep=r["rep"],
+                title=r.get("prompt"),
+                tags=r.get("tags", []),
+                grade=r["grade"],
+                detail={k: r["meta"].get(k) for k in ("expected_events", "found_events")},
+                latency_s=r.get("latency_s"),
+                cost_usd=Decimal(str(r.get("cost_usd", 0))),
+            )
+        )
+    for e in open_errors:
+        session.add(
+            EvalResult(
+                run_id=run.id,
+                case_id=e["prompt_id"],
+                rep=e["rep"],
+                error=f"{e['class']}: {e.get('error', '')}"[:500],
+            )
+        )
+    return run
+
+
+def _rows(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    return [json.loads(x) for x in path.read_text().splitlines() if x.strip()]
+
+
+def _brief(e: dict) -> dict:
+    return {k: e.get(k) for k in ("event_type", "value_cr", "headline") if e.get(k) is not None}
 
 
 class _Failed(Exception):
@@ -525,16 +616,7 @@ def _append(path: Path, row: dict) -> None:
 
 
 def summarize(results: Path, errors: Path) -> dict:
-    rows = (
-        [json.loads(x) for x in results.read_text().splitlines() if x.strip()]
-        if (results.exists())
-        else []
-    )
-    errs = (
-        [json.loads(x) for x in errors.read_text().splitlines() if x.strip()]
-        if (errors.exists())
-        else []
-    )
+    rows, errs = _rows(results), _rows(errors)
     n = len(rows)
     mean = {m["id"]: (sum(r["grade"][m["id"]] for r in rows) / n if n else 0.0) for m in METRICS}
     p = mean["correct"]
@@ -586,9 +668,12 @@ def summarize(results: Path, errors: Path) -> dict:
             f"- {e['prompt_id']} rep {e['rep']}: {e['class']} {e.get('error', '')[:120]}"
             for e in errs
         ]
+    passed = sum(all(r["grade"]["correct"] == 1 for r in rs_) for rs_ in by_case.values())
     return {
         "n": n,
         "errors": len(errs),
+        "passed": passed,
+        "failed": len(by_case) - passed,
         "mean": mean,
         "margin": margin,
         "recall": recall,

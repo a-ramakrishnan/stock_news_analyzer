@@ -1,6 +1,6 @@
 # Indian Market News Intelligence System — Design
 
-Version 1.31 · Nov 5, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
+Version 1.32 · Nov 5, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
 
 ## Goal and principles
 
@@ -311,6 +311,7 @@ A single Python codebase, one PostgreSQL database and a scheduler are enough; ev
 | LLM | Claude API with structured outputs: Haiku 5.5 for triage, Sonnet 5.5 for analysis; every call logged with its cost; monthly budget cap ($20) | Reliable extraction into fixed schemas |
 | Scheduling | APScheduler, cron times in `config/schedule.yaml`: filings every 30 minutes 07:00–23:30, news and triage hourly, prices and deals in the evening, explanations 07:45, digest 08:00 | Simple and dependable |
 | Interface | Markdown digest saved under `data/digests/` and a Streamlit dashboard (Plotly charts); email later (Telegram set aside for now) | Checking the data in a browser was more useful early than expected |
+| Evals | Per agent: fixed cases with checked answers, graded by code (`sna eval`), every run kept in `eval_runs`/`eval_results` and shown on the Agent evals page | Prompt and model changes are judged by a number, not a feeling |
 
 | Phase | Builds | Gate before the next phase |
 | --- | --- | --- |

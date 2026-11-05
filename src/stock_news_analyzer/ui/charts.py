@@ -382,3 +382,35 @@ def pe_chart(v, dark: bool = False) -> go.Figure:
     fig.update_layout(showlegend=False)
     fig.update_xaxes(tickformat="%b %Y")
     return _layout(fig, t, 260)
+
+
+def eval_history_chart(runs: list[dict], dark: bool = False) -> go.Figure:
+    """An agent's eval score run by run, one line per variant, with its 95% margin as a band
+    of error bars: a change smaller than the bars may be chance."""
+    t = theme(dark)
+    fig = go.Figure()
+    colours = [t.stock, t.sector, t.nifty, t.muted]
+    variants = sorted({r["variant"] for r in runs}, key=lambda v: (v != "baseline", v))
+    for i, variant in enumerate(variants):
+        mine = sorted((r for r in runs if r["variant"] == variant), key=lambda r: r["finished_at"])
+        fig.add_trace(
+            go.Scatter(
+                x=[r["finished_at"] for r in mine],
+                y=[100 * r.get("correct", 0) for r in mine],
+                error_y=dict(
+                    type="data", array=[100 * (r.get("margin") or 0) for r in mine], width=4
+                ),
+                mode="lines+markers",
+                name=variant,
+                line=dict(color=colours[i % len(colours)], width=2),
+                customdata=[[r["model"], r.get("passed", 0), r.get("failed", 0)] for r in mine],
+                hovertemplate=(
+                    "%{x|%d %b %Y %H:%M}: %{y:.0f}% correct<br>%{customdata[0]}, "
+                    "%{customdata[1]} cases passing, %{customdata[2]} failing<extra>"
+                    f"{variant}</extra>"
+                ),
+            )
+        )
+    fig.update_yaxes(range=[0, 105], ticksuffix="%", title=None)
+    fig.update_layout(hovermode="closest")
+    return _layout(fig, t, 260)

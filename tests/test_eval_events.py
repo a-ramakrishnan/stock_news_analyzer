@@ -269,6 +269,31 @@ def test_run_grades_resumes_and_records_failures(loaded, tmp_path):  # noqa: F81
     state = json.loads((flow / "_state.json").read_text())
     assert state["metrics"][0] == {"id": "correct", "label": "Correct", "kind": "binary"}
 
+    # the run is kept in the database for the Agent evals page
+    from stock_news_analyzer.models import EvalResult, EvalRun
+    from stock_news_analyzer.ui import queries
+
+    with Session(bind) as check:
+        run_row = check.query(EvalRun).one()
+        assert (run_row.flow, run_row.variant, run_row.attempts, run_row.errors) == (
+            "events",
+            "baseline",
+            4,
+            2,
+        )
+        assert run_row.scores["passed"] == 1 and run_row.scores["failed"] == 1
+        assert run_row.cases_verified == 3 and run_row.harness == ev.harness_digest()
+        assert check.query(EvalResult).filter(EvalResult.error.isnot(None)).count() == 2
+        overview = queries.eval_overview(check)
+        assert overview["events"]["current"]["correct"] == 0.5
+        listed = queries.eval_cases(check, run_row.id)
+        assert [c["passing"] for c in listed] == [False, False, True]  # failing first
+        broken = next(c for c in listed if c["errors"])
+        assert broken["runs"] == 0 and broken["errors"][0].startswith("bad_answer")
+        wrong = next(c for c in listed if c["runs"] and not c["passing"])
+        assert wrong["detail"]["expected_events"] == []
+        assert wrong["detail"]["found_events"][0]["event_type"] == "other"
+
     asked = len(client.requests)
     run()  # resume: only the failed attempts are tried again
     assert len(client.requests) - asked >= 2
@@ -284,3 +309,72 @@ def test_oracle_and_null_check_the_grader_for_free(loaded, tmp_path):  # noqa: F
     assert oracle["mean"]["correct"] == 1.0
     assert null["mean"]["correct"] == pytest.approx(1 / 3)  # only the routine filing
     assert yaml.safe_load(cases[0].path.read_text())["expected"]["verified"] is True
+
+
+@pytest.mark.db
+def test_the_agent_evals_page_shows_runs(loaded, test_database_url, monkeypatch, tmp_path):  # noqa: F811
+    from decimal import Decimal
+
+    from streamlit.testing.v1 import AppTest
+
+    from stock_news_analyzer.config import get_settings
+    from stock_news_analyzer.models import EvalResult, EvalRun
+
+    for variant, correct, passed in (
+        ("baseline", 0.70, 28),
+        ("baseline", 0.80, 32),
+        ("v1", 0.9, 36),
+    ):
+        run = EvalRun(
+            flow="events",
+            variant=variant,
+            model="claude-haiku-5-5",
+            cases=40,
+            cases_verified=38,
+            attempts=120,
+            errors=1,
+            scores={
+                "correct": correct,
+                "detect": 0.95,
+                "types": 0.9,
+                "amounts": 0.85,
+                "quotes": 0.97,
+                "margin": 0.09,
+                "recall": 0.96,
+                "precision": 0.9,
+                "specificity": 0.8,
+                "passed": passed,
+                "failed": 40 - passed,
+            },
+            cost_usd=Decimal("0.05"),
+        )
+        loaded.add(run)
+        loaded.flush()
+        loaded.add(
+            EvalResult(
+                run_id=run.id,
+                case_id="doc1",
+                rep=0,
+                title="LT: Credit rating",
+                tags=["found:credit_rating", "credit_rating"],
+                grade={"correct": 0, "detect": 1, "types": 1, "amounts": 0, "quotes": 1},
+                detail={
+                    "expected_events": [{"event_type": "credit_rating", "value_cr": 450}],
+                    "found_events": [{"event_type": "credit_rating", "value_cr": 4.5}],
+                },
+            )
+        )
+    loaded.commit()
+    monkeypatch.setenv("DATABASE_URL", test_database_url)
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    get_settings.cache_clear()
+    at = AppTest.from_string(
+        "from stock_news_analyzer.ui import app\napp.evals_page()", default_timeout=30
+    )
+    at.run()
+    assert not at.exception, at.exception
+    values = {m.label: m.value for m in at.metric}
+    assert values["Agents with an eval"] == "1 of 10"
+    assert values["Fully correct"] == "80%" and values["Cases failing"] == "8"
+    assert any("doc1" in e.label for e in at.expander)
+    get_settings.cache_clear()

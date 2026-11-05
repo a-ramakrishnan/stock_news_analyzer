@@ -133,6 +133,7 @@ def test_charts_build(loaded):  # noqa: F811
         "settings_page",
         "system_page",
         "agents_page",
+        "evals_page",
         "guide_page",
     ],
 )
@@ -167,6 +168,7 @@ def test_every_page_renders(loaded, test_database_url, monkeypatch, tmp_path, pa
         "Settings",
         "System",
         "Agent map",
+        "Agent evals",
         "Guide",
     }
 
@@ -186,7 +188,7 @@ def test_main_registers_every_page():
         "st.markdown(str(sum(len(p) for p in groups.values())))\n"
     )
     at.run()
-    assert not at.exception and at.markdown[-1].value == "17"
+    assert not at.exception and at.markdown[-1].value == "18"
     assert at.markdown[-2].value == "Today,Research,Library,Set up,Help"
 
 
@@ -217,7 +219,7 @@ def test_guide_opens_at_the_linked_section():
     at.run()
     assert not at.exception
     opened = [e.label for e in at.expander if e.proto.expanded]
-    assert opened == ["Words used"] and len(at.expander) == 15
+    assert opened == ["Words used"] and len(at.expander) == 16
     assert any("Book-to-bill" in m.value for m in at.markdown)
 
 

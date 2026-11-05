@@ -15,6 +15,10 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.32 · Nov 5, 2026
+
+- Steps 33–34: evals. agent-design.md gains an Evals section: the Event Extractor's eval (40 filings with answers you check, scored by code on fully correct, detect, types, amounts and quotes, three runs a case), every run kept in the database (migration 0031) and shown on a new **Agent evals** page next to the Agent map, the guardrails on the eval itself, and which agents follow and how each could be graded. design.md's tech stack. Trying it on a clean Mac and Windows becomes step 35.
+
 ### 1.31 · Nov 5, 2026
 
 - Step 32: shared data for other projects. Read-only views in a `shared` schema and a `research_reader` login (migration 0030), documented as a versioned contract in docs/shared-data.md, for the separate stock_deep_research project. Trying it on a clean Mac and Windows becomes step 33. design.md's architecture

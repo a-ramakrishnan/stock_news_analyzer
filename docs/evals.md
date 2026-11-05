@@ -45,4 +45,4 @@ Results go to `.claude/hillclimb/events/<variant>/`:
 - `traces/`: what the agent saw and said
 - `errors.jsonl`: failed calls, which are kept apart from wrong answers
 
-Each row is written as it finishes; rerunning resumes where it stopped. `--variant v1 --model claude-sonnet-5-5` measures a change next to the baseline.
+Each row is written as it finishes; rerunning resumes where it stopped. Every run is also kept in the database (`eval_runs`, `eval_results`) and shown on the **Agent evals** page: each agent's score, its passing and failing cases, and its history. `--variant v1 --model claude-sonnet-5-5` measures a change next to the baseline.

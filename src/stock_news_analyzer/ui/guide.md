@@ -28,7 +28,7 @@ Start the system with **start.command** (Mac) or **start.bat** (Windows) in its 
 
 ## The pages
 
-The sidebar groups the pages: **Today** (what changed, and the agent map), **Research** (one stock, questions, themes), **Library** (every filing and article), **Set up** (stocks, settings, system) and **Help**.
+The sidebar groups the pages: **Today** (what changed, the agent map and the agent evals), **Research** (one stock, questions, themes), **Library** (every filing and article), **Set up** (stocks, settings, system) and **Help**.
 
 - **Today:** index levels, a card for each stock (Stocks I own first), the latest digest, recent red flags, and whether the morning jobs ran.
 - **Portfolio:** each stock you own with a lean and the evidence behind it, and your sectors against the Nifty 50; explained in its own section below.
@@ -50,6 +50,7 @@ The sidebar groups the pages: **Today** (what changed, and the agent map), **Res
 - **Agent map:** how an agentic system works, shown on this one: the collectors perceive, the scheduler plans, the AI agents think, the database remembers, tools act, and guardrails and the run log watch over it, each with a line on what that part does in any agentic system.
   - **Today, live:** each box shows whether its job is running, worked or failed, its next run, and its AI calls and cost today; a faint line traces the path of each job running now; a feed explains each of today's runs in plain words.
   - **Replay the last 7 days:** press Play to watch information move through the system, today's or the week's, at 10 minutes, an hour or six hours a second; drag the slider to jump to a time. Each run lights up its box, a thin line traces the information from source to memory or from memory through Claude and back, and the feed narrates it.
+- **Agent evals:** how well each AI agent does its job, measured on fixed cases; explained in its own section below.
 - **Guide:** this page.
 
 ## Research brief
@@ -156,6 +157,20 @@ Some of the work uses Anthropic's Claude models through your own API key, which 
 These work without any AI: collecting filings and news, prices and unusual days, bulk and block deals, results from XBRL files, shareholding patterns, overdue-results and shareholding red flags, the digest and this dashboard.
 
 **Cost:** a monthly budget, set on **Settings** ($20 by default), stops all AI calls when reached. Reading a new stock's history costs the most, once. After that a 15-stock watchlist costs a few dollars a month, and an Ask question a few cents. **System** shows this month's spend by task.
+
+## Agent evals
+
+An eval measures one AI agent on a fixed set of cases whose answers you have checked, so you can tell whether a change (a new prompt, a cheaper model) made it better or worse instead of guessing. The first is for the Event Extractor, which reads filings into events; the others follow one by one.
+
+- **The cards:** one per AI agent. One with an eval shows the share of cases it gets **fully correct** (the events found, their types and amounts all right), the change since the last run, how many cases pass every run and how many fail, and recall (filings with events it caught), precision (events it reported that were real) and specificity (routine filings it left alone). Hover on the score for its margin: with 40 cases run three times it is about ±9 points, so a smaller change may be chance. A badge says when some answers are not checked yet or calls failed. An agent without an eval says how it could be measured.
+- **Look closer:** an agent's score run by run, one line per variant (the baseline, and any change you try), the latest run of each variant side by side, and its cases, failing ones first. Open a failing case to see what was expected next to what the agent found.
+- **Running one** (in the project folder, in a terminal):
+  1. `uv run sna eval events sample` picks 40 filings from your database.
+  2. `uv run sna eval events draft` has Opus draft each answer, for about $0.30.
+  3. Check each file in `evals/events/cases/` and set `verified: true`.
+  4. `uv run sna eval events run` scores the agent, for well under a dollar.
+
+  The page shows the run as soon as it finishes. docs/evals.md has the details.
 
 ## Where the data comes from
 

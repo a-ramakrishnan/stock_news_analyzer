@@ -1326,3 +1326,110 @@ def briefs(session: Session, isin: str) -> list[dict]:
         }
         for b in brief.versions(session, isin)
     ]
+
+
+# --- agent evals --------------------------------------------------------------------
+
+# The agents (by their Agent map job) that have an eval, and its name (`sna eval <flow>`).
+EVAL_FLOWS = {"events": "events"}
+# How each agent without an eval yet could be graded: the Agent evals page says so.
+EVAL_PLANS = {
+    "triage": "Relevance, topic and sentiment against your labels, by code.",
+    "results": "Figures read from result PDFs against the XBRL filings, by code.",
+    "explain": "Move explanations against a rubric, by a judge model.",
+    "concalls": "Guidance and quotes against the transcript, by code and a judge.",
+    "promises": "Promises and their status against the calls, by code and a judge.",
+    "orders": "Clients and order values against the filings, by code.",
+    "themes": "Theme tags against your labels, by code.",
+    "briefs": "The view against its facts and a rubric, by code and a judge.",
+    "ask": "Answers to fixed questions against a rubric, by a judge.",
+}
+
+
+def eval_runs(session: Session, flow: str) -> list[dict]:
+    """Every run of a flow's eval, newest first."""
+    from stock_news_analyzer.models import EvalRun
+
+    runs = session.scalars(
+        select(EvalRun)
+        .where(EvalRun.flow == flow)
+        .order_by(EvalRun.finished_at.desc(), EvalRun.id.desc())
+    ).all()
+    return [
+        {
+            "id": r.id,
+            "variant": r.variant,
+            "model": r.model,
+            "prompt_version": r.prompt_version,
+            "finished_at": r.finished_at,
+            "cases": r.cases,
+            "cases_verified": r.cases_verified,
+            "attempts": r.attempts,
+            "errors": r.errors,
+            "cost_usd": float(r.cost_usd or 0),
+            **{k: v for k, v in (r.scores or {}).items()},
+        }
+        for r in runs
+    ]
+
+
+def eval_overview(session: Session) -> dict[str, dict]:
+    """For each agent with an eval: its latest run of each variant (the baseline first), the
+    run before the latest baseline (for the change), and the history."""
+    out = {}
+    for job, flow in EVAL_FLOWS.items():
+        runs = eval_runs(session, flow)
+        latest: dict[str, dict] = {}
+        for r in runs:
+            latest.setdefault(r["variant"], r)
+        baseline = [r for r in runs if r["variant"] == "baseline"]
+        out[job] = {
+            "flow": flow,
+            "runs": runs,
+            "latest": dict(sorted(latest.items(), key=lambda kv: kv[0] != "baseline")),
+            "current": baseline[0] if baseline else (runs[0] if runs else None),
+            "previous": baseline[1] if len(baseline) > 1 else None,
+        }
+    return out
+
+
+def eval_cases(session: Session, run_id: int) -> list[dict]:
+    """A run's cases: how many of its runs were right, the mean scores, what was expected and
+    what the agent found (from a wrong run when there is one), failed calls. Failing first."""
+    from stock_news_analyzer.models import EvalResult
+
+    rows = session.scalars(select(EvalResult).where(EvalResult.run_id == run_id)).all()
+    cases: dict[str, dict] = {}
+    for r in rows:
+        c = cases.setdefault(
+            r.case_id,
+            {
+                "case": r.case_id,
+                "title": r.title,
+                "tags": r.tags or [],
+                "runs": 0,
+                "right": 0,
+                "errors": [],
+                "grades": [],
+                "detail": None,
+            },
+        )
+        if r.error:
+            c["errors"].append(r.error)
+            continue
+        c["title"] = c["title"] or r.title
+        c["tags"] = c["tags"] or r.tags or []
+        c["runs"] += 1
+        right = (r.grade or {}).get("correct") == 1
+        c["right"] += right
+        c["grades"].append(r.grade or {})
+        if c["detail"] is None or not right:
+            c["detail"] = r.detail
+    out = []
+    for c in cases.values():
+        grades = c.pop("grades")
+        metrics = {k for g in grades for k in g}
+        c.update({k: sum(g.get(k, 0) for g in grades) / len(grades) for k in sorted(metrics)})
+        c["passing"] = c["runs"] > 0 and c["right"] == c["runs"]
+        out.append(c)
+    return sorted(out, key=lambda c: (c["passing"], c.get("correct", 0), c["case"]))

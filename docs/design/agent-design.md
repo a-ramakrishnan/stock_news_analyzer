@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.31 · Nov 5, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.32 · Nov 5, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -624,6 +624,15 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 3. Save useful questions as recurring reports.
 
 > Tweet: Agent #17: Ask the database. "Which capital goods companies raised margin guidance two quarters in a row?" Plain English in, cited answer out, from my own data. #BuildInPublic
+
+## Evals
+
+An agent's quality is measured, not judged by feel: each AI agent gets an eval, a fixed set of cases whose answers a person has checked, a runner that calls the agent's real entry point on each, and a grader. Prompt and model changes are kept only when the eval shows they help by more than its margin. One agent at a time, starting with the one the most pages rest on.
+
+- **Event Extractor (built, steps 33–34):** 40 filings frozen from the database (25 the agent found events in, spread over the types, the ones you rejected first; 15 routine), answers drafted by Opus and checked by you, scored by code on Haiku's raw answer before the QA Checker: fully correct (the headline), detect, types F1, amounts within 1%, quotes found; recall, precision and specificity on the filings; three runs a case, about ±9 points at 95%. `sna eval events sample / draft / show / run`; docs/evals.md.
+- **Every run is kept** in `eval_runs` and `eval_results` (migration 0031), so the **Agent evals** page can show each agent's score, its passing and failing cases and its history beside the Agent map, though the eval runs outside Docker. The runner also writes results, transcripts and a summary under `.claude/hillclimb/<agent>/`.
+- **Guardrails on the eval itself:** failed calls are kept apart from wrong answers; the served model is checked against the one asked for; a changed runner or grader needs your approval before it scores again; oracle and null modes check the grader for free.
+- **Next, by how each could be graded:** the Results reader against the XBRL filings (exact, by code), News triage against your labels, Order books against the filings, then the prose agents (Move explainer, Earnings calls, Research briefs, Ask) by a rubric and a judge model.
 
 ## Build-in-public plan
 

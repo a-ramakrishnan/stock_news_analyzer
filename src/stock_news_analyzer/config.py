@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     llm_model_analysis: str = "claude-sonnet-5-5"
     # LLM calls stop for the rest of the month (India time) once this much has been spent.
     llm_monthly_budget_usd: float = 20.0
+    # What each AI call was sent and answered is kept this many days (0: not kept).
+    llm_trace_days: int = 30
 
     # Scheduled jobs turned off on the Settings page, comma-separated.
     paused_jobs: str = ""
@@ -47,6 +49,7 @@ EDITABLE = {
     "llm_model_triage": str,
     "llm_model_analysis": str,
     "llm_monthly_budget_usd": float,
+    "llm_trace_days": int,
     "unusual_threshold": float,
     "paused_jobs": str,
 }

@@ -15,6 +15,10 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.35 · Nov 5, 2026
+
+- Step 37: traces of every AI call (migration 0033: llm_traces, llm_prompts), a Traces page in the Agents group, `sna llm traces / trace / prune`, kept 30 days by default (Settings), pruned with the digest. agent-design.md's Evals section.
+
 ### 1.34 · Nov 5, 2026
 
 - Step 36: labelling eval cases in the dashboard. An Eval cases page (what the agent read beside the editable expected answer; Confirm, Nothing to find, Exclude; history) and Add to the eval on Filings; an Agents group in the sidebar. agent-design.md's Evals section.

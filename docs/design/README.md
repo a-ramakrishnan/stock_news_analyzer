@@ -15,6 +15,10 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.29 · Nov 5, 2026
+
+- research-brief.md 1.1: step 31.2 as built. The view is one Sonnet call over about 40 numbered facts (now with the order book, promises, management changes, ownership, the lean and the top news) in a fixed shape (verdict, summary, stances, Observed → Read, Why it matters and Key risk, decision cards, decisions to make now); every number in it is checked against the facts, with one retry and the failing parts dropped; versions are saved (`research_briefs`, migration 0029). New folds on the page; `sna brief`. agent-design.md's Reporter
+
 ### 1.28 · Nov 5, 2026
 
 - research-brief.md 1.0: the Research brief, after the briefing grammar of Robyn's research results (lede with verdict, stances and ruled key numbers; numbered folds; an evidence badge on every figure; entity cards; Observed → Read; decision cards; sources). Step 31.1 built: point-in-time trailing P/E against its own history, the sector and the Nifty (`agents/valuation.py`); balance sheets and cash flows from the half-yearly and annual XBRL (`balance_sheets`, migration 0028); peers and what's coming (`agents/research.py`); the page. design.md's dashboard, agent-design.md's Reporter. Trying it on a clean Mac and Windows becomes step 32

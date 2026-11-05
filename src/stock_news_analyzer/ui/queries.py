@@ -1307,3 +1307,21 @@ def research(session: Session, isin: str):
     from stock_news_analyzer.agents import research as rs
 
     return rs.facts(session, isin)
+
+
+def briefs(session: Session, isin: str) -> list[dict]:
+    """The saved views of a stock's research brief, newest first (agents/brief.py)."""
+    from stock_news_analyzer.agents import brief
+
+    return [
+        {
+            "id": b.id,
+            "created_at": b.created_at,
+            "model": b.model,
+            "cost_usd": float(b.cost_usd),
+            "facts": b.facts,
+            "view": b.view,
+            "dropped": b.dropped,
+        }
+        for b in brief.versions(session, isin)
+    ]

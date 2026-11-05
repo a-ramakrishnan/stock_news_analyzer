@@ -27,6 +27,19 @@ The balance-sheet tags couldn't be checked against a real filing here (NSE isn't
 
 Tests cover the balance sheet and cash flow from an XBRL file (borrowings added up, a segment's figure and a quarter's cash flow left out, capex as an amount), a quarter end with no balance sheet due, dates in board-meeting notices, the next quarter end, trailing EPS across a split and before four quarters are known, a full valuation, the balance lines and ratios, what's coming, the stock first among its peers, figures turning Stale, the import recording a file without a balance sheet so the second run skips it, and the page rendering. The page was checked in light and dark on generated data. 389 tests pass.
 
+## 31.2: the view
+
+- **More facts** in `agents/research.py`: the order book summary, promises (credibility and the latest ones), management changes of two years, shareholding of five quarters, the lean and its reasons (from Portfolio's `assess`, now usable for any stock), and the most important news of 90 days.
+- **`agents/brief.py`**: the facts as numbered lines with their badges; one Sonnet call with a fixed answer shape (verdict, summary, three stances, Observed → Read pairs citing fact ids, Why it matters and Key risk for the stock and its peers, decision cards, decisions to make now); a check that every number in the answer is one of the facts' numbers, as written or rounded; one retry naming the numbers that weren't; what still fails is dropped and recorded. Saved in `research_briefs` (migration 0029).
+- **The page:** a "Write the view" button (with an API key) that shows its steps as it works ("Gathering the facts… Asking claude-sonnet-5-5 for the view on 38 facts… Checking every number…") and its cost; a choice of saved views; the verdict as the headline, the summary and the model's stances in the lede, and a note saying who wrote it, when, for how much and how many parts were dropped. New folds: The view (Observed → Read cards with their fact ids; hover one to read the fact), Order book, Management, Ownership, What moves this stock, What to watch and decide (decision cards and a checklist) and Sources (the numbered facts). Peer cards gain Why it matters and Key risk.
+- **`sna brief SYMBOL`** prints the latest view; `--write` writes a new one.
+
+The model couldn't be called from the build machine (no key there), so the write path was run with a stand-in that returned a hand-written view with one made-up figure ("improves 25% by March"): the check caught it, asked again, and dropped that decision card; the real figures (52%, ₹34,555 cr, 0.24×, P/E 65 against 70) passed. The first real view on the Mac is the live test.
+
+### Checked
+
+Tests cover numbers that count (rounded, labels, small counts, a fact's year) and ones that don't (a percentage, a P/E or an amount not in the facts, 1.3 for 1.17); dropping parts and falling back to the facts' headline for a verdict; writing a clean view in one call, saving it with its facts and cost, and a view with made-up numbers asked again then trimmed; the versions in order; and the page and `sna brief` showing a saved view. 393 tests pass.
+
 ## On the Mac
 
 ```
@@ -35,6 +48,9 @@ git pull
 make start
 uv run sna run xbrl
 uv run sna results balance LT
+uv run sna brief LT --write
 ```
+
+The last command writes the first view for LT (one Sonnet call, a few cents) and prints it; the page then shows it. Or press **Write the view** on Research brief.
 
 `make start` rebuilds and applies the database change; the xbrl run reads the balance sheets (a few minutes for the Nifty 50). Send the output of the last command if a line says "not in the file" for a company that does file it.

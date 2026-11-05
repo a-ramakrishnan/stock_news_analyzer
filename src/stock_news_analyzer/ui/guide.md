@@ -66,6 +66,10 @@ One stock on one page, laid out like a research note: the conclusion first, then
   5. **What's coming:** board meetings announced, results due (45 days after a quarter, 60 after the year), ex-dates, and management's promises falling due.
   6. **Red flags** still open.
 
+**The view:** press **Write the view** (it needs an API key) and the analysis model writes, from the facts on the page only, a one-line verdict, a short summary, three stances (Favor, Watch, Avoid, Check), what the facts show and what they mean (**Observed → Read**, each citing the facts it rests on: hover a citation such as F12 to read it), why the stock and each peer matter and their key risk, and decision cards (Review now, Watch, Hold steady, Check) with the decisions to make now. Every number it writes is checked against the facts; anything with a number that isn't among them is dropped and listed under **Sources**, which shows all the facts the model was given. One view costs a few cents; each is kept, and earlier ones can be picked from **View**. It is an input for your decisions, not advice.
+
+With a view, the brief gains the folds **The view**, **What to watch and decide** and **Sources**; it always has **Order book**, **Management** (promises kept and missed, management changes), **Ownership** (five quarters of shareholding) and **What moves this stock** (its lean and last 12 weeks).
+
 Trailing P/E is the close over the last four quarters' EPS as they were known on each day; it is left out while EPS is not positive. Balance sheets come with the **xbrl** job; `uv run sna results balance SYMBOL` lists what was read and from which tags.
 
 ## Portfolio

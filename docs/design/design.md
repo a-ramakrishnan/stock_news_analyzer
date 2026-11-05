@@ -1,6 +1,6 @@
 # Indian Market News Intelligence System — Design
 
-Version 1.28 · Nov 5, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
+Version 1.29 · Nov 5, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
 
 ## Goal and principles
 

@@ -98,6 +98,14 @@ class Facts:
     filings: int = 0
     news: int = 0
     first_filing: date | None = None
+    # For the folds the view rests on (31.2):
+    order_book: dict | None = None  # orders.summary, when the company reports an order book
+    credibility: dict | None = None  # promises kept, missed... and the score
+    promises: list[dict] = field(default_factory=list)  # the latest ones, due soonest first
+    management: list[dict] = field(default_factory=list)  # management changes, newest first
+    ownership: list[dict] = field(default_factory=list)  # shareholding, newest quarter first
+    lean: object | None = None  # portfolio.Holding: lean, reasons, last 12 weeks
+    top_news: list[dict] = field(default_factory=list)  # most important of the last 90 days
 
 
 def _badge_for_result(model: str | None) -> str:
@@ -403,4 +411,133 @@ def facts(session: Session, isin: str, today: date | None = None) -> Facts:
         filings=sum(t != "news" for t, _ in docs),
         news=sum(t == "news" for t, _ in docs),
         first_filing=min((p for _, p in docs), default=None),
+        order_book=_order_book(session, isin, today),
+        credibility=next((c for c in _credibility(session, today) if c["isin"] == isin), None),
+        promises=_promises(session, isin),
+        management=_management(session, isin, today),
+        ownership=_ownership(session, isin),
+        lean=_lean(session, company, today),
+        top_news=_top_news(session, isin, today),
     )
+
+
+def _order_book(session: Session, isin: str, today: date) -> dict | None:
+    from stock_news_analyzer.agents import orders
+
+    summary = orders.summary(session, isin, today)
+    return summary if summary.get("order_book_cr") or summary.get("inflow_cr") else None
+
+
+def _credibility(session: Session, today: date) -> list[dict]:
+    from stock_news_analyzer.agents.promises import credibility
+
+    return credibility(session, today)
+
+
+def _promises(session: Session, isin: str, limit: int = 8) -> list[dict]:
+    rows = session.scalars(
+        select(Promise).where(Promise.isin == isin).order_by(Promise.updated_at.desc()).limit(limit)
+    ).all()
+    return [
+        {
+            "metric": p.metric,
+            "target": p.target,
+            "due": p.due,
+            "status": p.status.replace("_", " "),
+            "note": p.status_note,
+            "statement": p.statement,
+        }
+        for p in rows
+    ]
+
+
+def _management(session: Session, isin: str, today: date) -> list[dict]:
+    from stock_news_analyzer.agents import qa
+    from stock_news_analyzer.models import Event
+
+    since = datetime.combine(today - timedelta(days=730), datetime.min.time(), IST)
+    return [
+        {
+            "when": e.published_at.astimezone(IST).date(),
+            "headline": e.headline,
+            "person": e.person,
+            "role": e.role,
+            "action": e.action,
+            "sentiment": e.sentiment,
+        }
+        for e in session.scalars(
+            select(Event)
+            .where(
+                Event.isin == isin,
+                Event.event_type == "management_change",
+                Event.duplicate_of.is_(None),
+                Event.published_at >= since,
+                qa.shown(),
+            )
+            .order_by(Event.published_at.desc())
+            .limit(10)
+        )
+    ]
+
+
+def _ownership(session: Session, isin: str) -> list[dict]:
+    from stock_news_analyzer.agents.holdings import history
+
+    def pct(x):
+        return float(x) / 100 if x is not None else None
+
+    return [
+        {
+            "quarter": r.quarter_end,
+            "promoter": pct(r.promoter_pct),
+            "fii": pct(r.fii_pct),
+            "dii": pct(r.dii_pct),
+            "mf": pct(r.mf_pct),
+            "retail": pct(r.retail_pct),
+            "pledged": pct(r.pledged_pct),
+        }
+        for r in history(session, isin, limit=5)
+    ]
+
+
+def _lean(session: Session, company: Company, today: date):
+    from stock_news_analyzer.agents import portfolio, study
+
+    cases = study.all_cases(session)
+    evidence = {r.kind: r for r in study.summarise(cases, portfolio.HORIZON)}
+    return portfolio.assess(session, company, None, cases, evidence, today)
+
+
+def _top_news(session: Session, isin: str, today: date, limit: int = 8) -> list[dict]:
+    from stock_news_analyzer.models import NewsTriage
+
+    since = datetime.combine(today - timedelta(days=90), datetime.min.time(), IST)
+    rows = session.execute(
+        select(Document, NewsTriage)
+        .join(DocumentCompany, DocumentCompany.document_id == Document.id)
+        .join(
+            NewsTriage,
+            (NewsTriage.document_id == Document.id) & (NewsTriage.isin == DocumentCompany.isin),
+        )
+        .where(
+            DocumentCompany.isin == isin,
+            Document.doc_type == "news",
+            Document.published_at >= since,
+            NewsTriage.relevant,
+            NewsTriage.duplicate_of.is_(None),
+        )
+        .order_by(NewsTriage.importance.desc(), Document.published_at.desc())
+        .limit(limit)
+    ).all()
+    return [
+        {
+            "when": d.published_at.astimezone(IST).date(),
+            "title": d.title,
+            "summary": t.summary,
+            "sentiment": t.sentiment,
+            "importance": t.importance,
+            "url": d.url,
+            "publisher": d.publisher,
+        }
+        for d, t in rows
+    ]

@@ -863,6 +863,23 @@ class BalanceSheet(Base):
     )
 
 
+class ResearchBrief(Base):
+    """An AI-written view of a stock's research brief (agents/brief.py): the facts it was
+    given (numbered lines), the view, and anything dropped because a number in it was not
+    among the facts. Every version is kept."""
+
+    __tablename__ = "research_briefs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    isin: Mapped[str] = mapped_column(ForeignKey("companies.isin"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    model: Mapped[str] = mapped_column(String(64))
+    cost_usd: Mapped[Decimal] = mapped_column(Numeric(10, 5), default=0)
+    facts: Mapped[list] = mapped_column(JSONB)  # [[id, text], ...]
+    view: Mapped[dict] = mapped_column(JSONB)
+    dropped: Mapped[list] = mapped_column(JSONB, default=list)
+
+
 class IndexMember(Base):
     """An index's constituents as NSE last listed them (`sna watchlist nifty50`)."""
 

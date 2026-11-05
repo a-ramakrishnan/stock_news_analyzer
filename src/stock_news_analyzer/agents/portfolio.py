@@ -84,6 +84,79 @@ def lean_of(score: float, flags: list[RedFlag]) -> str:
     return "neutral"
 
 
+def assess(
+    session: Session,
+    company: Company,
+    quantity: float | None,
+    cases: list,
+    evidence: dict,
+    today: date,
+) -> Holding:
+    """One stock's lean, reasons, red flags and last 12 weeks, owned or not (the Research
+    brief uses it for any stock). `cases` and `evidence` come from the event study."""
+    isin = company.isin
+    close = session.scalar(
+        select(PriceDaily.close)
+        .where(PriceDaily.isin == isin)
+        .order_by(PriceDaily.trade_date.desc())
+        .limit(1)
+    )
+    moves = list(
+        session.scalars(
+            select(StockMove).where(StockMove.isin == isin).order_by(StockMove.trade_date)
+        )
+    )
+    reasons = []
+    for case in cases:
+        if case.isin != isin:
+            continue
+        age = (today - case.at.astimezone(IST).date()).days
+        if age < 0 or age > LOOKBACK:
+            continue
+        row = evidence.get(case.kind)
+        median = row.median if row else None
+        n = row.cases if row else 0
+        strength = min(n / study.FEW, 1.0)
+        weight = strength * 0.5 ** (age / HALF_LIFE)
+        reasons.append(
+            Reason(
+                case=case,
+                median=median,
+                cases=n,
+                up=row.up if row else None,
+                weight=weight,
+                contribution=(median or 0.0) * weight,
+                since=_since(moves, case.day0),
+            )
+        )
+    reasons.sort(key=lambda r: -abs(r.contribution))
+    flags = list(
+        session.scalars(select(RedFlag).where(RedFlag.isin == isin, RedFlag.dismissed_at.is_(None)))
+    )
+    score = sum(r.contribution for r in reasons)
+    ws = weekly.weeks(session, isin, 12, today=today)
+    priced = [w for w in ws if w.excess is not None]
+    return Holding(
+        isin=isin,
+        symbol=company.nse_symbol or company.bse_code or isin,
+        name=company.name,
+        quantity=quantity,
+        close=float(close) if close is not None else None,
+        value=quantity * float(close) if quantity and close is not None else None,
+        industry=company.industry,
+        lean=lean_of(score, flags),
+        score=score,
+        reasons=reasons,
+        flags=flags,
+        weeks={v: sum(w.verdict == v for w in priced) for v in weekly.VERDICTS},
+        move_12w=(
+            _compound([w.stock for w in priced]) - _compound([w.stock - w.excess for w in priced])
+            if priced
+            else None
+        ),
+    )
+
+
 def holdings(session: Session, today: date | None = None) -> list[Holding]:
     """Each stock owned with its lean and reasons, the strongest lean first."""
     today = today or datetime.now(IST).date()
@@ -94,75 +167,17 @@ def holdings(session: Session, today: date | None = None) -> list[Holding]:
         .join(Company, Company.isin == WatchlistItem.isin)
         .where(WatchlistItem.owned)
     ).all()
-    out = []
-    for item, company in owned:
-        isin = company.isin
-        close = session.scalar(
-            select(PriceDaily.close)
-            .where(PriceDaily.isin == isin)
-            .order_by(PriceDaily.trade_date.desc())
-            .limit(1)
+    out = [
+        assess(
+            session,
+            company,
+            float(item.quantity) if item.quantity is not None else None,
+            cases,
+            evidence,
+            today,
         )
-        moves = list(
-            session.scalars(
-                select(StockMove).where(StockMove.isin == isin).order_by(StockMove.trade_date)
-            )
-        )
-        reasons = []
-        for case in cases:
-            if case.isin != isin:
-                continue
-            age = (today - case.at.astimezone(IST).date()).days
-            if age < 0 or age > LOOKBACK:
-                continue
-            row = evidence.get(case.kind)
-            median = row.median if row else None
-            n = row.cases if row else 0
-            strength = min(n / study.FEW, 1.0)
-            weight = strength * 0.5 ** (age / HALF_LIFE)
-            reasons.append(
-                Reason(
-                    case=case,
-                    median=median,
-                    cases=n,
-                    up=row.up if row else None,
-                    weight=weight,
-                    contribution=(median or 0.0) * weight,
-                    since=_since(moves, case.day0),
-                )
-            )
-        reasons.sort(key=lambda r: -abs(r.contribution))
-        flags = list(
-            session.scalars(
-                select(RedFlag).where(RedFlag.isin == isin, RedFlag.dismissed_at.is_(None))
-            )
-        )
-        score = sum(r.contribution for r in reasons)
-        ws = weekly.weeks(session, isin, 12, today=today)
-        priced = [w for w in ws if w.excess is not None]
-        quantity = float(item.quantity) if item.quantity is not None else None
-        out.append(
-            Holding(
-                isin=isin,
-                symbol=company.nse_symbol or company.bse_code or isin,
-                name=company.name,
-                quantity=quantity,
-                close=float(close) if close is not None else None,
-                value=quantity * float(close) if quantity and close is not None else None,
-                industry=company.industry,
-                lean=lean_of(score, flags),
-                score=score,
-                reasons=reasons,
-                flags=flags,
-                weeks={v: sum(w.verdict == v for w in priced) for v in weekly.VERDICTS},
-                move_12w=(
-                    _compound([w.stock for w in priced])
-                    - _compound([w.stock - w.excess for w in priced])
-                    if priced
-                    else None
-                ),
-            )
-        )
+        for item, company in owned
+    ]
     return sorted(out, key=lambda h: -abs(h.score))
 
 

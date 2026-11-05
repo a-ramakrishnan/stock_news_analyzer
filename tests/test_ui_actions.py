@@ -49,6 +49,7 @@ def test_add_edit_and_remove_from_the_dashboard(loaded):  # noqa: F811
         "symbol": "CUB",
         "name": "City Union Bank Limited",
         "owned": False,
+        "study_only": False,
         "sector_index": "Nifty Bank",
         "aliases": "CUB, City Union",
         "peers": "",
@@ -56,13 +57,18 @@ def test_add_edit_and_remove_from_the_dashboard(loaded):  # noqa: F811
     }
     assert list(rows)[:3] != ["CUB"]  # owned stocks are listed first
 
-    rows["CUB"].update(owned=True, aliases="CUB", sector_index="")
+    rows["CUB"].update(owned=True, study_only=True, aliases="CUB", sector_index="")
     rows["LT"]["peers"] = "ltf, LTTS, NOSUCH"
     rows["KARURVYSYA"]["remove"] = True
     assert actions.save_changes(loaded, list(rows.values())) == (2, 1, ["NOSUCH"])
     assert rows_after(loaded)["LT"]["peers"] == "LTF, LTTS"
     cub = loaded.query(WatchlistItem).filter_by(isin=CUB).one()
     assert cub.owned and cub.aliases == ["CUB"] and cub.sector_index is None
+    assert not cub.study_only  # a stock you own is followed fully
+    rows = {r["symbol"]: r for r in actions.tracked_stocks(loaded)}
+    rows["LT"]["study_only"] = True
+    assert actions.save_changes(loaded, list(rows.values())) == (1, 0, [])
+    assert loaded.query(WatchlistItem).filter_by(isin=LT).one().study_only
     assert {r["symbol"] for r in actions.tracked_stocks(loaded)} == {"LT", "MSUMI", "CUB"}
     assert actions.save_changes(loaded, actions.tracked_stocks(loaded)) == (0, 0, [])  # no change
 

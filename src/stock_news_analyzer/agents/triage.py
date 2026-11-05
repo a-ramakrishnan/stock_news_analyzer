@@ -11,7 +11,7 @@ import logging
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 
@@ -67,6 +67,7 @@ Sentiment = Literal["positive", "negative", "neutral", "mixed"]
 
 BATCH_SIZE = 15  # articles per LLM call (all about one company)
 DUPLICATE_WINDOW = timedelta(days=3)
+FRESH = timedelta(days=3)  # news this recent is triaged before any backlog
 DUPLICATE_SIMILARITY = 90  # rapidfuzz ratio of normalised headlines, 0-100
 SNIPPET_CHARS = 600
 
@@ -256,7 +257,11 @@ def triage_news(
     result = TriageResult()
     rows = pending(session, symbol, since)
     if limit:
-        rows = rows[:limit]
+        # The last few days' news first, so a backlog (stocks just added with their history)
+        # is triaged over the following runs behind it; then oldest first again, by company.
+        cutoff = datetime.now(UTC) - FRESH
+        rows.sort(key=lambda row: row[0].published_at < cutoff)
+        rows = sorted(rows[:limit], key=lambda row: (row[0].published_at, row[0].id))
     by_company: dict[str, tuple[Company, list[Document]]] = {}
     for doc, company in rows:
         by_company.setdefault(company.isin, (company, []))[1].append(doc)

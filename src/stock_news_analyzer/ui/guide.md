@@ -40,13 +40,25 @@ The sidebar groups the pages: **Today** (what changed, and the agent map), **Res
 - **Themes:** themes across your companies (data centres, defence, credit and so on), whether they are getting stronger, and **read-across**: an important order or event at one company that may matter to another.
 - **Ask:** questions in plain English, answered from your own data with the sources listed. Earlier questions are kept.
 - **What moves the stock:** how stocks moved on average, 1, 5 and 20 trading days after each kind of filing.
-- **Manage stocks:** add, edit and remove stocks; load a new stock's history.
+- **What news does to prices:** the evidence across every stock followed, explained in its own section below.
+- **Manage stocks:** add, edit and remove stocks; load a new stock's history. **Study only** marks a stock followed for the evidence, like the Nifty 50 added with `sna watchlist nifty50`: its filings, news, prices and results are collected and read by the cheap AI, but its earnings calls and unusual days are not, and on **Today** it is a row in one table instead of a card. Untick it to follow a stock fully; a stock you own always is.
 - **Settings:** the API key, the monthly AI budget and models, the unusual-day threshold, and which scheduled jobs run.
 - **System:** run any job now and watch it work; the schedule, how much is stored, recent runs and errors, and the AI spend this month by task.
 - **Agent map:** how an agentic system works, shown on this one: the collectors perceive, the scheduler plans, the AI agents think, the database remembers, tools act, and guardrails and the run log watch over it, each with a line on what that part does in any agentic system.
   - **Today, live:** each box shows whether its job is running, worked or failed, its next run, and its AI calls and cost today; a faint line traces the path of each job running now; a feed explains each of today's runs in plain words.
   - **Replay the last 7 days:** press Play to watch information move through the system, today's or the week's, at 10 minutes, an hour or six hours a second; drag the slider to jump to a time. Each run lights up its box, a thin line traces the information from source to memory or from memory through Claude and back, and the feed narrates it.
 - **Guide:** this page.
+
+## What news does to prices
+
+Rules of thumb, such as "a big order win lifts the stock" or "good results with a profit fall sink it", tested against what happened. Every event stored is a case: results (revenue and profit growth on the year, dated by the results filing), order wins (sized against the company's revenue over the last four quarters), events of importance 3 or more that passed the QA check, red flags, and bulk and block deals. For each kind:
+
+- **Median move:** half the cases did better than this against the Nifty 50 (or the sector index), half worse, over 1, 5 or 20 trading days from the first close that could reflect the news.
+- **Middle half:** a band from the 25th to the 75th percentile, a tick at the median and a line at zero. A band clear of the line is a consistent pattern.
+- **Rose:** how often the stock beat the benchmark; about 50% is a coin toss.
+- **Few cases:** under 10, a hint rather than evidence.
+
+Pick a kind to see the cases behind it. More stocks make the evidence firmer: `uv run sna watchlist nifty50` adds the Nifty 50 as study-only stocks. The cases overlap and the market moves for many reasons, so this shows what usually followed, not what caused it, and big news is often priced in before the close. It is an input for your decisions, not advice.
 
 ## Settings
 

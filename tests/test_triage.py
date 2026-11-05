@@ -266,3 +266,26 @@ def test_reset_forgets_results_for_one_stock_or_all(news):
     tr.triage_news(news, llm)
     assert tr.reset(news, "LT") == 2 and len(tr.pending(news)) == 2
     assert tr.reset(news) == 2 and len(tr.pending(news)) == 4
+
+
+@pytest.mark.db
+def test_fresh_news_is_triaged_before_a_backlog(news):
+    from datetime import UTC, datetime
+
+    fresh = Document(
+        source="news:google",
+        source_id="fresh-1",
+        doc_type="news",
+        title="L&T wins a new metro order",
+        published_at=datetime.now(UTC) - timedelta(hours=2),
+        publisher="A Paper",
+        url="https://example.com/fresh",
+        raw={},
+    )
+    news.add(fresh)
+    news.flush()
+    news.add(DocumentCompany(document_id=fresh.id, isin=LT))
+    news.commit()
+    llm, _ = _llm(news)
+    result = tr.triage_news(news, llm, limit=1)  # room for one: today's, not the oldest
+    assert result.triaged == 1 and news.get(NewsTriage, (fresh.id, LT)) is not None

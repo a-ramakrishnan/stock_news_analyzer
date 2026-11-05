@@ -359,26 +359,81 @@ def watchlist_history(
     The same as "Load history now" on Manage stocks, for several stocks in one go. Safe to run
     again; what is stored is skipped.
     """
-    from stock_news_analyzer.ui.actions import load_history
-
     start = datetime.strptime(since, "%Y-%m-%d").date()
-    problems = []
     with get_session() as session:
         companies = [_companies_or_exit(session, symbol)[0] for symbol in symbols]  # all, first
-        for company in companies:
-            typer.echo(f"== {company.nse_symbol}: {company.name}")
-            try:
-                errors = load_history(
-                    session, company.isin, get_settings().data_dir, since=start, progress=typer.echo
-                )
-            except Exception as exc:  # keep going with the next stock; what was stored is kept
-                session.rollback()
-                errors = [f"stopped: {type(exc).__name__}: {exc}"[:300]]
-            problems += [f"{company.nse_symbol}: {e}" for e in errors]
+        problems = _load_histories(session, companies, start)
     for problem in problems:
         typer.echo(f"error: {problem}")
     if problems:
         typer.echo("Run the same command again to fill the gaps.")
+        raise typer.Exit(1)
+
+
+def _load_histories(session, companies, start) -> list[str]:
+    """Load each company's history, keeping going after a failure; returns the problems."""
+    from stock_news_analyzer.ui.actions import load_history
+
+    problems = []
+    for n, company in enumerate(companies, 1):
+        typer.echo(f"== {n}/{len(companies)} {company.nse_symbol}: {company.name}")
+        try:
+            errors = load_history(
+                session, company.isin, get_settings().data_dir, since=start, progress=typer.echo
+            )
+        except Exception as exc:  # keep going with the next stock; what was stored is kept
+            session.rollback()
+            errors = [f"stopped: {type(exc).__name__}: {exc}"[:300]]
+        problems += [f"{company.nse_symbol}: {e}" for e in errors]
+    return problems
+
+
+@watchlist_app.command("nifty50")
+def watchlist_nifty50(
+    history: bool = typer.Option(True, help="Load the new stocks' history too (hours)."),
+    since: str = typer.Option("2023-10-01", help="History start date, YYYY-MM-DD."),
+) -> None:
+    """Add the Nifty 50's current members as study-only stocks, for the evidence page.
+
+    Study-only stocks are collected (filings, news, prices, results) and read by the cheap
+    agents, but get no earnings-call analysis, promises or move explanations, and no card on
+    Today; untick "Study only" on Manage stocks to follow one fully. Stocks already on the
+    watchlist keep their settings. Safe to run again, e.g. after NSE changes the index.
+    """
+    from sqlalchemy import select
+
+    from stock_news_analyzer.agents import xbrl_results
+    from stock_news_analyzer.models import WatchlistItem
+    from stock_news_analyzer.sources import securities
+    from stock_news_analyzer.sources.exchange_http import ExchangeClient
+    from stock_news_analyzer.ui.actions import index_names
+
+    members = securities.parse_index_members(securities.download(securities.NIFTY50_URL))
+    with get_session() as session:
+        result = wl.add_index_members(session, members, set(index_names(session)))
+        typer.echo(
+            f"Nifty 50: {len(members)} members; {len(result.added)} added as study-only, "
+            f"{len(result.present)} already on the watchlist."
+        )
+        for company in result.added:
+            item = session.scalar(select(WatchlistItem).where(WatchlistItem.isin == company.isin))
+            typer.echo(f"  + {company.nse_symbol:<12} {item.sector_index or 'Nifty 50 only'}")
+        if result.unknown:
+            typer.echo(
+                f"Not in the master list: {', '.join(result.unknown)}. Run: sna securities "
+                "refresh, then this again."
+            )
+        if not history or not result.added:
+            return
+        start = datetime.strptime(since, "%Y-%m-%d").date()
+        problems = _load_histories(session, result.added, start)
+        typer.echo("== Results from NSE's XBRL files (no AI)")
+        xbrl = xbrl_results.import_results(session, ExchangeClient(), progress=typer.echo)
+        problems += xbrl.errors
+    for problem in problems:
+        typer.echo(f"error: {problem}")
+    if problems:
+        typer.echo("Run sna watchlist history SYMBOL... for the stocks with gaps.")
         raise typer.Exit(1)
 
 
@@ -928,6 +983,44 @@ def run(
             failed = True
     if failed:
         raise typer.Exit(1)
+
+
+@app.command("evidence")
+def evidence(
+    days: int = typer.Option(5, help="Trading days after the news: 1, 5 or 20."),
+    sector: bool = typer.Option(False, help="Against the sector index, not the Nifty 50."),
+    kind: str = typer.Option(None, help="List the cases of kinds containing this text."),
+) -> None:
+    """What each kind of event did to the stock afterwards: the median move against the
+    market, the middle half of the moves, and how often the stock rose (an event study)."""
+    from stock_news_analyzer.agents import study
+    from stock_news_analyzer.sources.announcements import IST
+
+    if days not in study.HORIZONS:
+        typer.echo("--days must be 1, 5 or 20")
+        raise typer.Exit(1)
+    with get_session() as session:
+        cases = study.all_cases(session)
+    benchmark = "sector index" if sector else "Nifty 50"
+    typer.echo(f"{len(cases)} cases; moves against the {benchmark} over {days} trading days")
+    typer.echo(f"{'Kind of event':<52} {'cases':>5} {'median':>7} {'middle half':>15} {'rose':>5}")
+    for r in study.summarise(cases, days, sector=sector):
+        if r.median is None:
+            typer.echo(f"{r.kind:<52} {r.cases:>5}   (all {r.waiting} too recent)")
+            continue
+        middle = f"{r.low:+.1%}..{r.high:+.1%}" if r.low is not None else "–"
+        few = "  few cases" if r.few else ""
+        typer.echo(f"{r.kind:<52} {r.cases:>5} {r.median:>+7.1%} {middle:>15} {r.up:>5.0%}{few}")
+    if kind:
+        typer.echo("")
+        for c in cases:
+            if kind.lower() in c.kind.lower():
+                move = (c.sector_excess if sector else c.excess).get(days)
+                shown = f"{move:+.1%}" if move is not None else "–"
+                typer.echo(
+                    f"{c.at.astimezone(IST):%Y-%m-%d} {c.symbol:<12} {shown:>7}  "
+                    f"{c.kind}: {c.detail}"
+                )
 
 
 @app.command("runs")

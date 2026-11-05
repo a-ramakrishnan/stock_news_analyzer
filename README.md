@@ -52,7 +52,7 @@ New to the system? The [Guide](src/stock_news_analyzer/ui/guide.md) explains wha
 
 The start script opens Docker Desktop if it isn't running, starts the database and waits until it is ready, applies any database changes, then starts the dashboard and the scheduler, which runs the daily jobs while Docker Desktop is open. From Terminal, `make start` (or `./start.command`) does the same. **stop.command** / **stop.bat** stops everything; your data is kept. To update, replace the folder's files with a newer download (keep the `data` folder) and start again.
 
-**The app image:** GitHub Actions publishes it to `ghcr.io/a-ramakrishnan/stock_news_analyzer` for Intel and Apple Silicon, and the start script downloads the newest release each time it starts (`SNA_VERSION=0.1.0` in `.env` keeps one release). Without internet it uses the copy already downloaded, and with none it builds the image from the folder's code. A developer changing the code sets `SNA_PULL_POLICY=build` in `.env` (as `.env.example` does), so the image is built from their copy.
+**The app image:** GitHub Actions publishes it to `ghcr.io/a-ramakrishnan/stock_news_analyzer` for Intel and Apple Silicon, and the start script downloads the newest release each time it starts (`SNA_VERSION=0.1.0` in `.env` keeps one release). Without internet it uses the copy already downloaded, and with none it builds the image from the folder's code. In a git checkout (a copy made with `git clone`), the start script builds the image from the folder's code instead, since the published image only changes with a release; `SNA_PULL_POLICY` in `.env` overrides either choice.
 
 **Your data and privacy:** everything stays on your computer: the database in Docker, filing PDFs and digests in the `data` folder, and your API key in the database or `.env`. Your own `config/watchlist.yaml`, if you make one, is ignored by Git.
 
@@ -106,6 +106,7 @@ make watchlist
 | `make watchlist` | Load `config/watchlist.yaml` and show the watchlist |
 | `uv run sna watchlist add "State Bank of India" --owned --alias SBI` | Add or update a stock by name, NSE symbol, BSE code or ISIN |
 | `uv run sna watchlist add gold` | Track bullion (gold or silver) |
+| `uv run sna watchlist nifty50` | Add the Nifty 50's current members (NSE's list) as study-only stocks and load their history (hours; `--no-history` to add only). Safe to run again when NSE changes the index |
 | `uv run sna watchlist history HDFCBANK SBIN` | Load new stocks' filings, news, corporate actions, moves and labels since Oct 2023 (`--since` to change); the CLI form of "Load history now" |
 | `uv run sna watchlist list` | Show the watchlist with NSE/BSE codes and industry |
 | `uv run sna watchlist remove LT` | Stop tracking |
@@ -573,6 +574,7 @@ make scheduler
 | `make run-all` | Run every job once, now, in order: collect, triage, measure, explain, read calls, digest |
 | `uv run sna run news` | Run one job now: `filings`, `news`, `triage`, `deals`, `prices`, `xbrl`, `results`, `events`, `explain`, `concalls`, `promises`, `orders`, `themes`, `flags`, `bullion`, `securities` or `digest` |
 | `uv run sna run missed` | Run every job that missed its scheduled run (the computer was asleep or off), in order, each from where it last stopped; like **Catch up** on System |
+| `uv run sna evidence --days 5` | The same evidence in the terminal; `--sector` against the sector index, `--kind "order win"` lists the cases |
 | `uv run sna runs` | Recent runs: when, how long, result, errors |
 | `make digest` | Print the digest covering everything since the last scheduled digest (`--hours 24` for a fixed window) |
 | `make scheduler` | Start the orchestrator in Docker; it keeps running while Docker Desktop is open |
@@ -611,6 +613,7 @@ make ui
 | Themes | Theme strength, a theme's months and items, read-across |
 | Ask | Ask a question in plain English; the answer with sources, and earlier questions |
 | What moves the stock | Average return vs Nifty 50 after each kind of filing, 1, 5 and 20 trading days later |
+| What news does to prices | The evidence across every stock followed: for each kind of event (results by revenue and profit growth, order wins by size, events by type and tone, red flags, block and bulk deals), the median move against the Nifty 50 or the sector, the middle half of the moves, how often the stock rose, and the cases behind it |
 | Manage stocks | Search any listed company and add it to Stocks I own or Watchlist, with news aliases and a sector benchmark; edit or remove stocks; **Load history now** fetches a new stock's filings, news and moves since Oct 2023 |
 | Settings | The Anthropic API key, the monthly AI budget and this month's spend, the models, the unusual-day threshold, and which scheduled jobs run. Saved values take the place of `.env`; the scheduler picks them up within a minute |
 | System | Run any job now, with its progress shown; schedule, stored data, recent runs and errors |

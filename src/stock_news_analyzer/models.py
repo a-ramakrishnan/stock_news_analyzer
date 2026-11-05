@@ -65,6 +65,10 @@ class WatchlistItem(Base):
     commodity: Mapped[str | None] = mapped_column(String(16), unique=True)  # 'GOLD', 'SILVER'
     display_name: Mapped[str] = mapped_column(Text)
     owned: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Followed for the evidence only (the Nifty 50 brought in by `sna watchlist nifty50`):
+    # collected and read by the cheap agents, but no earnings calls, promises or move
+    # explanations, and no card on Today.
+    study_only: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     quantity: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     notes: Mapped[str | None] = mapped_column(Text)
     # Other names the news uses for the company, e.g. "L&T". Short ones match case-sensitively.

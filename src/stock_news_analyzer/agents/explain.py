@@ -147,8 +147,10 @@ def pending(
         query = query.where(StockMove.trade_date >= since)
     if until:
         query = query.where(StockMove.trade_date <= until)
-    if symbol:
+    if symbol:  # by hand, any stock
         query = query.where((Company.nse_symbol == symbol.upper()) | (Company.isin == symbol))
+    else:  # on schedule, not the study-only stocks: explaining moves is the costly model
+        query = query.where(WatchlistItem.study_only.is_(False))
     return session.execute(query).all()
 
 

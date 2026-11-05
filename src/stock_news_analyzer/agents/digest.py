@@ -469,10 +469,13 @@ def build_digest(session: Session, since: datetime, until: datetime) -> Digest:
     lines += _read_across(session, since, until)
 
     owned = dict(session.execute(select(WatchlistItem.isin, WatchlistItem.owned)).all())
+    study = set(session.scalars(select(WatchlistItem.isin).where(WatchlistItem.study_only)))
     total_filings = total_news = total_unusual = 0
     unusual_summary = []
 
-    for company, sector in sorted(companies, key=lambda c: c[0].nse_symbol or ""):
+    # Study-only stocks (the Nifty 50) appear in the sections above, not one by one.
+    followed = [(c, s) for c, s in companies if c.isin not in study]
+    for company, sector in sorted(followed, key=lambda c: c[0].nse_symbol or ""):
         symbol = company.nse_symbol or company.isin
         lines += ["", f"## {symbol}: {company.name}{' (owned)' if owned.get(company.isin) else ''}"]
 

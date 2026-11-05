@@ -211,3 +211,12 @@ def test_redo_only_unexplained_days(unusual):
     llm, _ = _llm(unusual, reply_with())
     ex.explain_moves(unusual, llm)
     assert ex.reset(unusual, only_unexplained=True) == 0  # now explained: kept
+
+
+def test_study_only_stocks_are_explained_only_by_hand(unusual):
+    from stock_news_analyzer.models import WatchlistItem
+
+    unusual.query(WatchlistItem).update({"study_only": True})
+    unusual.commit()
+    assert ex.pending(unusual) == []  # the scheduled run leaves them out
+    assert [c.nse_symbol for _, c in ex.pending(unusual, symbol="LT")] == ["LT"]

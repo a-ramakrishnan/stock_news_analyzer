@@ -102,3 +102,37 @@ def test_load_lists_candidates_for_ambiguous_entries(
     assert "tracking Larsen & Toubro Limited" in result.stdout
     assert "'Bank' could match more than one company" in result.stdout
     assert "KARURVYSYA" in result.stdout and "Add `symbol: <NSE SYMBOL>`" in result.stdout
+
+
+@pytest.mark.db
+def test_watchlist_nifty50_adds_study_only_stocks(session, test_database_url, monkeypatch):
+    from stock_news_analyzer.agents import watchlist as wl
+    from stock_news_analyzer.sources import securities
+    from stock_news_analyzer.sources.securities import (
+        parse_bse_scrips,
+        parse_nifty500,
+        parse_nse_equity_list,
+    )
+
+    monkeypatch.setenv("DATABASE_URL", test_database_url)
+    fixtures = Path(__file__).parent / "fixtures"
+    wl.load_master(
+        session,
+        parse_nse_equity_list((fixtures / "EQUITY_L.csv").read_text(encoding="utf-8")),
+        parse_nifty500((fixtures / "ind_nifty500list.csv").read_text()),
+        parse_bse_scrips((fixtures / "bse_scrips.json").read_text()),
+    )
+    lists = {securities.NIFTY50_URL: (fixtures / "ind_nifty50list.csv").read_text()}
+    monkeypatch.setattr(securities, "download", lambda url, referer=None: lists[url])
+    result = runner.invoke(app, ["watchlist", "nifty50", "--no-history"])
+    assert result.exit_code == 0, result.stdout
+    assert "6 members; 5 added as study-only, 0 already on the watchlist" in result.stdout
+    assert "Not in the master list: NOTHERE" in result.stdout
+    session.expire_all()
+    assert {c.nse_symbol for i, c in wl.list_items(session) if i.study_only} == {
+        "LT",
+        "KARURVYSYA",
+        "FEDERALBNK",
+        "LTF",
+        "MOTHERSON",
+    }

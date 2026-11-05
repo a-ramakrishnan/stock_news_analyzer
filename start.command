@@ -38,11 +38,23 @@ done
 docker compose exec -T db pg_isready -U sna -q 2>/dev/null || fail "The database didn't start. See: docker compose logs db"
 echo "The database is ready."
 
-echo "Starting the dashboard and the scheduler. The first time, downloading the app takes a few minutes..."
-# The newest prebuilt image (or a build, if .env says SNA_PULL_POLICY=build); if that fails,
-# the image already here; if there is none, a build from this folder's code.
+# A git checkout (a developer's copy, kept up to date with git pull) runs its own code: the
+# app is built from this folder, not downloaded, unless .env chooses with SNA_PULL_POLICY.
+# The published image only changes with a release, so it can be older than the code here.
+if [ -z "${SNA_PULL_POLICY:-}" ] && [ -d .git ] && ! grep -qs '^SNA_PULL_POLICY=' .env; then
+  export SNA_PULL_POLICY=build
+  echo "Starting the dashboard and the scheduler, built from this folder's code (a few minutes the first time)..."
+else
+  echo "Starting the dashboard and the scheduler. The first time, downloading the app takes a few minutes..."
+fi
+# The newest prebuilt image (or a build, as above or if .env says SNA_PULL_POLICY=build); if
+# that fails, the image already here; if there is none, a build from this folder's code.
 if ! docker compose up -d; then
-  echo "Couldn't download the newest version; trying the one already on this computer..."
+  if [ "${SNA_PULL_POLICY:-}" = build ]; then
+    echo "The build didn't work; trying the version already on this computer..."
+  else
+    echo "Couldn't download the newest version; trying the one already on this computer..."
+  fi
   if ! SNA_PULL_POLICY=missing docker compose up -d; then
     echo "Building the app from this folder instead (a few minutes)..."
     SNA_PULL_POLICY=build docker compose up -d || fail "The dashboard and scheduler didn't start (see above). The database is running, so uv run sna commands still work."

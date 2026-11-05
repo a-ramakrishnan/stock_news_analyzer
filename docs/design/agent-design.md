@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.22 · Nov 4, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.24 · Nov 4, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -263,6 +263,7 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **Trigger:** when you add or remove a stock; monthly refresh.
 - **LLM:** Haiku 5.5, only for fuzzy name matching ("L&T", "Larsen").
 - **As built (steps 2, 7, 11):** no LLM. rapidfuzz matching against the NSE main board, NSE SME and BSE lists; an exact full-name match wins; a symbol pins ambiguous names. Peers are suggested from the same industry, largest first, and approved on the dashboard's Manage stocks page. That page also adds stocks, marks them owned and loads their history.
+- **As built (step 30):** `sna watchlist nifty50` adds the Nifty 50's current members from NSE's list as *study-only* stocks, each with a sector index from its NSE industry (banks get Nifty Bank). Study-only stocks are collected and read by the Haiku agents (triage, events, orders) for the evidence on what news does to prices, but get no Sonnet work (earnings calls, promises, move explanations) and no card on Today. Unticking "Study only" on Manage stocks follows one fully. To keep a backlog from spending the budget in a morning, triage, events and orders read the last 3 days first, and events and orders cap their calls per scheduled run (25 and 15).
 - **Reads / writes:** `companies`, `watchlist`, `relationships` (first-pass peers).
 
 1. Accept a name, symbol or ISIN; for bullion accept "gold" or "silver".
@@ -586,6 +587,7 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **LLM:** Opus 5.5 to write; code to format.
 - **As built (steps 6, 7):** the daily digest is put together in code (no LLM yet) and saved as Markdown under `data/digests/`. It has filings, triaged news with stars and topics, unusual moves with their likely cause, and bulk/block deals.
   
+  Step 30 added **What news does to prices** (Research): an event study in code, no LLM (`agents/study.py`, `sna evidence`). Every stored result, order win, event, red flag and deal is a case, dated by its filing and measured like the event labels over 1, 5 and 20 trading days against the Nifty 50 and the sector; cases are grouped by kind (results by revenue and profit growth on the year, orders by size against the last four quarters' revenue, events by type and sentiment) into a median, the middle half and how often the stock rose. Order sizes use only revenue reported before the order, so nothing is known before it was.
   The Streamlit dashboard has twelve pages in five groups: Today (Today, Red flags), Research (Stock, Ask, Themes, What moves the stock), Library (Filings, News), Set up (Manage stocks, Settings, System) and Help (Guide). Steps 23–26 added:
   - the Guide, with a help link on every page
   - Settings (API key, budget, models, unusual-day threshold, job switches), which take the place of `.env`

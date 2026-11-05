@@ -285,9 +285,9 @@ def quarter_before(day: date) -> str:
 
 def _watchlist_isins(session: Session, symbol: str | None):
     query = select(WatchlistItem.isin).join(Company, Company.isin == WatchlistItem.isin)
-    if symbol:
+    if symbol:  # by hand, any stock; on schedule, study-only stocks are left out
         return query.where((Company.nse_symbol == symbol.upper()) | (Company.isin == symbol))
-    return query.where(WatchlistItem.isin.is_not(None))
+    return query.where(WatchlistItem.isin.is_not(None), WatchlistItem.study_only.is_(False))
 
 
 def pending(

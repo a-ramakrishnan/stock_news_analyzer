@@ -147,6 +147,16 @@ h1{letter-spacing:-.01em}
 .sna-down{color:var(--sna-down)}
 .sna-muted{color:var(--sna-muted)}
 .sna-mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-weight:500}
+/* The evidence's range: the middle half of the moves as a band, the median as a tick, and a
+   line at zero, on one scale for the whole table. */
+.sna-range{position:relative;height:16px;min-width:150px}
+.sna-range .zero{position:absolute;top:0;bottom:0;width:1px;background:var(--sna-muted)}
+.sna-range .band{position:absolute;top:5px;height:6px;border-radius:3px;
+  background:color-mix(in srgb,var(--sna-muted) 40%,transparent)}
+.sna-range .mid{position:absolute;top:1px;width:3px;height:14px;border-radius:2px;
+  margin-left:-1px}
+.sna-range .mid.sna-up{background:var(--sna-up)}
+.sna-range .mid.sna-down{background:var(--sna-down)}
 .sna-tag{display:inline-block;font-size:.75rem;line-height:1.3;padding:1px 7px;border-radius:999px;
   background:var(--sna-soft);color:var(--sna-muted);white-space:nowrap}
 .sna-tag.ai{background:var(--sna-accent);color:var(--sna-accent-text);font-weight:600}
@@ -386,6 +396,36 @@ def esc(value) -> str:
     return html.escape(str(value))
 
 
+def study_moves(study: list[dict]) -> None:
+    """The study-only stocks (the Nifty 50) in one table, unusual moves first, instead of a
+    card each."""
+    if not study:
+        return
+    unusual = [s for s in study if s["unusual"]]
+    section_title(f"Nifty 50, study only ({len(study)})")
+    st.caption(
+        (f"{len(unusual)} moved unusually on the last day. " if unusual else "No unusual moves. ")
+        + "Followed for the evidence; untick Study only on Manage stocks to follow one fully."
+    )
+
+    def change(x, _row):
+        return f'<span class="{trend(x)}">{signed(x)}</span>'
+
+    rows = sorted(study, key=lambda s: (not s["unusual"], -abs(s["excess_return"] or 0)))
+    with st.expander("All of them, largest moves against the Nifty first", expanded=bool(unusual)):
+        html_table(
+            rows,
+            [
+                ("Stock", "symbol", lambda v, r: f'<span class="sna-mono">{esc(v)}</span>'),
+                ("Company", "name", None),
+                ("Day>", "stock_return", change),
+                ("vs Nifty 50>", "excess_return", change),
+                ("Unusual", "unusual", lambda v, r: tag("unusual", "warn") if v else ""),
+                ("Likely cause", "cause", None),
+            ],
+        )
+
+
 def html_table(rows, columns: list[tuple], empty: str = "Nothing to show.") -> None:
     """A table whose text wraps instead of being cut off; on a narrow screen each row becomes a
     stacked card. `columns`: (label, field, render) where render(value, row) returns HTML, or
@@ -484,7 +524,7 @@ def today_page() -> None:
     red_flag_list(load("red_flags"), "Red flags, last 30 days")
 
     owned = [s for s in watch if s["owned"]]
-    watching = [s for s in watch if not s["owned"]]
+    watching = [s for s in watch if not s["owned"] and not s["study_only"]]
     for title, group in (("Stocks I own", owned), ("Watchlist", watching)):
         section_title(f"{title} ({len(group)})")
         if not group:
@@ -495,6 +535,7 @@ def today_page() -> None:
         for i, s in enumerate(group):
             with cols[i % 3]:
                 stock_card(s)
+    study_moves([s for s in watch if s["study_only"]])
 
     bullion_section()
 
@@ -1652,6 +1693,175 @@ def moves_page() -> None:
         reactions_table(lb)
 
 
+HORIZON_LABELS = {1: "1 day", 5: "5 days", 20: "20 days"}
+
+
+def short_kind(kind: str) -> str:
+    """A kind without the prefix its section title already says: 'Results: revenue up,
+    profit down' -> 'Revenue up, profit down'; events and deals keep their type."""
+    for prefix in ("Results: ", "Order win: ", "Red flag: "):
+        if kind.startswith(prefix):
+            rest = kind.removeprefix(prefix)
+            return rest[:1].upper() + rest[1:]
+    return kind
+
+
+def range_bar(row: dict, scale: float) -> str:
+    """The middle half of the moves as a band and the median as a tick, on ±`scale`."""
+    if row["low"] is None or row["median"] is None:
+        return esc(None)
+
+    def x(v: float) -> float:
+        return 50 + 50 * max(-1.0, min(1.0, v / scale))
+
+    left, right = x(row["low"]), x(row["high"])
+    return (
+        f'<div class="sna-range" title="Middle half: {signed(row["low"], 1)} to '
+        f'{signed(row["high"], 1)}; median {signed(row["median"], 1)}">'
+        f'<span class="zero" style="left:50%"></span>'
+        f'<span class="band" style="left:{left:.1f}%;width:{max(right - left, 0.5):.1f}%"></span>'
+        f'<span class="mid {trend(row["median"])}" style="left:{x(row["median"]):.1f}%"></span>'
+        "</div>"
+    )
+
+
+def evidence_page() -> None:
+    from stock_news_analyzer.agents import study
+
+    page_header(
+        "What news does to prices",
+        "For each kind of event, across every stock followed (the Nifty 50 too, once added): "
+        "how the stock moved against the market afterwards, how often it rose, and how many "
+        "cases that rests on. Evidence for or against a rule of thumb; not a forecast.",
+        "what-news-does-to-prices",
+    )
+    data = load("evidence")
+    if not data["cases"]:
+        no_data(
+            "No events with prices yet. Results, order wins and events build up as the agents "
+            "run; uv run sna watchlist nifty50 adds the Nifty 50 for more cases."
+        )
+        return
+    c1, c2, c3 = st.columns([1.2, 1.2, 1.6], vertical_alignment="bottom")
+    horizon = (
+        c1.segmented_control(
+            "Over", list(HORIZON_LABELS), default=5, format_func=HORIZON_LABELS.get, key="ev-h"
+        )
+        or 5
+    )
+    benchmark = (
+        c2.segmented_control(
+            "Against", ["Nifty 50", "Sector index"], default="Nifty 50", key="ev-b"
+        )
+        or "Nifty 50"
+    )
+    groups = c3.pills(
+        "Kinds",
+        list(study.GROUPS),
+        default=list(study.GROUPS),
+        selection_mode="multi",
+        key="ev-g",
+    )
+    cases = [c for c in data["cases"] if c.group in (groups or [])]
+    rows = [r.__dict__ for r in study.summarise(cases, horizon, sector=benchmark != "Nifty 50")]
+    measured = sum(r["cases"] for r in rows)
+    stat_tiles(
+        [
+            ("Cases", f"{measured:,}", f"with {HORIZON_LABELS[horizon]} of prices since"),
+            (
+                "Kinds of event",
+                str(len(rows)),
+                f"{sum(not r['few'] for r in rows)} with {study.FEW}+ cases",
+            ),
+            ("Stocks", str(len({c.isin for c in cases})), "followed, owned or studied"),
+            ("From", f"{min(c.at for c in cases):%b %Y}" if cases else "–", "the oldest case"),
+        ]
+    )
+    with st.expander("How to read this", icon=":material/info:"):
+        st.markdown(
+            f"""
+- **Median move:** half the cases did better than this against the {benchmark}, half worse,
+  over the {HORIZON_LABELS[horizon]} from the first close that could reflect the news.
+- **Middle half:** the band runs from the 25th to the 75th percentile of the moves, the tick is
+  the median, and the line is zero. A band clear of the line is a consistent pattern; one
+  across it means the kind of event alone says little.
+- **Rose:** how often the stock beat the {benchmark}. About 50% is a coin toss.
+- **Few cases:** under {study.FEW}, read the numbers as a hint. They firm up as the Nifty 50's
+  history is read and new events come in.
+- Cases overlap (results and an event from the same filing) and the market moves for many
+  reasons at once: this shows what usually followed, not what caused it. Big news is often
+  priced in within minutes, before an end-of-day close.
+"""
+        )
+    if not rows:
+        st.caption("No cases for these kinds.")
+        return
+    scale = max([abs(v) for r in rows for v in (r["low"], r["high"]) if v is not None] + [0.01])
+    scale = min(scale, 0.15)
+
+    def median(v, _row):
+        if blank(v):
+            return esc(None)
+        v = v if abs(v) >= 0.0005 else 0.0  # not "−0.0%"
+        return f'<span class="{trend(v)}">{signed(v, 1)}</span>'
+
+    def rose(v, row):
+        if blank(v):
+            return esc(None)
+        note = " " + tag("few cases", "warn") if row["few"] else ""
+        return f"{v:.0%}{note}"
+
+    for group in study.GROUPS:
+        group_rows = [r for r in rows if r["group"] == group]
+        if not group_rows:
+            continue
+        section_title(group)
+        html_table(
+            group_rows,
+            [
+                ("Kind of event", "kind", lambda v, r: esc(short_kind(v))),
+                ("Cases>", "cases", None),
+                ("Median move>", "median", median),
+                (f"Middle half (±{scale:.0%} scale)", "median", lambda v, r: range_bar(r, scale)),
+                ("Rose>", "up", rose),
+            ],
+        )
+
+    section_title("The cases behind a kind")
+    kinds = [r["kind"] for r in rows]
+    kind = st.selectbox("Kind of event", kinds, key="ev-kind")
+    owned = data["owned"]
+    picked = sorted((c for c in cases if c.kind == kind), key=lambda c: c.at, reverse=True)
+    move = (
+        (lambda c, n: c.sector_excess.get(n))
+        if benchmark != "Nifty 50"
+        else (lambda c, n: c.excess.get(n))
+    )
+
+    def change(v, _row):
+        return f'<span class="{trend(v)}">{signed(v, 1)}</span>' if not blank(v) else esc(None)
+
+    html_table(
+        [
+            {
+                "when": f"{c.at.astimezone(IST):%d %b %Y}",
+                "stock": c.symbol + (" (own)" if c.isin in owned else ""),
+                "detail": c.detail,
+                **{f"m{n}": move(c, n) for n in study.HORIZONS},
+            }
+            for c in picked
+        ],
+        [
+            ("Date", "when", None),
+            ("Stock", "stock", lambda v, r: f'<span class="sna-mono">{esc(v)}</span>'),
+            ("What", "detail", None),
+            ("1 day>", "m1", change),
+            ("5 days>", "m5", change),
+            ("20 days>", "m20", change),
+        ],
+    )
+
+
 def manage_page() -> None:
     page_header(
         "Manage stocks",
@@ -1754,11 +1964,26 @@ def edit_stocks(session: Session) -> None:
         hide_index=True,
         width="stretch",
         disabled=["symbol", "name"],
-        column_order=["symbol", "name", "owned", "sector_index", "aliases", "peers", "remove"],
+        column_order=[
+            "symbol",
+            "name",
+            "owned",
+            "study_only",
+            "sector_index",
+            "aliases",
+            "peers",
+            "remove",
+        ],
         column_config={
             "symbol": st.column_config.TextColumn("Symbol", width="small"),
             "name": st.column_config.TextColumn("Company"),
             "owned": st.column_config.CheckboxColumn("I own it", width="small"),
+            "study_only": st.column_config.CheckboxColumn(
+                "Study only",
+                help="Followed for the evidence (the Nifty 50): collected and read by the cheap "
+                "agents, but no earnings calls, promises or move explanations, and no card on "
+                "Today. Untick to follow it fully.",
+            ),
             "sector_index": st.column_config.SelectboxColumn("Sector benchmark", options=indices),
             "aliases": st.column_config.TextColumn("Other names in the news"),
             "peers": st.column_config.TextColumn(
@@ -2571,6 +2796,12 @@ PAGES = {
     "news": st.Page(news_page, title="News", icon=":material/newspaper:", url_path="news"),
     "themes": st.Page(themes_page, title="Themes", icon=":material/hub:", url_path="themes"),
     "ask": st.Page(ask_page, title="Ask", icon=":material/question_answer:", url_path="ask"),
+    "evidence": st.Page(
+        evidence_page,
+        title="What news does to prices",
+        icon=":material/balance:",
+        url_path="evidence",
+    ),
     "moves": st.Page(
         moves_page, title="What moves the stock", icon=":material/insights:", url_path="moves"
     ),
@@ -2607,7 +2838,7 @@ def setup_needed() -> bool:
 # The sidebar's groups, in order.
 NAV = {
     "Today": ["today", "flags", "agents"],
-    "Research": ["stock", "ask", "themes", "moves"],
+    "Research": ["stock", "ask", "themes", "moves", "evidence"],
     "Library": ["filings", "news"],
     "Set up": ["manage", "settings", "system"],
     "Help": ["guide"],

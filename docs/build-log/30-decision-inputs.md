@@ -47,6 +47,10 @@ Each case's move is the stock's return against the Nifty 50 (and its sector inde
 
 Tests cover each results kind, order sizes, the summary statistics, a full run over generated prices with results, an order, events (one counted, one routine, one failed by QA) and a deal, including day 0 for news after the close and the order sized only on revenue known then, and the CLI. The page was checked in light and dark on generated data for twelve stocks over fourteen months, where order wins worth 5% or more of a year's revenue had been given a drift: the study found it (median +2.3% over 5 days, 87% rising), and the other kinds stayed near zero.
 
+### By the size of the move
+
+Asked for after part 2: the same cases the other way round. "Group the cases by: Size of move" puts every case in a band by its move against the benchmark, finer near zero (−5% or worse, −5 to −2%, −2 to −1%, −1 to −0.5%, −0.5 to 0%, 0 to +0.5%, +0.5 to +1%, +1 to +2%, +2 to +5%, +5% or better). Each band shows its number of cases as a bar, the kinds of event behind them, each with how many of that kind's cases fell in the band ("6 of 15": a pattern when they bunch at one end), and the stocks, owned ones in bold. Picking a band lists its cases with their kind and their 1, 5 and 20-day moves. `study.by_move` does the grouping; a test checks the bands, the order and the counts.
+
 ## On the Mac
 
 ```

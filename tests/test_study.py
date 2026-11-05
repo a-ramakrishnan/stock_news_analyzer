@@ -207,3 +207,28 @@ def test_cli_evidence(watchlist, test_database_url, monkeypatch):  # noqa: F811
     assert "1 cases; moves against the Nifty 50 over 1 trading days" in result.stdout
     assert "Block deal: sell" in result.stdout and "+5.0%" in result.stdout  # day 30's jump
     assert runner.invoke(app, ["evidence", "--days", "3"]).exit_code == 1
+
+
+def test_cases_grouped_by_the_size_of_the_move():
+    def case(kind, symbol, move):
+        c = study.Case("Order wins", kind, KVB, symbol, datetime.now(IST), "")
+        c.excess = {5: move}
+        return c
+
+    cases = [
+        case("Large", "LT", 0.003),
+        case("Large", "LT", 0.004),
+        case("Small", "BEL", 0.003),
+        case("Large", "BEL", 0.06),
+        case("Small", "LT", -0.07),
+        case("Small", "LT", None),  # too recent: in no band
+    ]
+    bands = study.by_move(cases, horizon=5)
+    assert [b.label for b in bands][:2] == ["−5% or worse", "−5% to −2%"]
+    assert [b.label for b in bands][4:6] == ["−0.5% to 0%", "0% to +0.5%"]
+    assert bands[-1].label == "+5% or better"
+    small_up = bands[5]  # a +0.3% move: what lay behind it
+    assert [c.symbol for c in small_up.cases] == ["LT", "LT", "BEL"]  # biggest first
+    assert small_up.kinds == [("Large", 2, 3), ("Small", 1, 2)]  # 2 of Large's 3 cases
+    assert small_up.stocks == [("LT", 2), ("BEL", 1)]
+    assert [len(b.cases) for b in bands] == [1, 0, 0, 0, 0, 3, 0, 0, 0, 1]

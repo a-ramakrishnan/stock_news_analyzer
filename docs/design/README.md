@@ -14,6 +14,10 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.25 · Nov 5, 2026
+
+- The evidence page can group the cases by the size of the move as well as by kind: bands of moves, each with the kinds of event and stocks behind it
+
 ### 1.24 · Nov 4, 2026
 
 - Step 30, part 2: the evidence. An event study in code (no LLM) over every stock followed: results by revenue and profit growth on the year, order wins by size against a year's revenue, events by type and tone, red flags and deals, each measured over 1, 5 and 20 trading days against the Nifty 50 and the sector, as a median, the middle half and how often the stock rose. A new Research page, What news does to prices, and `sna evidence`. agent-design.md's Reporter

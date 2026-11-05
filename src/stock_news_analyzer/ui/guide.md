@@ -58,7 +58,9 @@ Rules of thumb, such as "a big order win lifts the stock" or "good results with 
 - **Rose:** how often the stock beat the benchmark; about 50% is a coin toss.
 - **Few cases:** under 10, a hint rather than evidence.
 
-Pick a kind to see the cases behind it. More stocks make the evidence firmer: `uv run sna watchlist nifty50` adds the Nifty 50 as study-only stocks. The cases overlap and the market moves for many reasons, so this shows what usually followed, not what caused it, and big news is often priced in before the close. It is an input for your decisions, not advice.
+Pick a kind to see the cases behind it.
+
+**Group the cases by Size of move** turns it round: every case is put in a band by how far the stock moved (from "−5% or worse" through "0% to +0.5%" to "+5% or better"), and each band lists the kinds of event behind its moves, with how many of each kind's cases fell there ("2 of 15"), and the stocks, yours in bold. A kind bunched at one end is a pattern; one spread evenly says little. Pick a band to see its cases. More stocks make the evidence firmer: `uv run sna watchlist nifty50` adds the Nifty 50 as study-only stocks. The cases overlap and the market moves for many reasons, so this shows what usually followed, not what caused it, and big news is often priced in before the close. It is an input for your decisions, not advice.
 
 ## Settings
 

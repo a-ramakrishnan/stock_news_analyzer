@@ -1,6 +1,6 @@
 # Indian Market News Intelligence System — Design
 
-Version 1.30 · Nov 5, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
+Version 1.31 · Nov 5, 2026 (first written Oct 21, 2026) · @Ramki · changes are listed in [README.md](README.md)
 
 ## Goal and principles
 
@@ -33,7 +33,7 @@ A map of what is built and what is pending, agent by agent, is in [Agent design:
 | Red flags | Built, step 18: rules over the checked events and results deadlines, no LLM; in the digest and dashboard |
 | Themes and read-across | Built, step 20: events, orders and call points tagged with themes (Claude Haiku 5.5); theme strength and read-across between watchlist companies in code |
 | Analyst Q&A | Built, step 21: plain-English questions answered by Claude Sonnet 5.5 with read-only SQL and full-text search, citing sources; saved reports |
-| Use by others | Built, steps 23–27: Guide, Settings (key, budget, models, jobs), Red flags page, Run a job now, first-run setup, start scripts for Mac and Windows, one compose file, a prebuilt image, MIT licence. Step 28 made it ready for others (the author's watchlist out of the repository, the prebuilt image by default, release 0.1.0). Step 29 redesigned the dashboard from a Lovable design. Step 30 added decision inputs (the Nifty 50 as study-only stocks, the evidence on what news does to prices, Week by week, Portfolio); step 31 the Research brief ([research-brief.md](research-brief.md)). Trying it on a clean Mac and Windows becomes step 32 |
+| Use by others | Built, steps 23–27: Guide, Settings (key, budget, models, jobs), Red flags page, Run a job now, first-run setup, start scripts for Mac and Windows, one compose file, a prebuilt image, MIT licence. Step 28 made it ready for others (the author's watchlist out of the repository, the prebuilt image by default, release 0.1.0). Step 29 redesigned the dashboard from a Lovable design. Step 30 added decision inputs (the Nifty 50 as study-only stocks, the evidence on what news does to prices, Week by week, Portfolio); step 31 the Research brief ([research-brief.md](research-brief.md)). Step 32 shares the collected data with other projects through read-only views ([shared-data.md](../shared-data.md)), first with stock_deep_research, a separate deep research project. Trying it on a clean Mac and Windows becomes step 33 |
 | Email delivery (later; Telegram set aside for now) | Not started |
 
 - **Filings first, news second.** Under SEBI LODR Regulation 30, listed companies must report material events (order wins, capacity additions, fundraises, rating changes, management exits) to NSE/BSE, generally within 24 hours. These filings are the factual record. News adds context, sentiment and rumour.

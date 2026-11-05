@@ -15,6 +15,10 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.31 · Nov 5, 2026
+
+- Step 32: shared data for other projects. Read-only views in a `shared` schema and a `research_reader` login (migration 0030), documented as a versioned contract in docs/shared-data.md, for the separate stock_deep_research project. Trying it on a clean Mac and Windows becomes step 33. design.md's architecture
+
 ### 1.30 · Nov 5, 2026
 
 - research-brief.md 1.2: step 31.3 as built. Briefs compared fact by fact and view by view; a new view is told the delta and writes what changed; the page shows it, notes when filed facts have moved, and offers Ask about buttons; the briefs job (07:57) writes new views for owned stocks after results, a balance sheet, a red flag or a major event, listed in the digest. agent-design.md's orchestrator schedule and Reporter

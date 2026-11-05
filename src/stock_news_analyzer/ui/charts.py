@@ -291,3 +291,47 @@ def event_study_chart(study: pd.DataFrame, dark: bool = False) -> go.Figure:
     fig.update_xaxes(tickformat="+.1%", range=[-reach, reach], nticks=5)
     fig.update_annotations(font=dict(color=t.muted, size=13))
     return _layout(fig, t, max(220, 34 * len(study) + 80))
+
+
+def weekly_chart(weeks: list, dark: bool = False) -> go.Figure:
+    """Each week's move against the Nifty 50, coloured by whether it went the way the news
+    pointed (agents/weekly.py); hovering shows the week's main items."""
+    t = theme(dark)
+    colours = {
+        "In line with the news": t.stock,
+        "Against the news": t.sector,
+        "Moved without news": t.nifty,
+        "Quiet": t.baseline,
+    }
+    fig = go.Figure()
+    ordered = sorted(weeks, key=lambda w: w.start)
+    for verdict, colour in colours.items():
+        chosen = [w for w in ordered if w.verdict == verdict and w.excess is not None]
+        if not chosen:
+            continue
+        hover = []
+        for w in chosen:
+            top = [i for i in w.items if i.kind != "filing"][:3] or w.items[:3]
+            lines = "<br>".join(_wrap(f"· {i.title}", 70) for i in top) or "nothing came out"
+            hover.append(
+                f"{w.start:%d %b} – {w.end:%d %b %Y}: {w.excess:+.1%} vs Nifty 50, "
+                f"news tone {w.tone:+d}<br>{lines}"
+            )
+        fig.add_trace(
+            go.Bar(
+                # Centred on the week's Wednesday, four days wide: a bar's width on a date
+                # axis is otherwise worked out per trace, and a lone week comes out a hairline.
+                x=[pd.Timestamp(w.start) + pd.Timedelta(days=2) for w in chosen],
+                width=[4 * 86_400_000] * len(chosen),
+                y=[w.excess for w in chosen],
+                name=verdict,
+                marker=dict(color=colour, line=dict(width=0)),
+                customdata=hover,
+                hovertemplate="%{customdata}<extra>" + verdict + "</extra>",
+            )
+        )
+    fig.add_hline(y=0, line=dict(color=t.baseline, width=1))
+    fig.update_layout(bargap=0.25, barmode="overlay")
+    fig.update_xaxes(tickformat="%d %b")
+    fig.update_yaxes(tickformat="+.0%")
+    return _layout(fig, t, 300)

@@ -89,6 +89,7 @@ class Case:
     day0: date | None = None
     excess: dict[int, float | None] = field(default_factory=dict)  # vs Nifty 50, by horizon
     sector_excess: dict[int, float | None] = field(default_factory=dict)
+    importance: int | None = None  # an event's, 1 to 5
 
 
 # --- the cases -------------------------------------------------------------------------
@@ -283,6 +284,7 @@ def event_cases(session: Session, symbols: dict[str, str]) -> list[Case]:
             e.published_at,
             e.headline,
             e.document_id,
+            importance=e.importance,
         )
         for e in events
     ]
@@ -313,6 +315,16 @@ def deal_cases(session: Session, symbols: dict[str, str]) -> list[Case]:
             Case("Deals", f"{d.kind.title()} deal: {side}", d.isin, symbols[d.isin], at, detail)
         )
     return cases
+
+
+def short_kind(kind: str) -> str:
+    """A kind without the prefix its group already says: 'Results: revenue up, profit down'
+    -> 'Revenue up, profit down'; events and deals keep their type."""
+    for prefix in ("Results: ", "Order win: ", "Red flag: "):
+        if kind.startswith(prefix):
+            rest = kind.removeprefix(prefix)
+            return rest[:1].upper() + rest[1:]
+    return kind
 
 
 # --- the reactions ---------------------------------------------------------------------

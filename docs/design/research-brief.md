@@ -1,6 +1,6 @@
 # Research brief
 
-Version 1.0 · Nov 5, 2026 · @Ramki · changes are listed in [README.md](README.md)
+Version 1.1 · Nov 5, 2026 · @Ramki · changes are listed in [README.md](README.md)
 
 A complete research output for one stock, on its own page (**Research brief**, in the Research group). Its layout follows the "briefing grammar" of Robyn's research results (meetrobyn.com), adapted to an Indian listed company and to what this system collects.
 
@@ -49,13 +49,15 @@ Its finance agents also show their steps while working ("Reading three years of 
 | 4 | Peers | An entity card for the stock and each peer: P/E, one-year change, latest revenue growth, market cap | 31.1; "Why it matters", "Key risk" and "Ask about" in 31.2 |
 | 5 | What's coming | Board meetings announced, results due, ex-dates, promises falling due | 31.1 |
 | 6 | Red flags | Open flags | 31.1 |
-| – | The view | Observed → Read pairs | 31.2 |
-| – | Order book | Book-to-bill, largest wins | 31.2 |
-| – | Management | Who's who, changes, promises against delivery | 31.2 |
-| – | Ownership | Promoter, FII and DII trend, pledges, deals | 31.2 |
-| – | What moves this stock | The event study and Week by week for this stock | 31.2 |
-| – | What to watch and decide | Decision cards (Review now, Watch, Hold steady) and "Decisions to make now" | 31.2 |
-| – | Sources | Every filing and article used, linked | 31.2 |
+| 0 | The view | Observed → Read pairs citing fact ids; Why it matters and Key risk for the stock | 31.2 (only once a view is written) |
+| 4 | Order book | Order book, years of revenue, book-to-bill, orders announced on the year, government share, largest client | 31.2 |
+| 5 | Management | Promises kept and missed and the latest ones; management changes of the last two years | 31.2 |
+| 6 | Ownership | Promoters, FIIs, DIIs, mutual funds, retail, pledges, the last five quarters | 31.2 |
+| 8 | What moves this stock | The lean from the event study, its reasons and the last 12 weeks | 31.2 |
+| 11 | What to watch and decide | Decision cards (Review now, Watch, Hold steady, Check) and "Decisions to make now" | 31.2 (with a view) |
+| 12 | Sources | The numbered facts the view was written from, as the model saw them | 31.2 (with a view) |
+
+Fold numbers are counted on the page, so without a view the facts' folds start at 1.
 
 ### How the facts are made (31.1, no AI)
 
@@ -65,9 +67,13 @@ Its finance agents also show their steps while working ("Reading three years of 
 - **Peers:** the approved peers, else the largest in the NSE industry; each with its own valuation and latest results growth when its results are stored, else "Not tracked".
 - **What's coming:** dates in board-meeting notices of the last 90 days that fall in the next 120 days; the next results due (45 days after a quarter, 60 after the year) when no meeting is announced; NSE corporate actions with a future ex-date; open promises falling due (`agents/research.py`).
 
-### The view (31.2)
+### The view (31.2, as built)
 
-One Sonnet call per brief, given only the assembled facts with their badges and sources, writes the verdict title, three stances, the Observed → Read pairs, Why it matters / Key risk for the stock and its peers, and the decision cards. A check rejects any number in its text that is not among the facts, so no figure is made up. The page shows the steps while it works and the cost of the run; each brief is saved, so a re-run shows what changed since the last one. Expected cost: about $0.10–0.30 per brief.
+- **The facts as numbered lines** (`agents/brief.py`, `fact_lines`): about 40 lines such as "F8 [Filed] Results Q2 FY27 (to 30 Sep 2026, consolidated): revenue ₹25,109 cr, +1% on the year; profit ₹2,898 cr, +52% on the year; margin 11.5%". They cover the valuation, eight quarters, the balance sheet, peers, the order book, promises, management changes, ownership, the lean and its reasons, the most important news of 90 days, what's coming and open red flags.
+- **One call to the analysis model** (Sonnet, effort medium) with a fixed answer shape: verdict (one line), summary (two sentences), three stances (Favor, Watch, Avoid, Check), three to six Observed → Read pairs with the fact ids they rest on, Why it matters and Key risk for the stock and each peer, three to five decision cards (Review now, Watch, Hold steady, Check) with fact ids, and up to four "decisions to make now". The instructions: only the facts, no memory; every number one of the facts' numbers, as written or rounded, none calculated; cite the facts; say less about Read by AI and Stale facts; no buy, sell or hold.
+- **The number check:** every number in the view is matched against the facts' numbers, as written or rounded (65 for 65.2; 1.2 for 1.17, not 1.3). Labels (Q2, FY27, F12) aren't numbers; whole numbers up to 12 count as counts ("3 of 5 quarters") unless they are a percentage, a multiple or an amount. If any number isn't found, the model is asked once more with the list; parts that still fail are dropped (a stance, an observation, a peer note, a decision), the verdict falls back to the facts' headline, and what was dropped is recorded and shown under Sources. Signs aren't checked: a fact's +9% allows 9%.
+- **Saved versions** (`research_briefs`, migration 0029): the facts as given, the view, what was dropped, the model and the cost. The page shows the latest and offers the earlier ones; `sna brief SYMBOL` prints the latest, `--write` writes a new one.
+- **Cost:** about 40 fact lines in, a view of about 2,500 tokens out: roughly $0.03–0.10 a view on Sonnet; a retry doubles it.
 
 ### Staying current (31.3)
 

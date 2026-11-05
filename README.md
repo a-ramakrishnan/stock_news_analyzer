@@ -574,6 +574,7 @@ make scheduler
 | `make run-all` | Run every job once, now, in order: collect, triage, measure, explain, read calls, digest |
 | `uv run sna run news` | Run one job now: `filings`, `news`, `triage`, `deals`, `prices`, `xbrl`, `results`, `events`, `explain`, `concalls`, `promises`, `orders`, `themes`, `flags`, `bullion`, `securities` or `digest` |
 | `uv run sna run missed` | Run every job that missed its scheduled run (the computer was asleep or off), in order, each from where it last stopped; like **Catch up** on System |
+| `uv run sna brief LT --write` | Write the Research brief's view for a stock (one Sonnet call, a few cents) and print it; without `--write`, print the latest |
 | `uv run sna results balance LT` | The balance sheets and cash flows read from a stock's XBRL files, with the tag each figure came from |
 | `uv run sna evidence --days 5` | The same evidence in the terminal; `--sector` against the sector index, `--kind "order win"` lists the cases |
 | `uv run sna runs` | Recent runs: when, how long, result, errors |
@@ -614,7 +615,7 @@ make ui
 | Themes | Theme strength, a theme's months and items, read-across |
 | Ask | Ask a question in plain English; the answer with sources, and earlier questions |
 | Portfolio | Each stock owned with a lean (positive, neutral or negative) from its events of the last 90 days, each valued by what such events usually did across every stock followed, with how far the stock has moved since; your sectors against the Nifty 50's. Inputs, not advice |
-| Research brief | One stock's complete research on one page, conclusion first: a headline, stances and key numbers, then folds for valuation (P/E against its own history, the sector and the Nifty), results, balance sheet and cash flow, peers, what's coming and red flags; an evidence badge on every figure |
+| Research brief | One stock's complete research on one page, conclusion first: an AI-written verdict, stances and key numbers, then folds for the view (Observed → Read), valuation (P/E against its own history, the sector and the Nifty), results, balance sheet and cash flow, order book, management, ownership, peers, what moves the stock, what's coming, red flags, what to watch and decide, and the sources; an evidence badge on every figure, and every number in the view checked against the facts |
 | Week by week | One stock's last 12, 24 or 52 weeks: each week's move against the Nifty 50 and the sector, its unusual days, and everything that came out (results, order wins, events, red flags, deals, news, filings), with whether the move went the way the news pointed |
 | What moves the stock | Average return vs Nifty 50 after each kind of filing, 1, 5 and 20 trading days later |
 | What news does to prices | The evidence across every stock followed: for each kind of event (results by revenue and profit growth, order wins by size, events by type and tone, red flags, block and bulk deals), the median move against the Nifty 50 or the sector, the middle half of the moves, how often the stock rose, and the cases behind it; or grouped by the size of the move, with the kinds of event and stocks behind moves of each size |

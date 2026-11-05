@@ -261,6 +261,21 @@ h1{letter-spacing:-.01em}
 .sna-ecard .s b{display:block;font-family:"IBM Plex Mono",ui-monospace,monospace}
 .sna-timeline{list-style:none;padding:0;margin:0}
 .sna-timeline li{display:flex;gap:1rem;padding:.45rem 0;border-bottom:1px solid var(--sna-border)}
+.sna-stance.favor b{color:var(--sna-up)}
+.sna-stance.avoid b{color:var(--sna-down)}
+.sna-stance.watch b{color:var(--sna-medium)}
+.sna-or{display:grid;grid-template-columns:1fr 1fr;gap:.4rem 1.2rem;padding:.7rem 0;
+  border-bottom:1px solid var(--sna-border)}
+.sna-or p{margin:.15rem 0 0}
+.sna-or .sna-cites{grid-column:1/-1}
+.sna-cite{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.72rem;
+  border:1px solid var(--sna-border);border-radius:4px;padding:0 .3rem;margin-right:.25rem;
+  color:var(--sna-muted);cursor:help}
+.sna-note{font-size:.85rem;margin:.45rem 0 0}
+.sna-check{margin:.3rem 0 0;padding-left:1.1rem}
+.sna-sources{list-style:none;padding:0;font-size:.85rem}
+.sna-sources li{padding:.2rem 0;border-bottom:1px solid var(--sna-border)}
+@media (max-width:640px){.sna-or{grid-template-columns:1fr}}
 .sna-timeline li .d{min-width:6.5rem;font-family:"IBM Plex Mono",ui-monospace,monospace}
 .sna-week ul{margin:.2rem 0 .8rem;padding-left:1.1rem}
 .sna-week li{margin:.15rem 0}
@@ -2037,12 +2052,14 @@ def amount(value, unit: str) -> str:
 
 
 def research_page() -> None:
+    from stock_news_analyzer.agents import brief as bf
     from stock_news_analyzer.agents import research as rs
 
     page_header(
         "Research brief",
-        "One stock on one page, conclusion first: the key numbers, then a fold for each part "
-        "of the research. Every figure says where it came from and how far it can be trusted.",
+        "One stock on one page, conclusion first: the view, the key numbers, then a fold for "
+        "each part of the research. Every figure says where it came from and how far it can "
+        "be trusted.",
         "research-brief",
     )
     s = stock_picker("brief-stock", include_all=False)
@@ -2052,6 +2069,56 @@ def research_page() -> None:
     f = load("research", isin=s["isin"])
     v = f.valuation
     today = datetime.now(IST).date()
+    versions = load("briefs", isin=s["isin"])
+
+    # --- the view: write one, or pick a saved one -----------------------------------
+    c1, c2 = st.columns([3, 1.3], vertical_alignment="bottom")
+    chosen = None
+    if versions:
+        chosen = c1.selectbox(
+            "View",
+            versions,
+            format_func=lambda b: (
+                f"Written {b['created_at'].astimezone(IST):%d %b %Y, %H:%M} by {b['model']}"
+                f" · ${b['cost_usd']:.3f}"
+            ),
+            key=f"brief-version-{s['isin']}",
+        )
+    else:
+        c1.caption(
+            "No view written yet. The view is the verdict, stances, what the facts mean, "
+            "notes on the peers and the decisions to make, written by the analysis model from "
+            "the facts on this page only."
+        )
+    settings = get_settings()
+    if not settings.anthropic_api_key:
+        c2.caption("Add an API key on Settings to write the view.")
+    elif c2.button(
+        "Write a new view" if versions else "Write the view",
+        icon=":material/edit_note:",
+        type="primary" if not versions else "secondary",
+        help=f"One call to {settings.llm_model_analysis}, about $0.03–0.10.",
+    ):
+        from stock_news_analyzer.llm import LLM, LLMError
+
+        with st.status("Writing the view...", expanded=True) as status:
+            try:
+                with Session(engine()) as session:
+                    written = bf.write(session, LLM(session), s["isin"], progress=status.write)
+                status.update(label=f"View written for ${written.cost_usd:.3f}", state="complete")
+            except LLMError as exc:
+                status.update(label=f"No view: {exc}", state="error")
+        load.clear()
+        st.rerun()
+    view = chosen["view"] if chosen else None
+    known = dict(chosen["facts"]) if chosen else {}
+
+    def cite(ids: list[str]) -> str:
+        return " ".join(
+            f'<span class="sna-cite" title="{html.escape(known.get(i, ""))}">'
+            f"{html.escape(i)}</span>"
+            for i in ids
+        )
 
     # --- the lede ------------------------------------------------------------------
     headline, stances = brief_lede(f)
@@ -2065,10 +2132,19 @@ def research_page() -> None:
         if latest and latest["margin"] is not None
         else "No quarterly results stored yet."
     )
-    stance_html = "".join(
-        f'<span class="sna-stance"><b>{html.escape(k)}</b>{html.escape(t)}</span>'
-        for k, t in stances
-    )
+    if view:
+        headline = view["verdict"]
+        sub_line = html.escape(view["summary"]) or sub_line
+        stance_html = "".join(
+            f'<span class="sna-stance {x["label"].lower()}"><b>{html.escape(x["label"])}</b>'
+            f"{html.escape(x['text'])}</span>"
+            for x in view["stances"]
+        )
+    else:
+        stance_html = "".join(
+            f'<span class="sna-stance"><b>{html.escape(k)}</b>{html.escape(t)}</span>'
+            for k, t in stances
+        )
 
     def ruled(value: str, label: str, badge: str) -> str:
         return (
@@ -2103,6 +2179,21 @@ def research_page() -> None:
             ),
         ]
     )
+    written_note = ""
+    if chosen:
+        dropped = len(chosen["dropped"])
+        written_note = (
+            f" The view was written by {esc(chosen['model'])} on "
+            f"{chosen['created_at'].astimezone(IST):%d %b %Y} from {len(chosen['facts'])} facts "
+            f"(listed under Sources), for ${chosen['cost_usd']:.3f}; every number in it was "
+            "checked against them"
+            + (
+                f", and {dropped} part{'s' if dropped > 1 else ''} with numbers not among them "
+                "dropped."
+                if dropped
+                else "."
+            )
+        )
     st.html(
         f'<div class="sna-lede"><div class="sna-eyebrow">{esc(f.symbol)} · {esc(f.name)} · NSE'
         f"{' · ' + esc(f.industry) if f.industry else ''} · brief of {today:%d %b %Y}</div>"
@@ -2114,11 +2205,35 @@ def research_page() -> None:
         f"since {since}, {quarters_with_data} quarters of results and NSE's daily prices. Each "
         "figure carries its evidence: <b>Filed</b> as filed (XBRL or the exchange), <b>Read by "
         "AI</b> from a filing, <b>Market</b> from prices, <b>Stale</b> older than a half year, "
-        "<b>Not disclosed</b> when the filings don't carry it.</div></div>"
+        f"<b>Not disclosed</b> when the filings don't carry it.{written_note}</div></div>"
     )
 
     # --- the folds -----------------------------------------------------------------
-    with st.expander(f"1. Valuation · P/E {v.pe:.1f}" if v.pe else "1. Valuation · no P/E"):
+    n = iter(range(1, 50))
+
+    def fold(title: str, count: str):
+        return st.expander(f"{next(n)}. {title} · {count}")
+
+    if view:
+        with fold("The view", f"{len(view['observations'])} points"):
+            cards = "".join(
+                f'<div class="sna-or"><div><span class="sna-eyebrow">Observed</span>'
+                f'<p>{esc(o["observed"])}</p></div><div><span class="sna-eyebrow">Read</span>'
+                f'<p>{esc(o["read"])}</p></div><div class="sna-cites">{cite(o["facts"])}</div>'
+                "</div>"
+                for o in view["observations"]
+            )
+            subject = view["subject"]
+            if subject["why_it_matters"]:
+                cards += (
+                    f'<div class="sna-callout">Why it matters: {esc(subject["why_it_matters"])}'
+                    f"</div>"
+                )
+            if subject["key_risk"]:
+                cards += f'<div class="sna-callout warn">Key risk: {esc(subject["key_risk"])}</div>'
+            st.html(cards)
+
+    with fold("Valuation", f"P/E {v.pe:.1f}" if v.pe else "no P/E"):
         if v.note:
             st.caption(f"No P/E: {v.note}.")
         if v.series:
@@ -2159,16 +2274,13 @@ def research_page() -> None:
                 + ", adjusted for any bonus issue or split since."
             )
 
-    with st.expander(f"2. Results · {len(f.quarters)} quarters"):
+    def change(x, _row):
+        return f'<span class="{trend(x)}">{signed(x, 0)}</span>' if not blank(x) else esc(None)
+
+    with fold("Results", f"{len(f.quarters)} quarters"):
         if not f.quarters:
             st.caption("No quarterly results stored yet.")
         else:
-
-            def change(x, _row):
-                return (
-                    f'<span class="{trend(x)}">{signed(x, 0)}</span>' if not blank(x) else esc(None)
-                )
-
             html_table(
                 f.quarters,
                 [
@@ -2183,7 +2295,7 @@ def research_page() -> None:
             )
 
     end = f"{f.balance_end:%d %b %Y}" if f.balance_end else "none stored"
-    with st.expander(f"3. Balance sheet and cash flow · {end}"):
+    with fold("Balance sheet and cash flow", end):
         if not f.balance:
             st.caption(
                 "None stored yet: balance sheets come from the half-yearly and annual XBRL "
@@ -2202,13 +2314,131 @@ def research_page() -> None:
             if f.balance[0].source:
                 st.caption(f"As at {end}, from {f.balance[0].source}")
 
+    ob = f.order_book
+    with fold(
+        "Order book",
+        f"₹{ob['order_book_cr']:,.0f} cr" if ob and ob.get("order_book_cr") else "not reported",
+    ):
+        if not ob:
+            st.caption("The company doesn't report an order book, or none has been read yet.")
+        else:
+            brief_kv(
+                [
+                    (
+                        "Order book",
+                        amount(ob.get("order_book_cr"), "cr")
+                        + (f" ({ob['order_book_quarter']})" if ob.get("order_book_quarter") else "")
+                        if ob.get("order_book_cr")
+                        else None,
+                        rs.AI,
+                    ),
+                    (
+                        "Years of revenue",
+                        f"{ob['years_of_revenue']:.1f}" if ob.get("years_of_revenue") else None,
+                        rs.AI,
+                    ),
+                    (
+                        "Book-to-bill",
+                        f"{ob['book_to_bill']:.2f}" if ob.get("book_to_bill") else None,
+                        rs.AI,
+                    ),
+                    (
+                        "Orders announced, last 4 quarters on the 4 before",
+                        signed(ob["announced_growth"], 0)
+                        if ob.get("announced_growth") is not None
+                        else None,
+                        rs.AI,
+                    ),
+                    (
+                        "Government and PSU share",
+                        f"{ob['government_share']:.0%}"
+                        if ob.get("government_share") is not None
+                        else None,
+                        rs.AI,
+                    ),
+                    ("Largest client, last year", ob.get("top_client"), rs.AI),
+                ]
+            )
+
+    c = f.credibility
+    with fold(
+        "Management",
+        f"{len(f.management)} changes · "
+        + (
+            f"promises {c['score']:.0%} kept"
+            if c and c.get("score") is not None
+            else "no promise score yet"
+        ),
+    ):
+        if c:
+            st.html(
+                f"<p>Promises: <b>{c['kept']}</b> kept, {c['kept_late']} kept late, "
+                f"{c['partly']} partly, <b>{c['missed']}</b> missed, {c['dropped']} dropped, "
+                f"{c['overdue']} overdue, {c['to_come']} to come{evidence(rs.AI)}</p>"
+            )
+        if f.promises:
+            html_table(
+                f.promises,
+                [
+                    ("Promise", "metric", lambda x, r: f"{esc(x)}: {esc(r['target'])}"),
+                    ("Due", "due", None),
+                    (
+                        "Status",
+                        "status",
+                        lambda x, r: tag(x, {"kept": "good", "missed": "bad"}.get(x, "")),
+                    ),
+                    ("Note", "note", None),
+                ],
+            )
+        if f.management:
+            items = "".join(
+                f'<li><span class="d">{m["when"]:%d %b %Y}</span><span>{esc(m["headline"])}'
+                f"{evidence(rs.AI)}</span></li>"
+                for m in f.management
+            )
+            st.html(f'<ul class="sna-timeline">{items}</ul>')
+        if not (c or f.promises or f.management):
+            st.caption("No earnings-call promises or management changes stored.")
+
+    with fold("Ownership", f"{len(f.ownership)} quarters"):
+        if not f.ownership:
+            st.caption("No shareholding patterns stored yet.")
+        else:
+
+            def share(x, _row):
+                return f"{x:.1%}" if not blank(x) else esc(None)
+
+            html_table(
+                f.ownership,
+                [
+                    ("Quarter", "quarter", lambda x, r: f"{x:%b %Y}{evidence(rs.FILED)}"),
+                    ("Promoters>", "promoter", share),
+                    ("FIIs>", "fii", share),
+                    ("DIIs>", "dii", share),
+                    ("Mutual funds>", "mf", share),
+                    ("Retail>", "retail", share),
+                    ("Pledged>", "pledged", share),
+                ],
+            )
+
     basis = {"approved": "your approved peers", "industry": "the largest in its NSE industry"}
-    with st.expander(f"4. Peers · {max(len(f.peers) - 1, 0)} companies"):
+    notes = {p["symbol"]: p for p in view["peers"]} if view else {}
+    if view:
+        notes[f.symbol] = view["subject"]
+    with fold("Peers", f"{max(len(f.peers) - 1, 0)} companies"):
         st.caption(
             f"Against {basis.get(f.peer_basis, 'no peers yet')}; set peers on Manage stocks."
         )
         cards = []
         for p in f.peers:
+            note = notes.get(p.symbol)
+            extra = ""
+            if note and note.get("why_it_matters"):
+                extra += (
+                    f'<p class="sna-note"><b>Why it matters</b> {esc(note["why_it_matters"])}</p>'
+                )
+            if note and note.get("key_risk"):
+                extra += f'<p class="sna-note"><b>Key risk</b> {esc(note["key_risk"])}</p>'
             cards.append(
                 f'<div class="sna-ecard{" subject" if p.is_subject else ""}">'
                 f'<div class="sna-eyebrow">NSE · {esc(p.symbol)}'
@@ -2219,22 +2449,54 @@ def research_page() -> None:
                 f'<span><b class="{trend(p.revenue_growth)}">{signed(p.revenue_growth, 0)}</b>'
                 f"revenue{', ' + esc(p.period) if p.period else ''}</span></div>"
                 f'<div class="sna-muted" style="font-size:.8rem;margin-top:.4rem">'
-                f"{f'₹{p.market_cap_cr:,.0f} cr market cap' if p.market_cap_cr else ''}</div></div>"
+                f"{f'₹{p.market_cap_cr:,.0f} cr market cap' if p.market_cap_cr else ''}</div>"
+                f"{extra}</div>"
             )
         st.html(f'<div class="sna-cards">{"".join(cards)}</div>')
 
-    with st.expander(f"5. What's coming · {len(f.coming)} dates"):
+    h = f.lean
+    with fold("What moves this stock", f"leans {h.lean}" if h else "no evidence yet"):
+        if h is None or not h.reasons:
+            st.caption("No results, order wins, events or deals in the last 90 days.")
+        else:
+            st.html(
+                f"<p>{tag('leans ' + h.lean, LEAN_TAG[h.lean])} score {signed(h.score, 1)}; last "
+                f'12 weeks <span class="{trend(h.move_12w)}">{signed(h.move_12w, 1)}</span> '
+                "against the Nifty 50. See Portfolio and Week by week for how this is worked "
+                "out.</p>"
+            )
+            html_table(
+                [
+                    {
+                        "when": f"{r.case.at.astimezone(IST):%d %b}",
+                        "kind": r.case.kind,
+                        "median": r.median,
+                        "evidence": f"{r.cases} cases" if r.cases else "no cases",
+                        "since": r.since,
+                    }
+                    for r in h.reasons[:6]
+                ],
+                [
+                    ("Date", "when", None),
+                    ("Event", "kind", None),
+                    ("Usually, 20 days>", "median", change),
+                    ("Evidence", "evidence", None),
+                    ("Since then>", "since", change),
+                ],
+            )
+
+    with fold("What's coming", f"{len(f.coming)} dates"):
         if not f.coming:
             st.caption("Nothing announced for the next four months.")
         else:
             items = "".join(
-                f'<li><span class="d">{c.day:%a %d %b}</span><span>{esc(c.what)}'
-                f"{evidence(c.badge)}</span></li>"
-                for c in f.coming
+                f'<li><span class="d">{x.day:%a %d %b}</span><span>{esc(x.what)}'
+                f"{evidence(x.badge)}</span></li>"
+                for x in f.coming
             )
             st.html(f'<ul class="sna-timeline">{items}</ul>')
 
-    with st.expander(f"6. Red flags · {len(f.flags)} open"):
+    with fold("Red flags", f"{len(f.flags)} open"):
         if not f.flags:
             st.caption("No open red flags.")
         for flag in f.flags:
@@ -2243,6 +2505,46 @@ def research_page() -> None:
                 f"{flag.flagged_on:%d %b %Y} · {esc(flag.kind.replace('_', ' '))} · "
                 f"{esc(flag.title)}</div>"
             )
+
+    if view:
+        with fold("What to watch and decide", f"{len(view['decisions'])} calls"):
+            tags = {"Review now": "bad", "Watch": "warn", "Hold steady": "good", "Check": ""}
+            cards = "".join(
+                f'<div class="sna-ecard"><div>{tag(d["tag"], tags.get(d["tag"], ""))}</div>'
+                f'<div class="t">{esc(d["title"])}</div><p class="sna-note">{esc(d["why"])}</p>'
+                f'<div class="sna-cites">{cite(d["facts"])}</div></div>'
+                for d in view["decisions"]
+            )
+            checklist = "".join(f"<li>{esc(q)}</li>" for q in view["decide_now"])
+            st.html(
+                f'<div class="sna-cards">{cards}</div>'
+                + (
+                    '<div class="sna-callout"><span class="sna-eyebrow">Decisions to make now'
+                    f'</span><ul class="sna-check">{checklist}</ul></div>'
+                    if checklist
+                    else ""
+                )
+            )
+            st.caption("Inputs for your own decisions, not advice.")
+
+        with fold("Sources", f"{len(chosen['facts'])} facts"):
+            st.caption(
+                "The facts the view was written from, as the model saw them; the ids are the "
+                "ones cited above (hover a citation to read its fact)."
+            )
+            items = "".join(
+                f'<li><span class="sna-cite">{esc(i)}</span> {esc(t)}</li>'
+                for i, t in chosen["facts"]
+            )
+            st.html(f'<ul class="sna-sources">{items}</ul>')
+            if chosen["dropped"]:
+                st.warning(
+                    "Dropped because a number in it was not among the facts: "
+                    + "; ".join(
+                        f"{d['part']} ({', '.join(d['numbers'])})" for d in chosen["dropped"]
+                    ),
+                    icon=":material/rule:",
+                )
 
 
 def val_years() -> int:

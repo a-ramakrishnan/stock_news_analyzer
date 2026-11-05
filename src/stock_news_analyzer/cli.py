@@ -986,6 +986,55 @@ def run(
         raise typer.Exit(1)
 
 
+@app.command("brief")
+def brief_command(
+    symbol: str = typer.Argument(..., help="NSE symbol."),
+    write: bool = typer.Option(False, "--write", help="Write a new view (one model call)."),
+) -> None:
+    """A stock's research brief: the latest AI-written view, or a new one with --write; the
+    numbered facts it rests on are listed with --write."""
+    from stock_news_analyzer.agents import brief as bf
+    from stock_news_analyzer.llm import LLM, LLMError
+    from stock_news_analyzer.sources.announcements import IST
+
+    with get_session() as session:
+        company = _companies_or_exit(session, symbol)[0]
+        if write:
+            if not get_settings().anthropic_api_key:
+                typer.echo("No API key: add it on Settings or in .env.")
+                raise typer.Exit(1)
+            try:
+                b = bf.write(session, LLM(session), company.isin, progress=typer.echo)
+            except LLMError as exc:
+                typer.echo(f"No view: {exc}")
+                raise typer.Exit(1) from exc
+        else:
+            b = bf.latest(session, company.isin)
+            if b is None:
+                typer.echo("No view yet: run with --write.")
+                return
+        view = b.view
+        typer.echo(
+            f"\n{company.nse_symbol} · {b.created_at.astimezone(IST):%d %b %Y %H:%M} · "
+            f"{b.model} · ${b.cost_usd:.3f}\n"
+        )
+        typer.echo(view["verdict"])
+        typer.echo(view["summary"] + "\n")
+        for x in view["stances"]:
+            typer.echo(f"  {x['label']}: {x['text']}")
+        typer.echo("")
+        for o in view["observations"]:
+            typer.echo(f"- Observed: {o['observed']} [{', '.join(o['facts'])}]")
+            typer.echo(f"  Read: {o['read']}")
+        typer.echo("")
+        for d in view["decisions"]:
+            typer.echo(f"[{d['tag']}] {d['title']}: {d['why']}")
+        for q in view["decide_now"]:
+            typer.echo(f"  ? {q}")
+        for d in b.dropped:
+            typer.echo(f"dropped {d['part']}: numbers {', '.join(d['numbers'])} not in the facts")
+
+
 @app.command("evidence")
 def evidence(
     days: int = typer.Option(5, help="Trading days after the news: 1, 5 or 20."),

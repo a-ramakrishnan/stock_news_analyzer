@@ -245,10 +245,20 @@ class EventsSpec(Spec):
             ]
         }
 
-    def call(self, llm, case: EvalCase, model: str) -> Answer:
+    def call(self, llm, case: EvalCase, model: str, system: str | None = None) -> Answer:
         doc, company = filing(case.input)
         prompt = extractor._prompt([(doc, company)])
-        answer = extractor._ask(llm, model, [(doc, company)])
+        if system is None:  # the agent's own entry point
+            answer = extractor._ask(llm, model, [(doc, company)])
+        else:  # the same call with other instructions (an experiment)
+            answer = llm.structured(
+                "events",
+                model,
+                system,
+                prompt,
+                extractor.EventsAnswer,
+                max_tokens=extractor.MAX_TOKENS,
+            )
         found = next((f.events for f in answer.filings if f.id == doc.id), [])
         c = llm.last_call
         return Answer(

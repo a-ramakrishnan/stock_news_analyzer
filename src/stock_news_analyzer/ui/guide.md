@@ -170,6 +170,10 @@ An eval measures one AI agent on a fixed set of cases whose answers are known, s
   - An agent whose eval hasn't run says how many cases are checked and what to do next.
   - An agent without an eval says how it could be measured.
 - **Look closer:** an agent's score run by run, one line per variant (the baseline, and any change you try), the latest run of each variant side by side, and its cases, failing ones first. Open a failing case to see what was expected next to what the agent found.
+- **Compare variants:** a variant against the baseline, case by case.
+  - The verdict is better, worse or no clear difference. It only says better or worse when the 95% interval of the per-case difference leaves out zero, so a lucky run isn't mistaken for an improvement.
+  - Each score, the cost a case and the speed are shown side by side, with what each variant changed (model, instructions) and why.
+  - Open a case that got better or worse to see what was expected, what the baseline found and what the variant found.
 - **Eval cases:** pick an eval and work through the cases still to check, one at a time.
   - The left side shows what the agent read; the right shows the expected answer as a table you can edit (type, amount in Rs crore, the amount as written, a headline). Add or delete rows as needed.
   - **Confirm** saves the answer as checked, **Nothing to find** records that the filing announces no event, and **Exclude** leaves a case out of runs (say why in the note).
@@ -201,6 +205,10 @@ An eval measures one AI agent on a fixed set of cases whose answers are known, s
   2. `uv run sna eval events draft` has Opus draft the answers, for about a cent a case (the Results reader needs no drafts).
   3. Check the answers on **Eval cases**.
   4. `uv run sna eval events run` scores the agent, for well under a dollar.
+  5. To try a change:
+     1. Save the instructions with `uv run sna eval events instructions > v1.txt` and edit the file.
+     2. Run it as a variant: `uv run sna eval events run --variant v1 --instructions v1.txt --note "what changed"`. Use `--model` to try another model instead.
+     3. `uv run sna eval events compare` prints the comparison; the page shows it too.
 
   The page shows the run as soon as it finishes. docs/evals.md has the details.
 

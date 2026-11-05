@@ -161,12 +161,22 @@ class ResultsSpec(Spec):
         docs = [d for d in docs if len(reader.statement_text(d)) >= reader.MIN_CHARS]
         return sorted(docs, key=reader._rank)[0] if docs else None
 
-    def call(self, llm, case: EvalCase, model: str) -> Answer:
+    def call(self, llm, case: EvalCase, model: str, system: str | None = None) -> Answer:
         doc, company = _filing(case.input)
         text = reader.statement_text(doc)
         quarter = quarter_before(doc.published_at.astimezone(IST).date())
         prompt = reader._prompt(company, quarter, doc, text)
-        answer, used = reader._ask(llm, (model,), prompt)
+        if system is None:  # the agent's own entry point
+            answer, _ = reader._ask(llm, (model,), prompt)
+        else:  # the same call with other instructions (an experiment)
+            answer = llm.structured(
+                "results",
+                model,
+                system,
+                prompt,
+                reader.ResultsAnswer,
+                max_tokens=reader.MAX_TOKENS,
+            )
         c = llm.last_call
         return Answer(
             output=self._quarter(answer, case.reference or {}, text),

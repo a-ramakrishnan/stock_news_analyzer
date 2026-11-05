@@ -44,6 +44,28 @@ The commands, the runner and the page are shared.
 
 The first real run needs `--approve-harness`, after you've read the runner and the eval's grader. If either changes later, runs refuse until you approve again, so a score can't silently change meaning. Failed calls (timeouts, refusals, cut-off answers, no credit) are kept apart from wrong answers, and the served model is checked against the one asked for.
 
+## Experiments
+
+A variant is a run with something changed: another model (`--model`), or other instructions from a file (`--instructions FILE`). Every run records what it used (`eval_runs.config`: the model, and the agent's own instructions or a digest of the file) and why (`--note`). For a variant, that goes into `change.md` too.
+
+```
+uv run sna eval events instructions > v1.txt          # the agent's instructions, to edit
+uv run sna eval events run --variant v1 --instructions v1.txt --note "stricter about lakh and crore"
+uv run sna eval events compare baseline v1
+```
+
+`compare` (and **Compare variants** on the Agent evals page) pairs the two runs case by case on the cases both graded and gives:
+- which cases got better, which got worse, and how many stayed the same
+- each metric side by side
+- the cost a case, the median latency and the failed calls
+
+The verdict on the headline metric comes from the paired differences:
+- **better** or **worse** only when the 95% interval of the mean difference leaves out zero
+- **no clear difference** otherwise
+- **too few cases to tell** under five cases
+
+A change you keep then goes into the agent's code with a new prompt version, and live monitoring shows how it does on real work.
+
 ## Traces
 
 Every AI call is traced (`llm_traces`, migration 0033), failed calls included. A trace holds:

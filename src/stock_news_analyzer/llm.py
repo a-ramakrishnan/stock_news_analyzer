@@ -151,6 +151,9 @@ class LLM:
         call.cache_read_tokens = getattr(usage, "cache_read_input_tokens", 0) or 0
         call.cache_write_tokens = getattr(usage, "cache_creation_input_tokens", 0) or 0
         call.cost_usd = cost(model, usage)
+        # The last structured call, for callers that need its usage (the evals).
+        self.last_call, self.last_model = call, getattr(response, "model", model)
+        self.last_stop_reason = response.stop_reason
         parsed = response.parsed_output
         if response.stop_reason == "refusal":
             call.ok, call.error = False, "declined by the model's safety checks"

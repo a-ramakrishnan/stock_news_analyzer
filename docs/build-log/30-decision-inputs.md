@@ -51,6 +51,17 @@ Tests cover each results kind, order sizes, the summary statistics, a full run o
 
 Asked for after part 2: the same cases the other way round. "Group the cases by: Size of move" puts every case in a band by its move against the benchmark, finer near zero (−5% or worse, −5 to −2%, −2 to −1%, −1 to −0.5%, −0.5 to 0%, 0 to +0.5%, +0.5 to +1%, +1 to +2%, +2 to +5%, +5% or better). Each band shows its number of cases as a bar, the kinds of event behind them, each with how many of that kind's cases fell in the band ("6 of 15": a pattern when they bunch at one end), and the stocks, owned ones in bold. Picking a band lists its cases with their kind and their 1, 5 and 20-day moves. `study.by_move` does the grouping; a test checks the bands, the order and the counts.
 
+## Week by week
+
+Asked for next: one page per stock showing it week by week, to see whether it behaves the way its news says it should.
+
+- **`agents/weekly.py`** (no AI) splits a stock's last 12, 24 or 52 weeks into Monday-to-Friday weeks: the move against the Nifty 50 and the sector, compounded; the close; unusual days with the Move Explainer's cause; and every item that came out, each in the week whose prices could first react to it (Friday-evening news counts in the next week). Items are the event study's cases (results, order wins, events, red flags, deals), the news (off-topic and repeated articles left out) and the filings (one copy of each BSE and NSE pair).
+- **The news tone** of a week adds up the items: news and events of importance 3 or more count ±importance by sentiment; results count from +4 (profit up 20%+) to −4 (swung to a loss); order wins from +1 to +4 by size; a red flag −3.
+- **The verdict:** a week that moved more than the stock's usual week (the median size of its weekly moves in the period, at least 1%) is *in line with the news* when it went the way the tone pointed, *against the news* when not, and *moved without news* with no tone. Smaller moves are *quiet*.
+- **The page,** Week by week in Research: tiles for the period's move and how many weeks were in line, against or without news; a chart of the weekly moves coloured by verdict, with the week's main items on hover; then each week, newest first, with its move, unusual days, what happened, the news (linked, most important first) and the filings.
+
+Tests cover the verdicts, Friday-evening news moving to the next week, off-topic news left out, the tone of news, an event and a filing in the same week, and minor news not counting.
+
 ## On the Mac
 
 ```

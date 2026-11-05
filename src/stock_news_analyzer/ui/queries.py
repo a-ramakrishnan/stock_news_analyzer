@@ -1285,3 +1285,10 @@ def evidence(session: Session) -> dict:
     from stock_news_analyzer.agents import study
 
     return {"cases": study.all_cases(session), "owned": study.owned_isins(session)}
+
+
+def weeks(session: Session, isin: str, count: int = 12) -> list:
+    """A stock week by week (agents/weekly.py), newest first."""
+    from stock_news_analyzer.agents import weekly
+
+    return weekly.weeks(session, isin, count)

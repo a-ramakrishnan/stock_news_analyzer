@@ -612,6 +612,7 @@ make ui
 | News | Search headlines; links to the articles |
 | Themes | Theme strength, a theme's months and items, read-across |
 | Ask | Ask a question in plain English; the answer with sources, and earlier questions |
+| Week by week | One stock's last 12, 24 or 52 weeks: each week's move against the Nifty 50 and the sector, its unusual days, and everything that came out (results, order wins, events, red flags, deals, news, filings), with whether the move went the way the news pointed |
 | What moves the stock | Average return vs Nifty 50 after each kind of filing, 1, 5 and 20 trading days later |
 | What news does to prices | The evidence across every stock followed: for each kind of event (results by revenue and profit growth, order wins by size, events by type and tone, red flags, block and bulk deals), the median move against the Nifty 50 or the sector, the middle half of the moves, how often the stock rose, and the cases behind it; or grouped by the size of the move, with the kinds of event and stocks behind moves of each size |
 | Manage stocks | Search any listed company and add it to Stocks I own or Watchlist, with news aliases and a sector benchmark; edit or remove stocks; **Load history now** fetches a new stock's filings, news and moves since Oct 2023 |

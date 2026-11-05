@@ -224,6 +224,9 @@ h1{letter-spacing:-.01em}
 .sna-dot.good{background:var(--sna-up)}
 .sna-dot.warn{background:var(--sna-medium)}
 .sna-dot.bad{background:var(--sna-high)}
+.sna-week p{margin:.2rem 0 .6rem}
+.sna-week ul{margin:.2rem 0 .8rem;padding-left:1.1rem}
+.sna-week li{margin:.15rem 0}
 .sna-meter{display:inline-flex;gap:2px;vertical-align:middle}
 .sna-meter i{width:7px;height:12px;border-radius:2px;background:var(--sna-soft)}
 .sna-meter i.on{background:var(--sna-accent-text)}
@@ -1697,13 +1700,9 @@ HORIZON_LABELS = {1: "1 day", 5: "5 days", 20: "20 days"}
 
 
 def short_kind(kind: str) -> str:
-    """A kind without the prefix its section title already says: 'Results: revenue up,
-    profit down' -> 'Revenue up, profit down'; events and deals keep their type."""
-    for prefix in ("Results: ", "Order win: ", "Red flag: "):
-        if kind.startswith(prefix):
-            rest = kind.removeprefix(prefix)
-            return rest[:1].upper() + rest[1:]
-    return kind
+    from stock_news_analyzer.agents.study import short_kind as short
+
+    return short(kind)
 
 
 def range_bar(row: dict, scale: float) -> str:
@@ -1955,6 +1954,177 @@ def evidence_by_move(cases: list, horizon: int, sector: bool, owned: set[str]) -
         key="ev-band",
     )
     evidence_cases(band.cases, owned, sector, with_kind=True)
+
+
+VERDICT_TAG = {
+    "In line with the news": "good",
+    "Against the news": "warn",
+    "Moved without news": "",
+    "Quiet": "",
+}
+ITEM_LABELS = {
+    "result": "Results",
+    "order": "Order win",
+    "event": "Event",
+    "flag": "Red flag",
+    "deal": "Deal",
+}
+
+
+def weeks_page() -> None:
+    from stock_news_analyzer.agents import weekly
+
+    page_header(
+        "Week by week",
+        "One stock's last weeks: how it moved against the Nifty 50 and its sector, everything "
+        "that came out (results, order wins, events, red flags, deals, news and filings), and "
+        "whether the move went the way the news pointed.",
+        "week-by-week",
+    )
+    c1, c2 = st.columns([3, 1.4], vertical_alignment="bottom")
+    with c1:
+        s = stock_picker("weeks-stock", include_all=False)
+    count = (
+        c2.segmented_control(
+            "Weeks",
+            list(weekly.PERIODS),
+            default=12,
+            format_func=lambda n: f"{n} weeks",
+            key="weeks-n",
+        )
+        or 12
+    )
+    if s is None:
+        no_data("No stocks yet. Add them on the Manage stocks page.")
+        return
+    ws = load("weeks", isin=s["isin"], count=count)
+    priced = [w for w in ws if w.excess is not None]
+    if not priced:
+        no_data("No prices for this stock in these weeks yet: run the **prices** job on System.")
+        return
+
+    def total(field: str) -> float | None:
+        values = [getattr(w, field) for w in priced]
+        if any(v is None for v in values):
+            return None
+        out = 1.0
+        for v in values:
+            out *= 1 + v
+        return out - 1
+
+    counts = {v: sum(w.verdict == v for w in priced) for v in weekly.VERDICTS}
+    moved = counts["In line with the news"] + counts["Against the news"]
+    usual = weekly.usual_move(ws)
+    stat_tiles(
+        [
+            (
+                f"{s['symbol']}, {count} weeks",
+                f'<span class="{trend(total("stock"))}">{signed(total("stock"), 1)}</span>',
+                f"vs Nifty 50 about {signed(sum(w.excess for w in priced), 1)}",
+            ),
+            (
+                "In line with the news",
+                f"{counts['In line with the news']}",
+                (f"of {moved} week{'s' if moved > 1 else ''} that moved with news")
+                if moved
+                else "no weeks moved with news",
+            ),
+            ("Against the news", str(counts["Against the news"]), "moved the other way"),
+            (
+                "Moved without news",
+                str(counts["Moved without news"]),
+                f"{counts['Quiet']} quiet weeks (under ±{usual:.1%})",
+            ),
+        ]
+    )
+    with st.expander("How to read this", icon=":material/info:"):
+        st.markdown(
+            f"""
+- **A week** runs Monday to Friday. Its move is the stock against the Nifty 50, compounded over
+  its trading days. News out after Friday's close counts in the next week, when prices could
+  react to it.
+- **The news tone** adds up the week: news and events of importance {weekly.NEWS_IMPORTANCE}+
+  count +importance if positive and −importance if negative; good results and order wins add,
+  weak results and red flags take away. Off-topic and repeated articles don't count.
+- **In line / against the news:** the stock moved more than in its usual week ({usual:.1%} for
+  {s["symbol"]} over these weeks) and went the way the tone pointed, or the other way.
+  **Moved without news:** a bigger move with nothing either way, often the market or the
+  sector; compare its move against the sector. **Quiet:** a smaller move than usual.
+- Mostly in line means the stock trades on its news. Often against or without news means
+  something else drives it, or the news was expected.
+"""
+        )
+    with chart_card(f"{s['symbol']} against the Nifty 50, week by week", "weeks"):
+        st.plotly_chart(charts.weekly_chart(ws, dark()), width="stretch", **PLOT)
+
+    section_title("The weeks, newest first")
+    for n, w in enumerate(ws):
+        move = "no prices" if w.excess is None else f"{signed(w.excess, 1)} vs Nifty 50"
+        label = f"{w.start:%d %b} – {w.end:%d %b %Y}  ·  {move}  ·  {w.verdict}"
+        notable = w.verdict != "Quiet" or any(i.kind not in ("news", "filing") for i in w.items)
+        with st.expander(label, expanded=n < 4 and notable):
+            week_detail(w)
+
+
+def week_detail(w) -> None:
+    """One week: its move, unusual days, what happened, the news and the filings."""
+    parts = []
+    if w.excess is not None:
+        sector = (
+            f' · vs sector <span class="{trend(w.sector_excess)}">'
+            f"{signed(w.sector_excess, 1)}</span>"
+            if w.sector_excess is not None
+            else ""
+        )
+        close = f" · close ₹{w.close:,.2f}" if w.close is not None else ""
+        parts.append(
+            f'<p>Stock <span class="{trend(w.stock)}">{signed(w.stock, 1)}</span> · vs Nifty 50 '
+            f'<span class="{trend(w.excess)}">{signed(w.excess, 1)}</span>{sector}{close} · '
+            f"{w.days} trading days · news tone {w.tone:+d} · "
+            f"{tag(w.verdict, VERDICT_TAG[w.verdict])}</p>"
+        )
+    for u in w.unusual:
+        cause = f": {html.escape(u['cause'].replace('_', ' '))}" if u["cause"] else ""
+        why = f" {AI_TAG} {html.escape(u['explanation'])}" if u["explanation"] else ""
+        parts.append(
+            f"<p>Unusual day {u['date']:%a %d %b}, "
+            f'<span class="{trend(u["excess"])}">{signed(u["excess"], 1)}</span> vs Nifty'
+            f"{cause}.{why}</p>"
+        )
+
+    def line(i) -> str:
+        sign = f' <span class="sna-dot {"good" if i.tone > 0 else "bad"}"></span>' if i.tone else ""
+        when = f'<span class="sna-muted">{i.at.astimezone(IST):%a %d %b}</span>'
+        title = html.escape(i.title)
+        if i.url:
+            title = f'<a href="{html.escape(i.url)}" target="_blank">{title}</a>'
+        extra = f' <span class="sna-muted">· {html.escape(i.detail)}</span>' if i.detail else ""
+        return f"<li>{when} {title}{extra}{sign}</li>"
+
+    happened = [i for i in w.items if i.kind in ITEM_LABELS]
+    if happened:
+        parts.append("<b>What happened</b><ul>")
+        parts += [
+            line(i).replace("<li>", f"<li><b>{ITEM_LABELS[i.kind]}:</b> ", 1) for i in happened
+        ]
+        parts.append("</ul>")
+    news = w.of("news")
+    if news:
+        parts.append(f"<b>News ({len(news)})</b><ul>")
+        parts += [line(i) for i in news[:8]]
+        if len(news) > 8:
+            parts.append(f'<li class="sna-muted">and {len(news) - 8} less important</li>')
+        parts.append("</ul>")
+    filings = w.of("filing")
+    if filings:
+        parts.append(f"<b>Filings ({len(filings)})</b><ul>")
+        parts += [line(i) for i in filings[:10]]
+        if len(filings) > 10:
+            parts.append(f'<li class="sna-muted">and {len(filings) - 10} more</li>')
+        parts.append("</ul>")
+    if not (happened or news or filings):
+        parts.append('<p class="sna-muted">Nothing came out about the stock this week.</p>')
+    st.html('<div class="sna-week">' + "".join(parts) + "</div>")
 
 
 def manage_page() -> None:
@@ -2891,6 +3061,9 @@ PAGES = {
     "news": st.Page(news_page, title="News", icon=":material/newspaper:", url_path="news"),
     "themes": st.Page(themes_page, title="Themes", icon=":material/hub:", url_path="themes"),
     "ask": st.Page(ask_page, title="Ask", icon=":material/question_answer:", url_path="ask"),
+    "weeks": st.Page(
+        weeks_page, title="Week by week", icon=":material/calendar_view_week:", url_path="weeks"
+    ),
     "evidence": st.Page(
         evidence_page,
         title="What news does to prices",
@@ -2933,7 +3106,7 @@ def setup_needed() -> bool:
 # The sidebar's groups, in order.
 NAV = {
     "Today": ["today", "flags", "agents"],
-    "Research": ["stock", "ask", "themes", "moves", "evidence"],
+    "Research": ["stock", "weeks", "ask", "themes", "moves", "evidence"],
     "Library": ["filings", "news"],
     "Set up": ["manage", "settings", "system"],
     "Help": ["guide"],

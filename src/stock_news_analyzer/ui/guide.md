@@ -35,6 +35,7 @@ The sidebar groups the pages: **Today** (what changed, and the agent map), **Res
 - **Stock:** one company in depth.
   - The chart compares the stock with its sector index and the Nifty 50, both set to 100 at the start, with key filings marked.
   - Tabs: Unusual days, Results, Shareholding, Events (with red flags), Earnings calls, Order book, Filings, News, Bulk/block deals, How it reacted, Corporate actions.
+- **Week by week:** one stock's last 12, 24 or 52 weeks, explained in its own section below.
 - **Filings:** every exchange filing, searchable by stock, type, words and date. Select one to read its text.
 - **News:** headlines about your stocks, with the AI's relevance and importance, and links to the articles.
 - **Themes:** themes across your companies (data centres, defence, credit and so on), whether they are getting stronger, and **read-across**: an important order or event at one company that may matter to another.
@@ -48,6 +49,15 @@ The sidebar groups the pages: **Today** (what changed, and the agent map), **Res
   - **Today, live:** each box shows whether its job is running, worked or failed, its next run, and its AI calls and cost today; a faint line traces the path of each job running now; a feed explains each of today's runs in plain words.
   - **Replay the last 7 days:** press Play to watch information move through the system, today's or the week's, at 10 minutes, an hour or six hours a second; drag the slider to jump to a time. Each run lights up its box, a thin line traces the information from source to memory or from memory through Claude and back, and the feed narrates it.
 - **Guide:** this page.
+
+## Week by week
+
+One stock, week by week, to see whether it behaves the way its news says it should. Choose the stock and 12, 24 or 52 weeks.
+
+- **The chart:** each week's move against the Nifty 50, coloured by what the news said: in line with the news, against it, moved without news, or quiet. Hover a bar for the week's main items.
+- **The weeks, newest first:** each week's move against the Nifty 50 and the sector, its unusual days with their likely cause, then everything that came out: results, order wins, events, red flags and deals, the news (most important first, linked) and the filings. A green or red dot marks what pointed up or down.
+- **The verdict:** the week's news tone adds up positive and negative news and events of importance 3 or more, good or weak results, order wins and red flags. A week that moved more than the stock's usual week is *in line with the news* when it went the way the tone pointed, *against the news* when it went the other way, and *moved without news* when nothing pointed either way. Smaller moves are *quiet*.
+- Mostly in line: the stock trades on its news. Often against or without news: something else drives it (the market, the sector, flows), or the news was expected. News published after Friday's close counts in the next week.
 
 ## What news does to prices
 

@@ -6,6 +6,7 @@ cost, and refused once this month's spend reaches LLM_MONTHLY_BUDGET_USD.
 """
 
 import logging
+import time
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TypeVar
@@ -124,6 +125,7 @@ class LLM:
         import anthropic
 
         call = LlmCall(at=datetime.now(UTC), task=task, model=model)
+        started = time.monotonic()
         try:
             response = self.client.messages.parse(
                 model=model,
@@ -137,12 +139,14 @@ class LLM:
         except anthropic.APIError as exc:
             call.ok, call.error = False, f"{type(exc).__name__}: {exc}"[:2000]
             self._record(call)
+            self._trace(call, system, prompt, None, None, None, started)
             raise LLMError(call.error) from exc
         except ValidationError as exc:
             # The SDK parses the answer before returning: a cut-off or malformed answer raises
             # here, without the response (so its tokens can't be logged).
             call.ok, call.error = False, f"answer did not match the schema: {exc}"[:2000]
             self._record(call)
+            self._trace(call, system, prompt, None, None, None, started)
             raise BadAnswer(call.error) from exc
 
         usage = response.usage
@@ -162,6 +166,7 @@ class LLM:
         elif parsed is None:
             call.ok, call.error = False, "no structured answer in the response"
         self._record(call)
+        self._trace(call, system, prompt, parsed, response.stop_reason, self.last_model, started)
         if not call.ok:
             raise BadAnswer(call.error)
         return parsed
@@ -181,6 +186,7 @@ class LLM:
         import anthropic
 
         call = LlmCall(at=datetime.now(UTC), task=task, model=model)
+        started = time.monotonic()
         kwargs = {}
         if tools:
             *rest, last = tools
@@ -196,6 +202,7 @@ class LLM:
         except anthropic.APIError as exc:
             call.ok, call.error = False, f"{type(exc).__name__}: {exc}"[:2000]
             self._record(call)
+            self._trace(call, system, messages, None, None, None, started)
             raise LLMError(call.error) from exc
         usage = response.usage
         call.input_tokens = usage.input_tokens or 0
@@ -206,9 +213,40 @@ class LLM:
         if response.stop_reason == "refusal":
             call.ok, call.error = False, "declined by the model's safety checks"
         self._record(call)
+        self._trace(
+            call,
+            system,
+            messages,
+            list(getattr(response, "content", []) or []),
+            response.stop_reason,
+            getattr(response, "model", model),
+            started,
+        )
         if not call.ok:
             raise BadAnswer(call.error)
         return response
+
+    def _trace(self, call, system, prompt, answer, stop_reason, served, started) -> None:
+        """Keep what the call was sent and answered (llm_traces), unless traces are off. A
+        trace that can't be stored never stops the call."""
+        if not self.settings.llm_trace_days or call.id is None:
+            return
+        from stock_news_analyzer.traces import record
+
+        try:
+            record(
+                self.session,
+                call,
+                system,
+                prompt,
+                answer,
+                stop_reason,
+                served,
+                int((time.monotonic() - started) * 1000),
+            )
+        except Exception:  # noqa: BLE001  (a trace is a convenience, the call is the work)
+            self.session.rollback()
+            log.warning("could not store the trace of call %s", call.id, exc_info=True)
 
     def _record(self, call: LlmCall) -> None:
         self.session.add(call)

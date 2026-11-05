@@ -359,10 +359,14 @@ def job_digest(session: Session) -> str:
 
     until = datetime.now(UTC)
     since = last_digest_time(session) or until - timedelta(days=1)
+    from stock_news_analyzer.traces import prune
+
     digest = build_digest(session, since, until)
     path = save_digest(digest, get_settings().data_dir)
+    pruned = prune(session, get_settings().llm_trace_days)  # housekeeping, once a day
     return (
         f"{path}: {digest.filings} filings, {digest.news} articles, {digest.unusual} unusual days"
+        + (f"; {pruned} old AI call traces pruned" if pruned else "")
     )
 
 

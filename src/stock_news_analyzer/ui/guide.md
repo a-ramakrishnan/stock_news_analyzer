@@ -52,6 +52,7 @@ The sidebar groups the pages: **Today** (what changed), **Agents** (how the AI a
   - **Replay the last 7 days:** press Play to watch information move through the system, today's or the week's, at 10 minutes, an hour or six hours a second; drag the slider to jump to a time. Each run lights up its box, a thin line traces the information from source to memory or from memory through Claude and back, and the feed narrates it.
 - **Agent evals:** how well each AI agent does its job, measured on fixed cases; explained in its own section below.
 - **Eval cases:** the cases the agents are measured on, where you check their answers; explained under Agent evals below.
+- **Traces:** what each AI call was sent and what it answered; explained under Agent evals below.
 - **Guide:** this page.
 
 ## Research brief
@@ -174,6 +175,11 @@ An eval measures one AI agent on a fixed set of cases whose answers are known, s
   - Each case's **History** keeps every earlier answer and who changed it.
   - The Results reader's answers are the companies' own XBRL figures, so its cases only need excluding when a filing doesn't fit.
   - To add a filing as a case, select it on **Filings** and press **Add to the Event Extractor's eval**.
+- **Traces:** every AI call, newest first: when, which task, the model, tokens, cost, seconds and whether it worked.
+  - Filter by task, the last 1 to 90 days, words in the prompt, or failed calls only.
+  - Select a call to see the agent's instructions, exactly what it was sent beside what it answered, and why it stopped.
+  - A call about filings offers **Add to the Event Extractor's eval** for each, to turn a call it got wrong into a case.
+  - Traces are kept 30 days by default (**Settings**; 0 keeps none) and pruned each morning with the digest. Costs stay on **System** however long traces are kept.
 - **Running one** (in the project folder, in a terminal), with `events` or `results`:
   1. `uv run sna eval events sample` adds cases from your database.
   2. `uv run sna eval events draft` has Opus draft the answers, for about a cent a case (the Results reader needs no drafts).

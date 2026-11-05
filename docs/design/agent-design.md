@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.34 · Nov 5, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.35 · Nov 5, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -635,7 +635,8 @@ An agent's quality is measured, not judged by feel: each AI agent gets an eval, 
 - **Every run is kept** in `eval_runs` and `eval_results` (migration 0031), so the **Agent evals** page can show each agent's score, its passing and failing cases and its history beside the Agent map, though the eval runs outside Docker. The runner also writes results, transcripts and a summary under `.claude/hillclimb/<agent>/`.
 - **Guardrails on the eval itself:** failed calls are kept apart from wrong answers; the served model is checked against the one asked for; a changed runner or grader needs your approval before it scores again; oracle and null modes check the grader for free.
 - **Labelling (step 36):** the **Eval cases** page shows what the agent read beside the expected answer as an editable table, with Confirm, Nothing to find, Exclude, a note and the case's history; Filings adds any filing to the Event Extractor's eval. The Agent map, Agent evals and Eval cases form an **Agents** group in the sidebar.
-- **Next (steps 37–39, LangSmith-style):** traces of every AI call; live monitoring of quality from production (QA pass rates, quotes found, your accept and reject rate, per agent and prompt version, with alerts); experiments compared case by case. Then evals for News triage against your labels and Order books against the filings, and the prose agents (Move explainer, Earnings calls, Research briefs, Ask) by a rubric and a judge model.
+- **Traces (step 37):** every AI call keeps what it was sent and answered (`llm_traces`, migration 0033): the instructions stored once per distinct text, the prompt or conversation, the answer, the stop reason, the served model, the latency and the filings it was about; a **Traces** page and `sna llm traces`; kept `llm_trace_days` (30), pruned with the digest. A call about filings adds them to the eval.
+- **Next (steps 38–39, LangSmith-style):** live monitoring of quality from production (QA pass rates, quotes found, your accept and reject rate, per agent and prompt version, with alerts); experiments compared case by case. Then evals for News triage against your labels and Order books against the filings, and the prose agents (Move explainer, Earnings calls, Research briefs, Ask) by a rubric and a judge model.
 
 ## Build-in-public plan
 

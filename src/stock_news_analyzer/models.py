@@ -976,3 +976,34 @@ class EvalCase(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class LlmPrompt(Base):
+    """A distinct set of instructions (system prompt) sent to an LLM, stored once."""
+
+    __tablename__ = "llm_prompts"
+
+    sha: Mapped[str] = mapped_column(String(64), primary_key=True)
+    text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class LlmTrace(Base):
+    """What one AI call (`llm_calls`) was sent and answered: the instructions (by digest), the
+    prompt (or the conversation, as JSON), the answer, the stop reason, the model that served it
+    and how long it took. `subjects` names what the call was about where the prompt says so
+    (e.g. 'document:123'). Kept for `llm_trace_days` (Settings)."""
+
+    __tablename__ = "llm_traces"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    call_id: Mapped[int] = mapped_column(
+        ForeignKey("llm_calls.id", ondelete="CASCADE"), unique=True
+    )
+    system_sha: Mapped[str | None] = mapped_column(ForeignKey("llm_prompts.sha"))
+    prompt: Mapped[str] = mapped_column(Text)
+    response: Mapped[dict | list | None] = mapped_column(JSONB)
+    stop_reason: Mapped[str | None] = mapped_column(String(32))
+    served_model: Mapped[str | None] = mapped_column(String(64))
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
+    subjects: Mapped[list] = mapped_column(JSONB, default=list)

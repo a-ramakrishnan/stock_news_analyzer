@@ -3441,3 +3441,59 @@ def _register_evals() -> None:
 
 
 _register_evals()
+
+
+@llm_app.command("traces")
+def llm_traces(
+    task: list[str] = typer.Option([], help="Only this task (e.g. events); repeat for more."),
+    days: int = typer.Option(1, help="How many days back."),
+    failed: bool = typer.Option(False, "--failed", help="Only calls that failed."),
+) -> None:
+    """Traced AI calls, newest first: when, task, model, tokens, cost, seconds, outcome."""
+    from stock_news_analyzer import traces as tr
+
+    with get_session() as session:
+        rows = tr.listing(session, task or None, days, failed)
+    if not rows:
+        typer.echo("No traced calls.")
+    for r in rows:
+        outcome = "ok" if r["ok"] else (r["error"] or "failed")[:60]
+        typer.echo(
+            f"{r['call_id']:>7}  {r['at'].astimezone(fl.IST):%d %b %H:%M:%S}  {r['task']:<12} "
+            f"{r['model']:<20} {r['input_tokens']:>7,} in {r['output_tokens']:>6,} out  "
+            f"${r['cost_usd']:.5f}  {r['latency_s']:5.1f}s  {outcome}"
+        )
+
+
+@llm_app.command("trace")
+def llm_trace(call_id: int) -> None:
+    """One traced AI call in full: its instructions, what it was sent, what it answered."""
+    import json
+
+    from stock_news_analyzer import traces as tr
+
+    with get_session() as session:
+        t = tr.detail(session, call_id)
+    if t is None:
+        typer.echo(f"No trace for call {call_id}.")
+        raise typer.Exit(1)
+    typer.echo(
+        f"{t['task']} · {t['at'].astimezone(fl.IST):%d %b %Y %H:%M:%S} · "
+        f"{t['served_model'] or t['model']} · ${t['cost_usd']:.5f} · {t['latency_s']:.1f}s · "
+        f"stopped: {t['stop_reason'] or '-'}" + ("" if t["ok"] else f" · FAILED: {t['error']}")
+    )
+    typer.echo(f"\n--- instructions ---\n{t['system']}\n\n--- sent ---\n{t['prompt']}")
+    typer.echo("\n--- answered ---\n" + json.dumps(t["response"], indent=1, ensure_ascii=False))
+
+
+@llm_app.command("prune")
+def llm_prune(
+    days: int = typer.Option(None, help="Keep this many days (default: the setting)."),
+) -> None:
+    """Delete AI call traces older than the setting (done each morning with the digest)."""
+    from stock_news_analyzer import traces as tr
+
+    keep = get_settings().llm_trace_days if days is None else days
+    with get_session() as session:
+        n = tr.prune(session, keep)
+    typer.echo(f"Deleted {n} traces older than {keep} days.")

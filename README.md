@@ -49,8 +49,8 @@ New to the system? The [Guide](src/stock_news_analyzer/ui/guide.md) explains wha
 | 34 | Agent evals page: each AI agent's score, passing and failing cases and history, next to the Agent map | done |
 | 35 | A general eval framework (datasets in the database with history, a spec per agent, shared runner and commands); the Results reader's eval, graded against XBRL | done |
 | 36 | Eval cases page: check, correct or exclude each case's answer beside what the agent read, with its history; add any filing to an eval from Filings; an Agents group in the sidebar | done |
-| 37 | Traces of every AI call | next |
-| 38 | Live monitoring of the agents' quality | |
+| 37 | Traces of every AI call: what it was sent and answered, the model that served it, how long it took; a Traces page and `sna llm traces`; kept 30 days by default | done |
+| 38 | Live monitoring of the agents' quality | next |
 | 39 | Experiments compared case by case | |
 | 40 | Trying it on a clean Mac and Windows | |
 
@@ -637,6 +637,7 @@ make ui
 | Agent map | How an agentic system works, on this one: perceive, plan, think, remember, act, guardrails, observe. **Today, live**: each job running, ok or failed, its next run, AI calls and cost, a narrated feed of today's runs; **Replay**: play the last 7 days (or today) back, with lines drawn along each run's path, play, speed and a time slider |
 | Agent evals | How well each AI agent does its job: the share of eval cases it gets fully right with its margin and change, cases passing and failing, recall, precision and specificity; its score run by run per variant, its cases failing first with what was expected and found; how agents without an eval could be graded |
 | Eval cases | The cases each agent is measured on: what the agent read beside the expected answer as an editable table; Confirm, Nothing to find, Exclude, a note, and the history of earlier answers; a queue of cases still to check |
+| Traces | Every AI call: task, model, tokens, cost, seconds, outcome, filtered by task, days, words in the prompt or failures; select one for its instructions, what it was sent and what it answered; add the filings it read to an eval |
 | Guide | How to use the system: getting started, a daily routine, each page, the words used, AI use and cost, problems. Every page links to its part |
 
 ## Evals

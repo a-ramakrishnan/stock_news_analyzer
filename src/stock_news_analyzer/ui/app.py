@@ -3664,6 +3664,105 @@ def _eval_case(session, spec, case, next_key, pos_key) -> None:
                         st.caption(f"  {html.escape(line)}")
 
 
+def traces_page() -> None:
+    from stock_news_analyzer import traces as tr
+
+    page_header(
+        "Traces",
+        "What each AI call was sent and what it answered: the agent's instructions, the "
+        "prompt, the answer, the model that served it, its cost and how long it took. Use it "
+        "to see why an agent answered as it did, and to turn a call it got wrong into an eval "
+        "case.",
+        "agent-evals",
+    )
+    cfg = get_settings()
+    if not cfg.llm_trace_days:
+        st.info("Traces are off: set how many days to keep them on **Settings**.")
+    with Session(engine()) as session:
+        known = tr.tasks(session)
+    cols = st.columns([3, 1, 2, 1], vertical_alignment="bottom")
+    chosen = cols[0].multiselect("Tasks", known, placeholder="All tasks", key="traces-tasks")
+    days = cols[1].selectbox("Days", [1, 7, 30, 90], index=1, key="traces-days")
+    text = cols[2].text_input("Prompt contains", key="traces-text")
+    failed = cols[3].toggle("Failed only", key="traces-failed")
+    with Session(engine()) as session:
+        rows = tr.listing(session, chosen, days, failed, text.strip() or None)
+    if not rows:
+        st.info(
+            f"No traced calls in the last {days} days"
+            + (" matching that." if chosen or text or failed else ".")
+            + f" Calls are traced from now on and kept {cfg.llm_trace_days} days."
+        )
+        return
+    frame = pd.DataFrame(
+        [
+            {
+                "When": r["at"].astimezone(IST),
+                "Task": r["task"],
+                "Model": MODEL_NAMES.get(r["model"], r["model"]),
+                "Tokens in": r["input_tokens"],
+                "Tokens out": r["output_tokens"],
+                "Cost": r["cost_usd"],
+                "Seconds": r["latency_s"],
+                "Outcome": "ok" if r["ok"] else (r["error"] or "failed")[:60],
+            }
+            for r in rows
+        ]
+    )
+    spent = sum(r["cost_usd"] for r in rows)
+    st.caption(f"{len(rows)} calls · \\${spent:.4f} · {sum(not r['ok'] for r in rows)} failed")
+    picked = st.dataframe(
+        frame,
+        hide_index=True,
+        width="stretch",
+        on_select="rerun",
+        selection_mode="single-row",
+        key="traces-table",
+        column_config={
+            "When": st.column_config.DatetimeColumn(format="D MMM, HH:mm:ss"),
+            "Cost": st.column_config.NumberColumn(format="$%.5f"),
+            "Seconds": st.column_config.NumberColumn(format="%.1f"),
+        },
+    )
+    if not picked.selection.rows:
+        st.caption("Select a call to see what it was sent and answered.")
+        return
+    with Session(engine()) as session:
+        t = tr.detail(session, rows[picked.selection.rows[0]]["call_id"])
+    if t is None:
+        return
+    st.subheader(f"{t['task']} · {t['at'].astimezone(IST):%d %b %Y, %H:%M:%S}")
+    served = t["served_model"] or t["model"]
+    tokens = t["tokens"]
+    stopped = t["stop_reason"] or "-"
+    st.caption(
+        f"{MODEL_NAMES.get(served, served)} · {tokens[0]:,} tokens in "
+        f"({tokens[2]:,} from cache), {tokens[1]:,} out · \\${t['cost_usd']:.5f} · "
+        f"{t['latency_s']:.1f} s · stopped: {stopped}"
+    )
+    if not t["ok"]:
+        st.error(t["error"] or "The call failed.")
+    with st.expander("Instructions (system prompt)"):
+        st.text(t["system"] or "(none)")
+    sent, answered = st.columns(2, gap="large")
+    with sent:
+        st.markdown("**Sent**")
+        with st.container(height=520):
+            st.text(t["prompt"])
+    with answered:
+        st.markdown("**Answered**")
+        with st.container(height=520):
+            if t["response"] is None:
+                st.caption("No answer.")
+            else:
+                st.json(t["response"], expanded=True)
+    documents = tr.documents(t["subjects"])
+    if documents:
+        st.caption(f"About filings {', '.join(str(d) for d in documents)}.")
+        for d in documents:
+            add_to_eval(d, f"trace-{t['call_id']}")
+
+
 def theme_palette() -> dict[str, str]:
     return PALETTE["dark" if dark() else "light"]
 
@@ -3960,10 +4059,19 @@ def settings_page() -> None:
                 else 1,
                 format_func=lambda m: MODEL_NAMES.get(m, m),
             )
+            trace_days = st.number_input(
+                "Keep what each AI call was sent and answered for, days",
+                min_value=0,
+                max_value=365,
+                step=1,
+                value=int(cfg.llm_trace_days),
+                help="Shown on Traces (Agents). 0 keeps none; older ones are removed each morning.",
+            )
             if st.form_submit_button("Save", icon=":material/save:"):
                 store.save(session, "llm_monthly_budget_usd", new_budget)
                 store.save(session, "llm_model_triage", triage)
                 store.save(session, "llm_model_analysis", analysis)
+                store.save(session, "llm_trace_days", int(trace_days))
                 st.rerun()
 
         st.subheader("Unusual days")
@@ -4331,6 +4439,7 @@ PAGES = {
     "eval_cases": st.Page(
         eval_cases_page, title="Eval cases", icon=":material/fact_check:", url_path="eval-cases"
     ),
+    "traces": st.Page(traces_page, title="Traces", icon=":material/timeline:", url_path="traces"),
     "guide": st.Page(guide_page, title="Guide", icon=":material/help:", url_path="guide"),
 }
 
@@ -4352,7 +4461,7 @@ def setup_needed() -> bool:
 # The sidebar's groups, in order.
 NAV = {
     "Today": ["today", "portfolio", "flags"],
-    "Agents": ["agents", "evals", "eval_cases"],
+    "Agents": ["agents", "evals", "eval_cases", "traces"],
     "Research": ["research", "stock", "weeks", "ask", "themes", "moves", "evidence"],
     "Library": ["filings", "news"],
     "Set up": ["manage", "settings", "system"],

@@ -44,6 +44,17 @@ The commands, the runner and the page are shared.
 
 The first real run needs `--approve-harness`, after you've read the runner and the eval's grader. If either changes later, runs refuse until you approve again, so a score can't silently change meaning. Failed calls (timeouts, refusals, cut-off answers, no credit) are kept apart from wrong answers, and the served model is checked against the one asked for.
 
+## Traces
+
+Every AI call is traced (`llm_traces`, migration 0033), failed calls included. A trace holds:
+- the instructions, stored once per distinct text
+- what the call was sent: the prompt, or the conversation for Ask
+- what it answered
+- the stop reason, the model that served it, and how long it took
+- the filings it was about
+
+The **Traces** page and `sna llm traces` / `sna llm trace ID` show them. A call about filings can add them to the Event Extractor's eval. Traces are kept `llm_trace_days` (30 by default, set on Settings, 0 for none) and pruned each morning with the digest (`sna llm prune` by hand). Live monitoring (step 38) reads them.
+
 ## The evals
 
 ### Event Extractor (`sna eval events`)

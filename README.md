@@ -50,8 +50,8 @@ New to the system? The [Guide](src/stock_news_analyzer/ui/guide.md) explains wha
 | 35 | A general eval framework (datasets in the database with history, a spec per agent, shared runner and commands); the Results reader's eval, graded against XBRL | done |
 | 36 | Eval cases page: check, correct or exclude each case's answer beside what the agent read, with its history; add any filing to an eval from Filings; an Agents group in the sidebar | done |
 | 37 | Traces of every AI call: what it was sent and answered, the model that served it, how long it took; a Traces page and `sna llm traces`; kept 30 days by default | done |
-| 38 | Live monitoring of the agents' quality | next |
-| 39 | Experiments compared case by case | |
+| 38 | Live monitoring: nine quality monitors from what the agents record (QA passes, quotes found, your rejections, failed calls...), the last 7 days against the 28 before, alerts on the page and in the digest; AI spend by task | done |
+| 39 | Experiments compared case by case | next |
 | 40 | Trying it on a clean Mac and Windows | |
 
 ## Quick start (no Python needed)
@@ -638,6 +638,7 @@ make ui
 | Agent evals | How well each AI agent does its job: the share of eval cases it gets fully right with its margin and change, cases passing and failing, recall, precision and specificity; its score run by run per variant, its cases failing first with what was expected and found; how agents without an eval could be graded |
 | Eval cases | The cases each agent is measured on: what the agent read beside the expected answer as an editable table; Confirm, Nothing to find, Exclude, a note, and the history of earlier answers; a queue of cases still to check |
 | Traces | Every AI call: task, model, tokens, cost, seconds, outcome, filtered by task, days, words in the prompt or failures; select one for its instructions, what it was sent and what it answered; add the filings it read to an eval |
+| Monitoring | Quality from real work: events passing QA, quotes found, events you rejected, filings not read, results PDFs read, order amounts found, earnings-call quotes found, brief parts dropped, AI calls failed; last 7 days against the 28 before, alerts when worse than chance explains; each monitor's rolling rate by prompt version, model or task; AI spend by task |
 | Guide | How to use the system: getting started, a daily routine, each page, the words used, AI use and cost, problems. Every page links to its part |
 
 ## Evals

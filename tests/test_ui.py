@@ -136,6 +136,7 @@ def test_charts_build(loaded):  # noqa: F811
         "evals_page",
         "eval_cases_page",
         "traces_page",
+        "monitoring_page",
         "guide_page",
     ],
 )
@@ -173,6 +174,7 @@ def test_every_page_renders(loaded, test_database_url, monkeypatch, tmp_path, pa
         "Agent evals",
         "Eval cases",
         "Traces",
+        "Monitoring",
         "Guide",
     }
 
@@ -192,7 +194,7 @@ def test_main_registers_every_page():
         "st.markdown(str(sum(len(p) for p in groups.values())))\n"
     )
     at.run()
-    assert not at.exception and at.markdown[-1].value == "20"
+    assert not at.exception and at.markdown[-1].value == "21"
     assert at.markdown[-2].value == "Today,Agents,Research,Library,Set up,Help"
 
 

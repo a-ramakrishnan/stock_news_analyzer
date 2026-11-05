@@ -15,6 +15,10 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.36 · Nov 5, 2026
+
+- Step 38: live monitoring of the agents' quality from production data, with alerts on a Monitoring page and in the digest. agent-design.md's Evals section.
+
 ### 1.35 · Nov 5, 2026
 
 - Step 37: traces of every AI call (migration 0033: llm_traces, llm_prompts), a Traces page in the Agents group, `sna llm traces / trace / prune`, kept 30 days by default (Settings), pruned with the digest. agent-design.md's Evals section.

@@ -53,6 +53,7 @@ The sidebar groups the pages: **Today** (what changed), **Agents** (how the AI a
 - **Agent evals:** how well each AI agent does its job, measured on fixed cases; explained in its own section below.
 - **Eval cases:** the cases the agents are measured on, where you check their answers; explained under Agent evals below.
 - **Traces:** what each AI call was sent and what it answered; explained under Agent evals below.
+- **Monitoring:** how the agents are doing on real work, with alerts; explained under Agent evals below.
 - **Guide:** this page.
 
 ## Research brief
@@ -180,6 +181,21 @@ An eval measures one AI agent on a fixed set of cases whose answers are known, s
   - Select a call to see the agent's instructions, exactly what it was sent beside what it answered, and why it stopped.
   - A call about filings offers **Add to the Event Extractor's eval** for each, to turn a call it got wrong into a case.
   - Traces are kept 30 days by default (**Settings**; 0 keeps none) and pruned each morning with the digest. Costs stay on **System** however long traces are kept.
+- **Monitoring:** how the agents are doing on real work day by day, from what they already record, with no extra AI calls.
+  - The monitors:
+    - events passing the QA check
+    - event quotes found in the filing
+    - events you rejected
+    - filings the Event Extractor couldn't read
+    - results PDFs read
+    - order amounts found
+    - earnings-call quotes found
+    - Research brief views with parts dropped
+    - AI calls that failed
+  - Each card compares the last 7 days with the 28 before; some figures are better lower, and the arrow's colour says which way is good.
+  - An **alert** means the last week is worse by more than chance explains: at least 5 points, beyond 2.5 standard errors, with enough work in both periods. Alerts are listed at the top and in the morning digest under **Agent quality**.
+  - **Look closer** draws a monitor's 7-day rolling rate over 30 to 180 days, with dotted lines by prompt version, model or task, so a change shows where it came from.
+  - **AI spend** shows the last 30 days by task.
 - **Running one** (in the project folder, in a terminal), with `events` or `results`:
   1. `uv run sna eval events sample` adds cases from your database.
   2. `uv run sna eval events draft` has Opus draft the answers, for about a cent a case (the Results reader needs no drafts).

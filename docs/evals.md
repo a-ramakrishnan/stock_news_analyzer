@@ -55,6 +55,21 @@ Every AI call is traced (`llm_traces`, migration 0033), failed calls included. A
 
 The **Traces** page and `sna llm traces` / `sna llm trace ID` show them. A call about filings can add them to the Event Extractor's eval. Traces are kept `llm_trace_days` (30 by default, set on Settings, 0 for none) and pruned each morning with the digest (`sna llm prune` by hand). Live monitoring (step 38) reads them.
 
+## Live monitoring
+
+Evals measure an agent on fixed cases; monitoring watches it on real work (`monitoring.py`), from what the agents already record, with no extra AI calls:
+- events passing the QA check
+- event quotes found
+- events you rejected
+- filings the Event Extractor couldn't read
+- results PDFs read
+- order amounts found in their filings
+- earnings-call quotes found
+- Research brief views with parts dropped
+- AI calls that failed
+
+Each is a daily rate, split by prompt version, model or task. The last 7 days are compared with the 28 before. An **alert** needs a change for the worse of at least 5 points and beyond 2.5 standard errors of the difference, with at least 10 items this week and 20 before. Alerts show on the **Monitoring** page and in the morning digest (**Agent quality**).
+
 ## The evals
 
 ### Event Extractor (`sna eval events`)

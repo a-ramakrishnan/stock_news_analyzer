@@ -574,6 +574,7 @@ make scheduler
 | `make run-all` | Run every job once, now, in order: collect, triage, measure, explain, read calls, digest |
 | `uv run sna run news` | Run one job now: `filings`, `news`, `triage`, `deals`, `prices`, `xbrl`, `results`, `events`, `explain`, `concalls`, `promises`, `orders`, `themes`, `flags`, `bullion`, `securities` or `digest` |
 | `uv run sna run missed` | Run every job that missed its scheduled run (the computer was asleep or off), in order, each from where it last stopped; like **Catch up** on System |
+| (other projects) | Read the collected data through the read-only `shared` views as `research_reader`: see [docs/shared-data.md](docs/shared-data.md) |
 | `uv run sna brief LT --write` | Write the Research brief's view for a stock (one Sonnet call, a few cents) and print it; without `--write`, print the latest |
 | `uv run sna results balance LT` | The balance sheets and cash flows read from a stock's XBRL files, with the tag each figure came from |
 | `uv run sna evidence --days 5` | The same evidence in the terminal; `--sector` against the sector index, `--kind "order win"` lists the cases |

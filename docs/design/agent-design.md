@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.30 · Nov 5, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.31 · Nov 5, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 

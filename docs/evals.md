@@ -127,6 +127,18 @@ Over all runs it also gives recall (filings with events in which it found one), 
 | All figures | Share of the XBRL figures it got right (revenue, other income, finance costs, depreciation, profit before and after tax, EPS) |
 | Quarter found | It found the quarter's column at all |
 
+Each answer keeps the reader's own note on what the document is, and any figure it wrote that isn't in the text (and so was left out, as the reader stores it).
+
+**Diagnosing the misses** (`sna eval results diagnose [--variant v1] [--all]`, no AI calls): for each case the latest run got wrong, code looks for the XBRL revenue and profit in two places:
+- the PDF's text
+- the excerpt the reader sends the model (the start of the filing and windows around its revenue lines, up to 40,000 characters)
+
+It looks in every unit a statement may use (crore, lakh, million...), allowing for rounding. Each miss is then put down to one cause:
+- no text in the PDF
+- figures not in the text (another document, or garbled text)
+- figures in the text but outside the excerpt
+- figures in the excerpt, so the model misread them, which is where instruction variants help
+
 ## Noise
 
 The margin on a pass rate is about ±1.96·√(p(1−p)/n), where n is the number of graded runs. 40 cases × 3 runs gives about ±9 points at 95%, so a change smaller than that may be chance.

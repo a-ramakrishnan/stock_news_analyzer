@@ -195,7 +195,12 @@ class ResultsSpec(Spec):
     def _quarter(self, answer, reference: dict, text: str) -> dict:
         """The answer's column for the case's quarter, in Rs crore, each figure kept only if
         it is written in the text (as the reader stores it)."""
-        out = {"is_results": answer.is_results, "basis": answer.basis, "unit": answer.unit}
+        out = {
+            "is_results": answer.is_results,
+            "basis": answer.basis,
+            "unit": answer.unit,
+            "note": (answer.note or "").strip(),
+        }
         target = date.fromisoformat(reference["period_end"]) if reference else None
         in_text = reader.numbers_in(text)
         factor = reader.UNITS[answer.unit]
@@ -207,12 +212,17 @@ class ResultsSpec(Spec):
             if _month_end(end.year, end.month) != target or c.months != 3:
                 continue
             out["period_end"] = target.isoformat()
+            dropped = {}
             for f in FIELDS:
                 v = reader.number(getattr(c, f))
+                if v is not None and abs(v) not in in_text:
+                    dropped[f] = getattr(c, f)  # written, but not in the text: left out
                 if v is None or abs(v) not in in_text:
                     out[f] = None
                 else:
                     out[f] = float(round(v if f == "eps" else v * factor, 2 if f == "eps" else 4))
+            if dropped:
+                out["not_in_text"] = dropped
             break
         return out
 
@@ -236,14 +246,23 @@ class ResultsSpec(Spec):
     def describe(self, answer: dict | None) -> list[str]:
         if not answer:
             return []
+        note = f" ({answer['note']})" if answer.get("note") else ""
         if "period_end" not in answer:
-            return ["quarter not found" if answer.get("is_results") else "no results read"]
+            what = "quarter not found" if answer.get("is_results") else "no results read"
+            return [what + note]
         figures = ", ".join(
             f"{LABELS[f]} {answer[f]:,.2f}"
             for f in ("revenue", "pat", "eps")
             if answer.get(f) is not None
         )
-        return [f"{answer.get('basis')} {answer['period_end']}: {figures}"]
+        unit = f" in {answer['unit']}" if answer.get("unit") else ""
+        lines = [f"{answer.get('basis')} {answer['period_end']}{unit}: {figures}"]
+        if answer.get("not_in_text"):
+            lines.append(
+                "written but not in the text, left out: "
+                + ", ".join(f"{LABELS[f]} {v}" for f, v in answer["not_in_text"].items())
+            )
+        return lines
 
     editable = False  # the company's XBRL figures are the answer
 
@@ -265,6 +284,106 @@ class ResultsSpec(Spec):
 
     def null(self, case: EvalCase) -> dict:
         return {"is_results": False}
+
+
+# --- diagnosis: where did the figures go? (no model calls) ------------------------------
+
+STATEMENT_UNITS = {  # Rs crore -> the figure as a statement in that unit writes it
+    "crore": Decimal(1),
+    "lakh": Decimal(100),
+    "million": Decimal(10),
+    "thousand": Decimal(10_000),
+    "rupees": Decimal(10_000_000),
+    "billion": Decimal("0.01"),
+}
+VERDICTS = {
+    "no_text": "no text in the PDF (a scanned file?)",
+    "not_in_text": "the figures aren't in the PDF's text (another document, or garbled text)",
+    "outside_excerpt": "in the PDF's text but outside the excerpt the reader sends",
+    "in_excerpt": "in the excerpt the reader sends: Haiku misread it",
+}
+
+
+def _written_as(value_cr: float | None, numbers: set[Decimal]) -> str | None:
+    """The unit in which `value_cr` (Rs crore, rounded to 2 decimals as XBRL gives it) is
+    written among `numbers`, if it is."""
+    if value_cr is None:
+        return None
+    v = abs(Decimal(str(value_cr)))
+    for unit, factor in STATEMENT_UNITS.items():
+        want = v * factor
+        tolerance = max(Decimal("0.0051") * factor + Decimal("0.006"), want * Decimal("0.0002"))
+        if any(abs(n - want) <= tolerance for n in numbers):
+            return unit
+    return None
+
+
+def diagnose(case: EvalCase) -> dict:
+    """Where a case's XBRL revenue and profit are: in the PDF's text, and in the excerpt the
+    reader sends to the model (in which unit), and so what a wrong answer is down to."""
+    doc, _ = _filing(case.input)
+    text = reader.statement_text(doc)
+    sent = reader.excerpt(text)
+    in_text, in_sent = reader.numbers_in(text), reader.numbers_in(sent)
+    ref = case.reference or {}
+    fields = {}
+    for f in ("revenue", "pat"):
+        if ref.get(f) is not None:
+            fields[f] = {"text": _written_as(ref[f], in_text), "sent": _written_as(ref[f], in_sent)}
+    if ref.get("eps") is not None:
+        eps = abs(Decimal(str(ref["eps"])))
+        fields["eps"] = {
+            "text": "rupees" if any(abs(n - eps) <= Decimal("0.006") for n in in_text) else None,
+            "sent": "rupees" if any(abs(n - eps) <= Decimal("0.006") for n in in_sent) else None,
+        }
+    money = [v for f, v in fields.items() if f != "eps"]
+    if len(text) < reader.MIN_CHARS:
+        verdict = "no_text"
+    elif not any(v["text"] for v in money):
+        verdict = "not_in_text"
+    elif any(v["text"] and not v["sent"] for v in money):
+        verdict = "outside_excerpt"
+    else:
+        verdict = "in_excerpt"
+    return {
+        "key": case.key,
+        "title": case.title,
+        "document": case.input.get("title"),
+        "text_chars": len(text),
+        "sent_chars": len(sent),
+        "fields": fields,
+        "verdict": verdict,
+    }
+
+
+def diagnosis_markdown(rows: list[dict], outcomes: dict[str, str]) -> str:
+    """The diagnosis as a table and a count by cause."""
+    lines = [
+        "| Case | Last run | Revenue: text / excerpt | Profit: text / excerpt "
+        "| Text, excerpt chars | Down to |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+
+    def cell(r, f):
+        v = r["fields"].get(f)
+        return "-" if v is None else f"{v['text'] or 'no'} / {v['sent'] or 'no'}"
+
+    for r in rows:
+        lines.append(
+            f"| {r['key']} | {outcomes.get(r['key'], '-')} | {cell(r, 'revenue')} | "
+            f"{cell(r, 'pat')} | {r['text_chars']:,} / {r['sent_chars']:,} | "
+            f"{VERDICTS[r['verdict']]} |"
+        )
+    counts = {k: sum(r["verdict"] == k for r in rows) for k in VERDICTS}
+    lines += ["", "**By cause:**", ""]
+    lines += [f"- {VERDICTS[k]}: {n}" for k, n in counts.items() if n]
+    lines += [
+        "",
+        "Text / excerpt: the unit the XBRL figure is written in there (lakh, crore, ...), or "
+        "no. The excerpt is what the reader sends the model: the start of the filing and "
+        "windows around its revenue lines, up to 40,000 characters.",
+    ]
+    return "\n".join(lines) + "\n"
 
 
 SPEC = ResultsSpec()

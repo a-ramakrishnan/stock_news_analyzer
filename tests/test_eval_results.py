@@ -156,3 +156,76 @@ def test_a_figure_not_in_the_text_counts_as_missing(loaded, tmp_path):  # noqa: 
     made_up = Q2.model_copy(update={"pat": "4,41,000.00"})  # not in the statement
     summary, _ = _run_one(loaded, case, replying(answer([made_up])), tmp_path)
     assert summary["mean"]["pat"] == 0 and summary["mean"]["revenue"] == 1
+
+
+@pytest.mark.db
+def test_the_answer_keeps_the_readers_note_and_what_it_left_out(loaded, tmp_path):  # noqa: F811
+    xbrl_q2(loaded)
+    results_filing(loaded)
+    case = fw.sample(loaded, SPEC, n=1)[0]
+    loaded.commit()
+    made_up = Q2.model_copy(update={"pat": "4,41,000.00"})  # not in the statement
+    reply = answer([made_up])
+    out = SPEC._quarter(reply, case.reference, rs.statement_text(re_eval._filing(case.input)[0]))
+    assert out["note"].startswith("Consolidated results") and out["unit"] == "lakh"
+    assert out["not_in_text"] == {"pat": "4,41,000.00"} and out["pat"] is None
+    lines = SPEC.describe(out)
+    assert lines[0].startswith("consolidated 2026-09-30 in lakh: revenue 67,000.00")
+    assert lines[1] == "written but not in the text, left out: PAT 4,41,000.00"
+    assert SPEC.describe({"is_results": False, "note": "A covering letter."}) == [
+        "no results read (A covering letter.)"
+    ]
+    assert SPEC.describe(case.reference)[0].startswith("consolidated 2026-09-30: revenue")
+
+
+@pytest.mark.db
+def test_diagnosis_says_where_the_figures_went(loaded, monkeypatch):  # noqa: F811
+    xbrl_q2(loaded)
+    results_filing(loaded)
+    case = fw.sample(loaded, SPEC, n=1)[0]
+    loaded.commit()
+
+    d = re_eval.diagnose(case)  # the lakh statement is in the excerpt: a misread is Haiku's
+    assert d["verdict"] == "in_excerpt"
+    assert d["fields"]["revenue"] == {"text": "lakh", "sent": "lakh"}
+    assert d["fields"]["eps"] == {"text": "rupees", "sent": "rupees"}
+
+    monkeypatch.setattr(re_eval.reader, "excerpt", lambda text: text[:60])
+    d = re_eval.diagnose(case)  # in the PDF, but not in what the reader sends
+    assert d["verdict"] == "outside_excerpt" and d["fields"]["pat"] == {
+        "text": "lakh",
+        "sent": None,
+    }
+    monkeypatch.undo()
+
+    other = fw.EvalCase(
+        key="x",
+        title="x",
+        input=case.input,
+        reference={**case.reference, "revenue": 1234.5, "pat": 99.1},
+    )
+    assert re_eval.diagnose(other)["verdict"] == "not_in_text"
+    blank = fw.EvalCase(
+        key="y",
+        title="y",
+        input={**case.input, "text": "Covering letter."},
+        reference=case.reference,
+    )
+    assert re_eval.diagnose(blank)["verdict"] == "no_text"
+
+    md = re_eval.diagnosis_markdown(
+        [re_eval.diagnose(case), re_eval.diagnose(other)], {"LT-202609": "0 of 3 right"}
+    )
+    assert "| LT-202609 | 0 of 3 right | lakh / lakh | lakh / lakh |" in md
+    assert "- the figures aren't in the PDF's text (another document, or garbled text): 1" in md
+
+
+def test_figures_are_found_in_any_unit_allowing_for_rounding():
+    from decimal import Decimal as D
+
+    lakh = {D("30742.37")}
+    assert re_eval._written_as(307.42, lakh) == "lakh"  # XBRL rounds to 0.01 crore
+    assert re_eval._written_as(67078.68, {D("67079")}) == "crore"  # a statement in whole crore
+    assert re_eval._written_as(1988.53, {D("19885.3")}) == "million"
+    assert re_eval._written_as(1988.53, {D("1989.9")}) is None
+    assert re_eval._written_as(None, lakh) is None

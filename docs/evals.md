@@ -118,7 +118,7 @@ Over all runs it also gives recall (filings with events in which it found one), 
 
 **What it measures:** given a results PDF, does the agent read the quarter's figures the way the company filed them in XBRL? Its answer for the quarter is converted to Rs crore and filtered as the reader stores it: a figure is kept only if it is written in the text.
 
-**Cases:** quarters that have the exchange's XBRL figures and a results PDF with text, at most two per company. The XBRL figures are the answer, exact and filed by the company, so nothing needs drafting or checking.
+**Cases:** quarters that have the exchange's XBRL figures and a results PDF whose text holds the quarter's revenue or profit, in any unit, at most two per company. A covering letter, a scanned file or a garbled table would measure the PDF's conversion to text, not the reader. The XBRL figures are the answer, exact and filed by the company, so nothing needs drafting or checking.
 
 | Score | What it means |
 | --- | --- |
@@ -138,6 +138,8 @@ It looks in every unit a statement may use (crore, lakh, million...), allowing f
 - figures not in the text (another document, or garbled text)
 - figures in the text but outside the excerpt
 - figures in the excerpt, so the model misread them, which is where instruction variants help
+
+`--exclude-missing` excludes the cases whose figures aren't in the PDF's text, with the cause as their note. `sample --n N` then adds fresh ones, and new samples only take PDFs that hold the figures.
 
 ## Noise
 

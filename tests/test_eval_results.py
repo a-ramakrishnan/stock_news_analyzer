@@ -229,3 +229,69 @@ def test_figures_are_found_in_any_unit_allowing_for_rounding():
     assert re_eval._written_as(1988.53, {D("19885.3")}) == "million"
     assert re_eval._written_as(1988.53, {D("1989.9")}) is None
     assert re_eval._written_as(None, lakh) is None
+
+
+@pytest.mark.db
+def test_sampling_takes_only_a_pdf_that_holds_the_figures(loaded):  # noqa: F811
+    from datetime import timedelta
+
+    from test_results import OCT
+
+    xbrl_q2(loaded)
+    letter = results_filing(  # ranks first (a results title, longer text) but holds nothing
+        loaded,
+        when=OCT - timedelta(minutes=5),
+        title="Financial Results Q2 - covering letter",
+        text="Please find enclosed the results. " * 400,
+    )
+    statement = results_filing(loaded)
+    case = fw.sample(loaded, SPEC, n=5)[0]
+    assert case.input["document_id"] == statement.id != letter.id
+
+
+@pytest.mark.db
+def test_a_quarter_whose_pdfs_lack_the_figures_is_not_sampled(loaded):  # noqa: F811
+    xbrl_q2(loaded)
+    results_filing(loaded, text="A scanned file with a few words. " * 40)
+    assert fw.sample(loaded, SPEC, n=5) == []
+
+
+@pytest.mark.db
+def test_diagnose_excludes_cases_that_measure_the_pdf(
+    loaded,  # noqa: F811
+    test_database_url,
+    monkeypatch,
+):
+    from typer.testing import CliRunner
+
+    from stock_news_analyzer.cli import app
+    from stock_news_analyzer.config import get_settings
+
+    xbrl_q2(loaded)
+    results_filing(loaded)
+    case = fw.sample(loaded, SPEC, n=1)[0]
+    bad = fw.add_case(
+        loaded,
+        SPEC,
+        fw.NewCase(
+            key="LT-BAD",
+            title="LT: garbled",
+            input={**case.input, "document_id": 999},
+            reference={**case.reference, "revenue": 1234.5, "pat": 99.1},
+            drafted_by="xbrl",
+        ),
+    )
+    fw.set_answer(bad, bad.reference, "verified", "test")
+    loaded.commit()
+    monkeypatch.setenv("DATABASE_URL", test_database_url)
+    get_settings.cache_clear()
+    try:
+        out = CliRunner().invoke(app, ["eval", "results", "diagnose", "--all", "--exclude-missing"])
+    finally:
+        get_settings.cache_clear()
+    assert out.exit_code == 0, out.stdout
+    assert "Excluded 1 cases" in out.stdout and "sample --n 1" in out.stdout
+    loaded.expire_all()
+    by_key = {c.key: c for c in fw.cases(loaded, SPEC)}
+    assert by_key["LT-BAD"].status == "excluded" and by_key["LT-202609"].status == "verified"
+    assert by_key["LT-BAD"].note.startswith("the figures aren't in the PDF's text")

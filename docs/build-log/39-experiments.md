@@ -41,3 +41,12 @@ So:
 - `sna eval results diagnose`: for each miss, whether the XBRL figures are in the PDF's text and in the excerpt the reader sends, in which unit, and so whether the PDF, the excerpt or the model is to blame. No AI calls.
 - The eval's answer keeps the reader's note on what the document is, and the figures it wrote that weren't in the text.
 - The reader's output limit goes from 4,000 to 8,000 tokens, so long bank statements aren't cut off. This applies in production too.
+
+The diagnosis of v1's 20 misses:
+- 9 had the figures nowhere in the PDF's text (covering letters, scanned files, garbled tables)
+- 5 had them in the text but outside the excerpt
+- 6 had them in the excerpt and Haiku misread them; two of those were the token cut-offs
+
+So:
+- **The excerpt** (the reader, so production too): revenue lines with figures on the same line still come first, but the rest of the 40,000-character allowance now goes to the other revenue lines, those near "consolidated" first. A consolidated statement laid out with its figures on the lines below, after a standalone one, used to be dropped whenever the standalone row was found. Airtel's 228,000-character PDF was sent as 11,500 characters.
+- **Sampling** takes only a results PDF whose text holds the quarter's XBRL revenue or profit. `diagnose --exclude-missing` excludes the existing cases that measure the PDF, and `sample --n N` replaces them.

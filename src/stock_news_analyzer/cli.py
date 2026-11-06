@@ -3455,6 +3455,12 @@ def _eval_commands(spec) -> typer.Typer:
                 "(default: the latest run).",
             ),
             all_cases: bool = typer.Option(False, "--all", help="Every case, right or wrong."),
+            exclude_missing: bool = typer.Option(
+                False,
+                "--exclude-missing",
+                help="Exclude the cases whose figures aren't in the PDF's text (they measure "
+                "the PDF, not the reader); then `sample --n N` adds fresh ones.",
+            ),
         ) -> None:
             """Where each wrong case's XBRL figures are: in the PDF's text, in the excerpt the
             reader sends, in which unit; so whether the PDF, the excerpt or the model is to
@@ -3488,9 +3494,30 @@ def _eval_commands(spec) -> typer.Typer:
                             right_every_time.add(key)
                 wrong = [c for c in items if all_cases or c.key not in right_every_time]
                 rows = [rv.diagnose(c) for c in wrong]
+                excluded = 0
+                if exclude_missing:
+                    by_key = {c.key: c for c in items}
+                    for r in rows:
+                        if r["verdict"] in ("no_text", "not_in_text"):
+                            case = by_key[r["key"]]
+                            fw.set_answer(
+                                case,
+                                case.reference,
+                                "excluded",
+                                "diagnose",
+                                rv.VERDICTS[r["verdict"]],
+                            )
+                            excluded += 1
+                    session.commit()
             if run is not None:
                 typer.echo(f"Cases {run.variant} got wrong in its latest run ({len(rows)}):\n")
             typer.echo(rv.diagnosis_markdown(rows, outcomes))
+            if excluded:
+                typer.echo(
+                    f"Excluded {excluded} cases whose figures aren't in the PDF's text. Add "
+                    f"fresh ones (only PDFs that hold the figures): sna eval results sample "
+                    f"--n {excluded}"
+                )
 
     @sub.command("instructions")
     def instructions_cmd() -> None:

@@ -110,7 +110,7 @@ class ResultsSpec(Spec):
         for row, company in rows:
             if len(out) >= n or per_company.get(company.isin, 0) >= PER_COMPANY:
                 continue
-            doc = self._pdf(session, company.isin, row.period_end)
+            doc = self._pdf(session, company.isin, row.period_end, row)
             if doc is None:
                 continue
             key = f"{company.nse_symbol or company.isin}-{row.period_end:%Y%m}"
@@ -144,8 +144,10 @@ class ResultsSpec(Spec):
             )
         return out
 
-    def _pdf(self, session: Session, isin: str, end: date) -> Document | None:
-        """The best results filing with text for the quarter ending `end`."""
+    def _pdf(self, session: Session, isin: str, end: date, row=None) -> Document | None:
+        """The best results filing for the quarter ending `end` whose text holds the quarter's
+        XBRL revenue or profit (in any unit): a covering letter, a scanned file or a garbled
+        table would measure the PDF's conversion to text, not the reader."""
         start = datetime.combine(end + timedelta(days=1), datetime.min.time(), tzinfo=IST)
         docs = session.scalars(
             select(Document)
@@ -159,7 +161,13 @@ class ResultsSpec(Spec):
             )
         ).all()
         docs = [d for d in docs if len(reader.statement_text(d)) >= reader.MIN_CHARS]
-        return sorted(docs, key=reader._rank)[0] if docs else None
+        for doc in sorted(docs, key=reader._rank):
+            if row is None:
+                return doc
+            numbers = reader.numbers_in(reader.statement_text(doc))
+            if any(_written_as(_f(getattr(row, f"{f}_cr")), numbers) for f in ("revenue", "pat")):
+                return doc
+        return None
 
     def call(self, llm, case: EvalCase, model: str, system: str | None = None) -> Answer:
         doc, company = _filing(case.input)

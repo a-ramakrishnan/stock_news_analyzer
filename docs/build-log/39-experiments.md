@@ -26,3 +26,18 @@ The tests cover:
 - the page's comparison, with the verdict, the why and the cases that got better
 
 Screenshot taken against sample runs in a scratch copy of the database.
+
+## Follow-up: the first real runs, and a diagnosis
+
+The Results reader's first baseline scored 36% fully correct.
+- Six cases took the standalone statement where the company reports consolidated.
+- Seven read nothing or no quarter.
+- Four had a wrong unit or table.
+- Bank statements were cut off at 4,000 tokens.
+
+Variant v1 (prefer consolidated; one statement, its own unit) lifted basis from 68% to 81%, but correct only from 33% to 37%: no clear difference over 27 cases. With the right statement chosen, most figures then came out empty, which suggests the model never saw them.
+
+So:
+- `sna eval results diagnose`: for each miss, whether the XBRL figures are in the PDF's text and in the excerpt the reader sends, in which unit, and so whether the PDF, the excerpt or the model is to blame. No AI calls.
+- The eval's answer keeps the reader's note on what the document is, and the figures it wrote that weren't in the text.
+- The reader's output limit goes from 4,000 to 8,000 tokens, so long bank statements aren't cut off. This applies in production too.

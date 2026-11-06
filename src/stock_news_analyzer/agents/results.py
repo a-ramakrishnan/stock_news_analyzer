@@ -63,7 +63,7 @@ WINDOW_CHARS = 9000
 MAX_WINDOWS = 6
 MAX_CHARS = 40_000
 OUTPUT_TOKENS = 1500  # a typical answer, for estimates
-MAX_TOKENS = 4000  # an answer longer than this has gone wrong (repeating itself)
+MAX_TOKENS = 8000  # longer than this has gone wrong; bank statements need more than 4000
 # A statement row: the revenue line followed by at least three figures on the same line (a
 # sentence in a press release rarely has more than two).
 _ROW_FIGURES = re.compile(r"\d[\d,]*\.\d+|\d{1,3}(?:,\d{2,3})+")

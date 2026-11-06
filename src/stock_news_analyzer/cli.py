@@ -3445,6 +3445,53 @@ def _eval_commands(spec) -> typer.Typer:
         typer.echo(summary["markdown"])
         typer.echo(f"Details: {spec.flow / variant}")
 
+    if spec.name == "results":
+
+        @sub.command("diagnose")
+        def diagnose_cmd(
+            variant: str = typer.Option(
+                None,
+                help="Diagnose the cases this variant's latest run got wrong "
+                "(default: the latest run).",
+            ),
+            all_cases: bool = typer.Option(False, "--all", help="Every case, right or wrong."),
+        ) -> None:
+            """Where each wrong case's XBRL figures are: in the PDF's text, in the excerpt the
+            reader sends, in which unit; so whether the PDF, the excerpt or the model is to
+            blame. No AI calls."""
+            from sqlalchemy import select
+
+            from stock_news_analyzer.evals import framework as fw
+            from stock_news_analyzer.evals import results as rv
+            from stock_news_analyzer.models import EvalResult
+
+            with _eval_spec_session(spec) as session:
+                items = [c for c in fw.cases(session, spec) if c.status != "excluded"]
+                latest = fw.latest_runs(session, spec)
+                run = latest.get(variant) if variant else next(iter(latest.values()), None)
+                outcomes: dict[str, str] = {}
+                right_every_time: set[str] = set()
+                if run is not None:
+                    tally: dict[str, list] = {}
+                    for r in session.scalars(select(EvalResult).where(EvalResult.run_id == run.id)):
+                        tally.setdefault(r.case_id, []).append(
+                            None if r.error else (r.grade or {}).get("correct", 0)
+                        )
+                    for key, got in tally.items():
+                        graded = [g for g in got if g is not None]
+                        right = sum(g == 1 for g in graded)
+                        failed = len(got) - len(graded)
+                        outcomes[key] = f"{right} of {len(graded)} right" + (
+                            f", {failed} failed" if failed else ""
+                        )
+                        if graded and right == len(graded) and not failed:
+                            right_every_time.add(key)
+                wrong = [c for c in items if all_cases or c.key not in right_every_time]
+                rows = [rv.diagnose(c) for c in wrong]
+            if run is not None:
+                typer.echo(f"Cases {run.variant} got wrong in its latest run ({len(rows)}):\n")
+            typer.echo(rv.diagnosis_markdown(rows, outcomes))
+
     @sub.command("instructions")
     def instructions_cmd() -> None:
         """Print the agent's instructions, to copy into a file, change, and try as a variant:

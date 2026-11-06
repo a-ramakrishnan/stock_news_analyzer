@@ -157,6 +157,21 @@ def test_excerpt_finds_the_statement_behind_a_long_press_release():
     assert "Revenue from operations 67,00,000.00 60,00,000.00" in part
 
 
+def test_excerpt_sends_a_consolidated_statement_laid_out_on_separate_lines():
+    # A standalone statement with its figures on the revenue line, then far later a
+    # consolidated one whose figures sit on the lines below: both must be sent.
+    standalone = STATEMENT.replace("Consolidated", "Standalone")
+    consolidated = (
+        "Statement of Consolidated Unaudited Financial Results\n(Rs in crore)\n"
+        "Revenue from operations\n49,462.60\n47,876.20\nProfit for the period\n5,947.90\n"
+    )
+    text = "Covering letter. " + standalone + "Segment notes. " * 6000 + consolidated
+    part = rs.excerpt(text)
+    assert "Revenue from operations 67,00,000.00" in part  # the standalone row
+    assert "49,462.60" in part and "Statement of Consolidated" in part
+    assert len(part) <= rs.MAX_CHARS
+
+
 def broken_then(answers):
     """Replies with each of `answers` in turn; None stands for a cut-off, malformed answer."""
 

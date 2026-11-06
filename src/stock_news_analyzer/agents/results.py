@@ -239,21 +239,39 @@ def _line(text: str, start: int) -> str:
 
 
 def excerpt(text: str) -> str:
-    """The parts of a results filing around its revenue lines, at most MAX_CHARS. Revenue
-    lines in a table (followed by figures) come first: a press release that mentions revenue
-    in every paragraph would otherwise use up the windows before the statement."""
+    """The parts of a results filing around its revenue lines, at most MAX_CHARS: the start
+    (company, date) and windows around revenue lines, chosen in order of priority and then
+    put back in the filing's order.
+
+    1. Revenue lines in a table (followed by figures on the same line): a press release that
+       mentions revenue in every paragraph would otherwise use up the windows first.
+    2. The other revenue lines, those near the word "consolidated" first: a statement laid
+       out with its figures on the next lines (often the consolidated one, after the
+       standalone) would otherwise never be sent.
+    """
     low = text.lower()
     starts = sorted({m.start() for a in ANCHORS for m in re.finditer(re.escape(a), low)})
     if not starts:
         return text[:MAX_CHARS]
     rows = [s for s in starts if len(_ROW_FIGURES.findall(_line(text, s))) >= 3]
-    starts = rows or starts
+    taken = set(rows)
+    others = sorted(
+        (s for s in starts if s not in taken),
+        key=lambda s: ("consolidated" not in low[max(0, s - LEAD_CHARS) : s], s),
+    )
+    room = min(MAX_WINDOWS, (MAX_CHARS - HEAD_CHARS) // WINDOW_CHARS)
+    windows: list[tuple[int, int]] = []
+    for s in rows + others:
+        if len(windows) >= room:
+            break
+        if s < HEAD_CHARS or any(a <= s < b for a, b in windows):
+            continue  # already sent
+        windows.append((max(0, s - LEAD_CHARS), s - LEAD_CHARS + WINDOW_CHARS))
     spans = [(0, HEAD_CHARS)]
-    for s in starts:
-        a, b = max(0, s - LEAD_CHARS), s - LEAD_CHARS + WINDOW_CHARS
+    for a, b in sorted(windows):
         if a <= spans[-1][1]:
             spans[-1] = (spans[-1][0], max(b, spans[-1][1]))
-        elif len(spans) <= MAX_WINDOWS:
+        else:
             spans.append((a, b))
     return "\n[...]\n".join(text[a:b] for a, b in spans)[:MAX_CHARS]
 

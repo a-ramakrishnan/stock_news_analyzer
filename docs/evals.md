@@ -118,7 +118,7 @@ Over all runs it also gives recall (filings with events in which it found one), 
 
 ### Results reader (`sna eval results`)
 
-**What it measures:** given a results PDF, does the agent read the quarter's figures the way the company filed them in XBRL? Its answer for the quarter is converted to Rs crore and filtered as the reader stores it: a figure is kept only if it is written in the text (garbled tables included: columns run together, dots or spaces for commas).
+**What it measures:** given a results PDF, does the agent read the quarter's figures the way the company filed them in XBRL? Its answer for the quarter is converted to Rs crore and filtered as the reader stores it: a figure is kept only if it is written in the text (garbled tables included: columns run together, dots or spaces for commas, a comma for the point).
 
 **Cases:** quarters that have the exchange's XBRL figures and a results PDF whose text holds the quarter's revenue or profit, in any unit, at most two per company. A covering letter, a scanned file or a garbled table would measure the PDF's conversion to text, not the reader. The XBRL figures are the answer, exact and filed by the company, so nothing needs drafting or checking.
 
@@ -133,7 +133,7 @@ Each answer keeps the reader's own note on what the document is, and any figure 
 
 **Diagnosing the misses** (`sna eval results diagnose [--variant v1] [--all]`, no AI calls): for each case the latest run got wrong, code looks for the XBRL revenue and profit in two places:
 - the PDF's text
-- the excerpt the reader sends the model (the start of the filing and windows around its revenue lines, up to 40,000 characters)
+- the excerpt the reader sends the model (the whole filing when it fits in 40,000 characters, else the start and windows around its revenue lines)
 
 It looks in every unit a statement may use (crore, lakh, million...), allowing for rounding. Each miss is then put down to one cause:
 - no text in the PDF

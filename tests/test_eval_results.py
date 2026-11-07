@@ -282,6 +282,19 @@ def test_diagnose_excludes_cases_that_measure_the_pdf(
         ),
     )
     fw.set_answer(bad, bad.reference, "verified", "test")
+    from stock_news_analyzer.models import EvalRun
+
+    loaded.add(  # a run on record: its variant is named after the exclusions are saved
+        EvalRun(
+            flow="results",
+            variant="v1",
+            model="m",
+            cases=2,
+            cases_verified=2,
+            attempts=0,
+            scores={},
+        )
+    )
     loaded.commit()
     monkeypatch.setenv("DATABASE_URL", test_database_url)
     get_settings.cache_clear()
@@ -291,6 +304,7 @@ def test_diagnose_excludes_cases_that_measure_the_pdf(
         get_settings.cache_clear()
     assert out.exit_code == 0, out.stdout
     assert "Excluded 1 cases" in out.stdout and "sample --n 1" in out.stdout
+    assert "Cases v1 got wrong in its latest run (2)" in out.stdout
     loaded.expire_all()
     by_key = {c.key: c for c in fw.cases(loaded, SPEC)}
     assert by_key["LT-BAD"].status == "excluded" and by_key["LT-202609"].status == "verified"

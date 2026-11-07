@@ -118,6 +118,7 @@ def grade(expected: list[dict], found: list[dict], text: str) -> dict[str, float
 class EventsSpec(Spec):
     name = "events"
     agent = "events"
+    code = (extractor,)
     title = "Event Extractor"
     system = extractor.SYSTEM
     prompt_version = extractor.PROMPT_VERSION

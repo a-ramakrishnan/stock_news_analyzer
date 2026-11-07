@@ -643,7 +643,7 @@ make ui
 
 ## Evals
 
-`sna eval <agent>` measures an AI agent on cases with checked answers: the Event Extractor on 40 filings (does it find the events, of the right types and amounts, with real quotes?) and the Results reader on results PDFs against the companies' XBRL figures. Each run shows on the **Agent evals** page: every agent's score, its passing and failing cases and its history. See [docs/evals.md](docs/evals.md).
+`sna eval <agent>` measures an AI agent on cases with checked answers: the Event Extractor on 40 filings (does it find the events, of the right types and amounts, with real quotes?) and the Results reader on results PDFs against the companies' XBRL figures. Each run shows on the **Agent evals** page: every agent's score, its passing and failing cases and its history. A rerun resumes only attempts made with the same code, instructions and cases, and cases excluded later drop out of the scores. See [docs/evals.md](docs/evals.md).
 
 ## Other commands
 

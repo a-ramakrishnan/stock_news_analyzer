@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.38 · Nov 6, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.39 · Nov 7, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -375,7 +375,7 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
 - **As built (step 16), results only.** Results, the first event type built, go into `results`; the order tracker uses them to fill revenue gaps. Two sources: the exchange's XBRL files (exact, no LLM) first, and the **Results Reader** (`agents/results.py`, Haiku 5.5) reading the PDF where XBRL has nothing.
   - **What it reads:** every results filing of every watchlist stock. It copies the headline figures from the results statement: revenue, other income, finance costs, depreciation, profit before and after tax, and EPS.
   - **Checking:** Haiku copies each figure as written, with the statement's unit (lakh, crore, million). The code converts the figures to Rs crore, so the model does no arithmetic, and checks them in two ways:
-    - **Against the filing:** a figure is kept only if that exact number, decimal point included, is in the filing's text. Three ways a PDF's text garbles a table are read as well: columns run together ("320.13522.38"), dots for commas ("2.56.921") and spaces for commas ("5 405"). A figure that lost its decimal point in the text is not matched; the check below catches that.
+    - **Against the filing:** a figure is kept only if that exact number, decimal point included, is in the filing's text. Ways a PDF's text garbles a table are read as well: columns run together ("320.13522.38"), dots for commas ("2.56.921", or a whole row like "17.292 16.315 54.364"), spaces for commas ("5 405") and a comma for the point ("19,885,3"). A figure that lost its decimal point in the text is not matched; the check below catches that.
     - **Against each other:** after each run, revenue is compared with the company's other periods, and costs and profit with the period's revenue. Some PDFs lose a decimal point in their text layer; L&T's "67,078.68" came out as "6707868". A figure 50–200 times too large and written without the point its neighbours have is divided by 100. Anything else far out of scale is left out.
   - **No statement:** some filings (L&T's latest) attach only the results press release. Its key-figures annexure (revenue, finance costs, depreciation, profit) is used instead, and the figures it doesn't give stay empty.
   - **Unusable answers:** when Haiku's answer is cut off or malformed, as with long bank statements, Sonnet 5.5 tries the same filing once. If that fails too, the filing is marked `failed` and the period's next filing is tried.

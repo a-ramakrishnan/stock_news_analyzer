@@ -3475,6 +3475,7 @@ def _eval_commands(spec) -> typer.Typer:
                 items = [c for c in fw.cases(session, spec) if c.status != "excluded"]
                 latest = fw.latest_runs(session, spec)
                 run = latest.get(variant) if variant else next(iter(latest.values()), None)
+                run_variant = run.variant if run is not None else None  # before the commit
                 outcomes: dict[str, str] = {}
                 right_every_time: set[str] = set()
                 if run is not None:
@@ -3509,8 +3510,8 @@ def _eval_commands(spec) -> typer.Typer:
                             )
                             excluded += 1
                     session.commit()
-            if run is not None:
-                typer.echo(f"Cases {run.variant} got wrong in its latest run ({len(rows)}):\n")
+            if run_variant is not None:
+                typer.echo(f"Cases {run_variant} got wrong in its latest run ({len(rows)}):\n")
             typer.echo(rv.diagnosis_markdown(rows, outcomes))
             if excluded:
                 typer.echo(

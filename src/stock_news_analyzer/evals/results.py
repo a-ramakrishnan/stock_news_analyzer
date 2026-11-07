@@ -75,6 +75,7 @@ def _f(v) -> float | None:
 class ResultsSpec(Spec):
     name = "results"
     agent = "results"
+    code = (reader,)
     title = "Results reader"
     system = reader.SYSTEM
     prompt_version = None

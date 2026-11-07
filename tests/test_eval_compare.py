@@ -115,6 +115,14 @@ def test_worse_unclear_and_too_few(loaded):  # noqa: F811
     mixed_base = _run(loaded, "v3", {f"doc{i}": [0] if i in (3, 4) else [1] for i in range(10)})
     c = fw.compare(loaded, SPEC, mixed_base.id, mixed.id)
     assert c["verdict"] == "no clear difference" and len(c["regressed"]) == 2
+    gone = fw.add_case(  # excluded after both runs: left out of the comparison
+        loaded, SPEC, fw.NewCase(key="doc1", title="x", input={}, reference={"events": []})
+    )
+    fw.set_answer(gone, gone.reference, "excluded", "test")
+    loaded.commit()
+    c = fw.compare(loaded, SPEC, mixed_base.id, mixed.id)
+    assert c["cases"] == 9 and c["excluded"] == ["doc1"] and len(c["regressed"]) == 1
+    assert "Left out, excluded since: doc1" in fw.comparison_markdown(SPEC, c)
     small_a = _run(loaded, "v4", {"x": [1], "y": [0]})
     small_b = _run(loaded, "v5", {"x": [1], "y": [1], "z": [1]})
     c = fw.compare(loaded, SPEC, small_a.id, small_b.id)

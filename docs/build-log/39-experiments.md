@@ -50,3 +50,19 @@ The diagnosis of v1's 20 misses:
 So:
 - **The excerpt** (the reader, so production too): revenue lines with figures on the same line still come first, but the rest of the 40,000-character allowance now goes to the other revenue lines, those near "consolidated" first. A consolidated statement laid out with its figures on the lines below, after a standalone one, used to be dropped whenever the standalone row was found. Airtel's 228,000-character PDF was sent as 11,500 characters.
 - **Sampling** takes only a results PDF whose text holds the quarter's XBRL revenue or profit. `diagnose --exclude-missing` excludes the existing cases that measure the PDF, and `sample --n N` replaces them.
+
+## Follow-up: what the v2 run showed
+
+v2 scored 48% on 39 cases, "no clear difference" from the baseline. It said "27 attempts to run (90 already done)", and that exposed three problems:
+- **Stale resumes.** v2 resumed 90 attempts from an earlier v2 made before the excerpt fix, so it mostly measured the old code. A result now carries a version: a digest of the agent's code, the model, the instructions and the case's input and answer. Attempts with another version are run again and moved to `results.stale.jsonl`.
+- **Excluded cases still counted.** The summary and the run on record read every row of results.jsonl, so the five cases `--exclude-missing` had just excluded were still in. They now count only the run's cases, and `compare` leaves out cases excluded since, listing them.
+- **`diagnose --exclude-missing` crashed** after saving the exclusions: it named the run after its session had closed.
+
+Many answers had plausible figures "written but not in the text". Looking at the PDFs' text showed the figures were there, garbled:
+- DABUR: `company320.13522.38349.531,767.63`, columns run together
+- MAXHEALTH: `2.56.921`, dots for commas
+- ETERNAL: `5 405`, spaces for commas
+
+The reader's check (`numbers_in`, production too) now reads all three, both ways. DIACABS's `3074237` (for 30,742.37) is still not matched: a figure that lost its decimal point is exactly how a copied figure goes wrong, and the existing scale check restores it only when Haiku copies it as written.
+
+Tests: the garbled forms, a lost point still not matched, a rerun with other instructions running everything again, an excluded case dropping out of a summary and a comparison, and diagnose with a run on record (which reproduced the crash before the fix).

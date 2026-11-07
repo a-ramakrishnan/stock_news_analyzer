@@ -180,9 +180,32 @@ def period_label(end: date, months: int) -> str | None:
 _NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
 
 
+# How a PDF's text can garble a table's figures (seen in real filings):
+# - columns run together: '320.13522.38349.53' for 320.13, 522.38, 349.53
+_GLUED = re.compile(r"\d[\d,]*(?:\.\d[\d,]*){2,}")
+_TWO_DECIMALS = re.compile(r"\d{1,3}(?:,\d{2,3})*\.\d{2}|\d+\.\d{2}")
+# - dots for commas: '2.56.921' for 2,56,921 (then '4.090' is 4,090 too)
+_DOTTED = re.compile(r"(?<![\d,.])\d{1,3}(?:\.\d{2})*\.\d{2,3}\.\d{3}(?![\d,]|\.\d)")
+_DOT_THOUSANDS = re.compile(r"(?<![\d,.])\d{1,3}\.\d{3}(?![\d,]|\.\d)")
+# - spaces for commas: '5 405' for 5,405, '2 56 921' for 2,56,921
+_SPACED = re.compile(
+    r"(?<![\d,.])(?:\d{1,3}(?: \d{3})+|\d{1,2}(?: \d{2})+ \d{3})(?:\.\d{1,2})?(?![\d,]|\.\d)"
+)
+
+
 def numbers_in(text: str) -> set[Decimal]:
-    """Every number written in `text`, as a value: '67,078.68' -> 67078.68."""
-    return {Decimal(n.replace(",", "")) for n in _NUMBER.findall(text)}
+    """Every number written in `text`, as a value: '67,078.68' -> 67078.68. Figures a PDF's
+    text garbled in the ways above are read as well, both ways; a figure whose decimal point
+    is lost ('3074237') is not, as that is how a copied figure goes wrong too."""
+    found = {Decimal(n.replace(",", "")) for n in _NUMBER.findall(text)}
+    for run in _GLUED.findall(text):
+        found |= {Decimal(n.replace(",", "")) for n in _TWO_DECIMALS.findall(run)}
+    dotted = _DOTTED.findall(text)
+    if dotted:
+        found |= {Decimal(n.replace(".", "")) for n in dotted}
+        found |= {Decimal(n.replace(".", "")) for n in _DOT_THOUSANDS.findall(text)}
+    found |= {Decimal(n.replace(" ", "")) for n in _SPACED.findall(text)}
+    return found
 
 
 # --- finding filings -------------------------------------------------------------

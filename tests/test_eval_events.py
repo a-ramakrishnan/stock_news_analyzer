@@ -375,6 +375,24 @@ def test_run_grades_records_resumes_and_keeps_failures_apart(loaded, tmp_path): 
     assert len(client.requests) - asked >= 2
     assert len((flow / "baseline" / "results.jsonl").read_text().splitlines()) == 4
 
+    base = flow / "baseline"
+    only = fw.summarize(SPEC, base / "results.jsonl", base / "errors.jsonl", {pos[0].key})
+    assert only["n"] == 2 and only["errors"] == 0  # an excluded case's attempts drop out
+
+    said: list[str] = []
+    asked = len(client.requests)
+    run(system="Read filings. Be strict.", say=said.append)  # other instructions: run again
+    assert len(client.requests) - asked >= 6
+    assert said[0].startswith("4 earlier attempts were made with other code")
+    assert said[1].startswith("6 attempts to run (0 already done)")
+    assert len((base / "results.stale.jsonl").read_text().splitlines()) == 4
+    rows = [json.loads(x) for x in (base / "results.jsonl").read_text().splitlines()]
+    assert {r["version"] for r in rows} == {
+        fw.attempt_version(SPEC, c, "claude-haiku-5-5", "Read filings. Be strict.")
+        for c in items
+        if c is not pos[1]
+    }
+
 
 @pytest.mark.db
 def test_oracle_and_null_check_the_grader_for_free(loaded, tmp_path):  # noqa: F811

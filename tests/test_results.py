@@ -208,6 +208,21 @@ def test_a_figure_not_in_the_filing_is_not_stored(loaded):  # noqa: F811
     assert rs.numbers_in("Revenue 67,078.68 (234.10)") == {Decimal("67078.68"), Decimal("234.10")}
 
 
+def test_figures_a_pdfs_text_garbled_are_still_found():
+    def has(text, *figures):
+        found = rs.numbers_in(text)
+        return all(Decimal(f) in found for f in figures)
+
+    glued = "Owners of the holding company320.13522.38349.531,767.631,842.68"
+    assert has(glued, "320.13", "522.38", "349.53", "1767.63", "1842.68")
+    dots = "Revenue from operations 2.56.921 2.36.617\nOther income 4.090 4,052"
+    assert has(dots, "256921", "236617", "4090", "4052")
+    assert has("Total 5 405 4799 3 288 14410", "5405", "3288", "4799")
+    assert has("Revenue 2 56 921.50 EPS 31.20", "256921.50", "31.20")
+    assert not has("Revenue from Operations 3074237 | 2502996", "30742.37")  # a lost point
+    assert not has("EPS 4.090 Revenue 67,078.68", "4090")  # dots for commas only if seen
+
+
 @pytest.mark.db
 def test_a_lost_decimal_point_is_restored_by_checking_figures_against_each_other(loaded):  # noqa: F811
     def quarter(end, revenue, pat, written_revenue, written_pat):

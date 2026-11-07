@@ -210,6 +210,8 @@ An eval measures one AI agent on a fixed set of cases whose answers are known, s
      2. Run it as a variant: `uv run sna eval events run --variant v1 --instructions v1.txt --note "what changed"`. Use `--model` to try another model instead.
      3. `uv run sna eval events compare` prints the comparison; the page shows it too.
 
+     Running again resumes where a run stopped, but attempts made with other code, instructions or a changed case are run again. Cases you exclude later drop out of the scores.
+
   The page shows the run as soon as it finishes. docs/evals.md has the details.
 
 ## Where the data comes from

@@ -42,6 +42,8 @@ The commands, the runner and the page are shared.
 - `--unverified` includes cases not checked yet
 - `--mode oracle` and `--mode null` check the grader for free: the expected answers must score 100%, and no answer at all scores only what has nothing to find
 
+A rerun resumes where it stopped, but only from attempts made with the same agent code, instructions, model and case. Any others are run again, and the old ones are moved to `results.stale.jsonl`, so a variant name reused after a code change measures the new code. Scores count only the cases in the eval now: a case excluded later drops out of the summary, the page and `compare`, which lists it as left out.
+
 The first real run needs `--approve-harness`, after you've read the runner and the eval's grader. If either changes later, runs refuse until you approve again, so a score can't silently change meaning. Failed calls (timeouts, refusals, cut-off answers, no credit) are kept apart from wrong answers, and the served model is checked against the one asked for.
 
 ## Experiments
@@ -116,7 +118,7 @@ Over all runs it also gives recall (filings with events in which it found one), 
 
 ### Results reader (`sna eval results`)
 
-**What it measures:** given a results PDF, does the agent read the quarter's figures the way the company filed them in XBRL? Its answer for the quarter is converted to Rs crore and filtered as the reader stores it: a figure is kept only if it is written in the text.
+**What it measures:** given a results PDF, does the agent read the quarter's figures the way the company filed them in XBRL? Its answer for the quarter is converted to Rs crore and filtered as the reader stores it: a figure is kept only if it is written in the text (garbled tables included: columns run together, dots or spaces for commas).
 
 **Cases:** quarters that have the exchange's XBRL figures and a results PDF whose text holds the quarter's revenue or profit, in any unit, at most two per company. A covering letter, a scanned file or a garbled table would measure the PDF's conversion to text, not the reader. The XBRL figures are the answer, exact and filed by the company, so nothing needs drafting or checking.
 

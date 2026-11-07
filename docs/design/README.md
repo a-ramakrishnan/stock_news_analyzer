@@ -15,6 +15,10 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.38 · Nov 6, 2026
+
+- After the Results reader's eval runs: the reader's check that a figure is in the filing's text now reads three ways a PDF's text garbles a table (columns run together, dots or spaces for commas), which had dropped right figures in production. The eval runner resumes only attempts made with the same agent code, instructions, model and case, and its scores and comparisons leave out cases excluded since. agent-design.md's Results Reader and design.md's.
+
 ### 1.37 · Nov 5, 2026
 
 - Step 39: experiments. A variant runs with another model or instructions from a file and records what and why (migration 0034); variants compared case by case with a verdict that allows for noise, on the Agent evals page and `sna eval <name> compare`. This completes the LangSmith-style eval platform (steps 35–39). agent-design.md's Evals section.

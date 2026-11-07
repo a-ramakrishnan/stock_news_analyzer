@@ -75,6 +75,7 @@ class Spec:
     prompt_version: str | None = None
     metrics: list[dict] = []  # [{id, label, kind}], the headline first
     needs_checking = True  # answers are drafted, then checked by you
+    code: tuple = ()  # the agent's modules: a result made with other code isn't resumed
     default_n = 40
 
     def default_model(self) -> str:
@@ -390,6 +391,19 @@ def harness_digest(spec: Spec) -> str:
     return h.hexdigest()
 
 
+def attempt_version(spec: Spec, case: EvalCase, model: str, system: str | None) -> str:
+    """What an attempt depends on: the agent's code, the model, the instructions, and the
+    case's input and answer. A result kept with another version is run again, not resumed."""
+    import inspect
+
+    h = hashlib.sha256()
+    for m in spec.code:
+        h.update(Path(inspect.getfile(m)).read_bytes())
+    h.update(f"{model}\n{system or ''}\n".encode())
+    h.update(json.dumps([case.input, case.reference], sort_keys=True, default=str).encode())
+    return h.hexdigest()[:16]
+
+
 def check_harness(spec: Spec, approve: bool, flow: Path | None = None) -> None:
     """Refuse to run when the runner or the spec's grader changed since you approved them."""
     flow = flow or spec.flow
@@ -477,9 +491,23 @@ def run(
     out = flow / variant
     (out / "traces").mkdir(parents=True, exist_ok=True)
     results, errors = out / "results.jsonl", out / "errors.jsonl"
-    done = {(r["prompt_id"], r["rep"]) for r in _rows(results)}
-    todo = [(c, r) for c in items for r in range(reps) if (c.key, r) not in done]
-    say(f"{len(todo)} attempts to run ({len(done)} already done) on {model}")
+    version = {c.key: attempt_version(spec, c, model, system) for c in items}
+    kept, stale = [], []
+    for r in _rows(results):
+        current = r.get("version") == version.get(r["prompt_id"], r.get("version"))
+        (kept if current else stale).append(r)
+    if stale:  # made with other code, instructions, model or answer: set aside, run again
+        with (out / "results.stale.jsonl").open("a") as f:
+            f.writelines(json.dumps(r, default=str) + "\n" for r in stale)
+        results.write_text("".join(json.dumps(r, default=str) + "\n" for r in kept))
+        say(
+            f"{len(stale)} earlier attempts were made with other code, instructions, model or "
+            "answers; they are run again (the old ones are in results.stale.jsonl)"
+        )
+    wanted = [(c, r) for c in items for r in range(reps)]
+    done = {(r["prompt_id"], r["rep"]) for r in kept}
+    todo = [(c, r) for c, r in wanted if (c.key, r) not in done]
+    say(f"{len(todo)} attempts to run ({len(wanted) - len(todo)} already done) on {model}")
 
     def one(case: EvalCase, rep: int):
         if mode in ("oracle", "null"):
@@ -541,6 +569,7 @@ def run(
             row = {
                 "prompt_id": case.key,
                 "rep": rep,
+                "version": version[case.key],
                 "prompt": case.title,
                 "tags": case.tags or [],
                 "status": "ok",
@@ -561,7 +590,8 @@ def run(
                 row["usage"] = answer.usage
                 row["cost_usd"] = answer.cost_usd
             _append(results, row)
-    summary = summarize(spec, results, errors)
+    keys = {c.key for c in items}
+    summary = summarize(spec, results, errors, keys)
     (out / "summary.md").write_text(summary["markdown"])
     config = run_config(spec, model, system, system_file)
     if variant != "baseline":
@@ -572,7 +602,7 @@ def run(
         )
     if mode == "agent" and session_factory is not None:
         with session_factory() as session:
-            run_row = record(session, spec, variant, model, items, results, errors, summary)
+            run_row = record(session, spec, variant, model, items, results, errors, summary, keys)
             run_row.config, run_row.note = config, note
             session.commit()
     return summary
@@ -591,8 +621,21 @@ def run_config(spec: Spec, model: str, system: str | None, system_file: str | No
     }
 
 
-def summarize(spec: Spec, results: Path, errors: Path) -> dict:
-    rows, errs = _rows(results), _rows(errors)
+def _current(results: Path, errors: Path, keys: set[str] | None):
+    """The graded attempts on the run's cases (an excluded case's earlier ones left out), and
+    the failed attempts not graded since."""
+    rows = [r for r in _rows(results) if keys is None or r["prompt_id"] in keys]
+    graded = {(r["prompt_id"], r["rep"]) for r in rows}
+    errs = [
+        e
+        for e in _rows(errors)
+        if (keys is None or e["prompt_id"] in keys) and (e["prompt_id"], e["rep"]) not in graded
+    ]
+    return rows, errs
+
+
+def summarize(spec: Spec, results: Path, errors: Path, keys: set[str] | None = None) -> dict:
+    rows, errs = _current(results, errors, keys)
     n = len(rows)
     ids = [m["id"] for m in spec.metrics]
     mean = {k: (sum(r["grade"].get(k, 0) for r in rows) / n if n else 0.0) for k in ids}
@@ -656,12 +699,12 @@ def summarize(spec: Spec, results: Path, errors: Path) -> dict:
     }
 
 
-def record(session, spec: Spec, variant, model, items, results: Path, errors: Path, summary):
-    """Keep the run in the database for the Agent evals page: the scores over every graded
-    run of the variant so far, and each case's runs."""
-    rows, errs = _rows(results), _rows(errors)
-    graded = {(r["prompt_id"], r["rep"]) for r in rows}
-    open_errors = [e for e in errs if (e["prompt_id"], e["rep"]) not in graded]
+def record(
+    session, spec: Spec, variant, model, items, results: Path, errors: Path, summary, keys=None
+):
+    """Keep the run in the database for the Agent evals page: the scores over the variant's
+    graded attempts on the run's cases, and each case's attempts."""
+    rows, open_errors = _current(results, errors, keys)
     run_row = EvalRun(
         flow=spec.name,
         variant=variant,
@@ -758,6 +801,11 @@ def _by_case(session: Session, run_id: int) -> dict[str, dict]:
     return out
 
 
+def _excluded(session: Session, spec: Spec) -> set[str]:
+    """The cases excluded since: a comparison leaves them out."""
+    return {c.key for c in cases(session, spec) if c.status == "excluded"}
+
+
 def compare(session: Session, spec: Spec, a_id: int, b_id: int) -> dict:
     """Run B against run A, case by case, on the cases both graded: which got better and which
     worse, the change in each metric, cost and latency, and a verdict on the headline metric
@@ -765,7 +813,10 @@ def compare(session: Session, spec: Spec, a_id: int, b_id: int) -> dict:
     difference leaves out zero)."""
     a_run, b_run = session.get(EvalRun, a_id), session.get(EvalRun, b_id)
     a, b = _by_case(session, a_id), _by_case(session, b_id)
-    common = sorted(k for k in a.keys() & b.keys() if a[k]["grades"] and b[k]["grades"])
+    excluded = _excluded(session, spec)
+    common = sorted(
+        k for k in a.keys() & b.keys() if a[k]["grades"] and b[k]["grades"] and k not in excluded
+    )
     head = spec.metrics[0]["id"]
     diffs = [b[k]["mean"].get(head, 0) - a[k]["mean"].get(head, 0) for k in common]
     n = len(diffs)
@@ -826,8 +877,9 @@ def compare(session: Session, spec: Spec, a_id: int, b_id: int) -> dict:
             **side(b, common),
         },
         "cases": len(common),
-        "only_a": sorted(a.keys() - b.keys()),
-        "only_b": sorted(b.keys() - a.keys()),
+        "only_a": sorted(a.keys() - b.keys() - excluded),
+        "excluded": sorted((a.keys() | b.keys()) & excluded),
+        "only_b": sorted(b.keys() - a.keys() - excluded),
         "difference": mean,
         "interval": (low, high),
         "verdict": verdict,
@@ -875,6 +927,8 @@ def comparison_markdown(spec: Spec, c: dict) -> str:
         if group:
             lines += ["", f"## {title} in {b['variant']}", ""]
             lines += [f"- {x['case']} ({x['title']}): {x['a']:.0%} → {x['b']:.0%}" for x in group]
+    if c.get("excluded"):
+        lines += ["", f"Left out, excluded since: {', '.join(c['excluded'])}"]
     if b.get("note"):
         lines += ["", f"Why {b['variant']}: {b['note']}"]
     return "\n".join(lines) + "\n"

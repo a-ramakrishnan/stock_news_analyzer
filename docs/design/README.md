@@ -15,6 +15,10 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.39 · Nov 7, 2026
+
+- The Results reader after the v3 eval run: a filing that fits the 40,000-character allowance is sent whole; a revenue line in the filing's first lines gets its window (the statement after it used to be cut); "Revenues" and "Total revenue" lines are anchors too (Infosys, Airtel). Two more garbled forms are read: a comma for the decimal point, and a row of figures with dots for commas. agent-design.md's Results Reader and design.md's.
+
 ### 1.38 · Nov 6, 2026
 
 - After the Results reader's eval runs: the reader's check that a figure is in the filing's text now reads three ways a PDF's text garbles a table (columns run together, dots or spaces for commas), which had dropped right figures in production. The eval runner resumes only attempts made with the same agent code, instructions, model and case, and its scores and comparisons leave out cases excluded since. agent-design.md's Results Reader and design.md's.

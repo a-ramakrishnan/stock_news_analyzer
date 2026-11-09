@@ -221,6 +221,20 @@ def test_figures_a_pdfs_text_garbled_are_still_found():
     assert has("Revenue 2 56 921.50 EPS 31.20", "256921.50", "31.20")
     assert not has("Revenue from Operations 3074237 | 2502996", "30742.37")  # a lost point
     assert not has("EPS 4.090 Revenue 67,078.68", "4090")  # dots for commas only if seen
+    assert has("joint 19,885,3 28,947.9", "19885.3")  # a comma for the point
+    eternal = "Total 17.292 16.315 ~.833 54.364 Z0.?43"
+    assert has(eternal, "17292", "16315", "54364")
+    assert not has("Revenue 17.292 16.31 54.364 1.250", "17292")  # a row with 2 decimals
+
+
+def test_excerpt_sends_a_short_filing_whole_and_a_statement_at_its_start():
+    short = "Statement (Rs in crore)\nRevenue from operations 2,104.62\n" + "Row 1.00\n" * 2000
+    assert len(short) <= rs.MAX_CHARS and rs.excerpt(short) == short
+    early = "Revenue from operations 2,104.62 1,900.00 1,800.00\n" + "Row. " * 1000 + "PAT 155.88"
+    long = early + "Notes. " * 9000
+    assert "PAT 155.88" in rs.excerpt(long)  # the head's revenue line got its window
+    revenues = "Notes. " * 9000 + "Revenues 40,986 38,994 80,300 76,927\n" + "Notes. " * 9000
+    assert "Revenues 40,986" in rs.excerpt(revenues)
 
 
 @pytest.mark.db

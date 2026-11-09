@@ -56,7 +56,14 @@ MIN_CHARS = 500  # less text than this is a scanned PDF or a covering letter
 # The statement is found by its revenue line; the text around each mention is sent, plus the
 # covering letter's start (company, date). Results PDFs also carry auditors' reports and
 # notes, which are left out.
-ANCHORS = ("revenue from operations", "income from operations", "interest earned", "total income")
+ANCHORS = (
+    "revenue from operations",
+    "income from operations",
+    "interest earned",
+    "total income",
+    "revenues",  # Infosys: "Revenues 40,986 38,994 ..."
+    "total revenue",  # Airtel's segment table
+)
 HEAD_CHARS = 2500
 LEAD_CHARS = 2500  # before the revenue line: the title, unit and column headings
 WINDOW_CHARS = 9000
@@ -187,6 +194,10 @@ _TWO_DECIMALS = re.compile(r"\d{1,3}(?:,\d{2,3})*\.\d{2}|\d+\.\d{2}")
 # - dots for commas: '2.56.921' for 2,56,921 (then '4.090' is 4,090 too)
 _DOTTED = re.compile(r"(?<![\d,.])\d{1,3}(?:\.\d{2})*\.\d{2,3}\.\d{3}(?![\d,]|\.\d)")
 _DOT_THOUSANDS = re.compile(r"(?<![\d,.])\d{1,3}\.\d{3}(?![\d,]|\.\d)")
+# - a comma for the decimal point: '19,885,3' for 19,885.3
+_COMMA_POINT = re.compile(r"(?<![\d,.])\d{1,3}(?:,\d{2,3})*,\d{1,2}(?![\d,]|\.\d)")
+# - dots for commas in a whole row: 'Total 17.292 16.315 54.364' for 17,292 ...
+_ROW_DOT_THOUSANDS = 3  # such figures on one line, and none with two decimals
 # - spaces for commas: '5 405' for 5,405, '2 56 921' for 2,56,921
 _SPACED = re.compile(
     r"(?<![\d,.])(?:\d{1,3}(?: \d{3})+|\d{1,2}(?: \d{2})+ \d{3})(?:\.\d{1,2})?(?![\d,]|\.\d)"
@@ -205,6 +216,13 @@ def numbers_in(text: str) -> set[Decimal]:
         found |= {Decimal(n.replace(".", "")) for n in dotted}
         found |= {Decimal(n.replace(".", "")) for n in _DOT_THOUSANDS.findall(text)}
     found |= {Decimal(n.replace(" ", "")) for n in _SPACED.findall(text)}
+    for n in _COMMA_POINT.findall(text):
+        whole, _, point = n.rpartition(",")
+        found.add(Decimal(f"{whole.replace(',', '')}.{point}"))
+    for line in text.splitlines():
+        thousands = _DOT_THOUSANDS.findall(line)
+        if len(thousands) >= _ROW_DOT_THOUSANDS and not re.search(r"\d\.\d{2}(?!\d)", line):
+            found |= {Decimal(n.replace(".", "")) for n in thousands}
     return found
 
 
@@ -272,6 +290,8 @@ def excerpt(text: str) -> str:
        out with its figures on the next lines (often the consolidated one, after the
        standalone) would otherwise never be sent.
     """
+    if len(text) <= MAX_CHARS:
+        return text  # it all fits
     low = text.lower()
     starts = sorted({m.start() for a in ANCHORS for m in re.finditer(re.escape(a), low)})
     if not starts:
@@ -287,8 +307,8 @@ def excerpt(text: str) -> str:
     for s in rows + others:
         if len(windows) >= room:
             break
-        if s < HEAD_CHARS or any(a <= s < b for a, b in windows):
-            continue  # already sent
+        if any(a <= s < b for a, b in windows):
+            continue  # already sent (a revenue line in the head still gets its window)
         windows.append((max(0, s - LEAD_CHARS), s - LEAD_CHARS + WINDOW_CHARS))
     spans = [(0, HEAD_CHARS)]
     for a, b in sorted(windows):

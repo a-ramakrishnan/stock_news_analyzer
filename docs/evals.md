@@ -86,7 +86,7 @@ Evals measure an agent on fixed cases; monitoring watches it on real work (`moni
 - event quotes found
 - events you rejected
 - filings the Event Extractor couldn't read
-- results PDFs read
+- results PDFs read (split by the reader's prompt version, from results-2)
 - order amounts found in their filings
 - earnings-call quotes found
 - Research brief views with parts dropped
@@ -137,6 +137,11 @@ Each answer keeps the reader's own note on what the document is, and any figure 
 uv run sna eval results run --variant v4 --option examples=on --note "worked examples"
 uv run sna eval results compare baseline v4
 ```
+
+**What it found so far** (30 cases, Haiku):
+- the first baseline scored 36%; the excerpt fixes, the garbled-figure fixes and the 8,000-token limit took the same instructions to 75%
+- the "Which statement" paragraph (always consolidated when there is one; one statement and its own unit) raised basis from 88% to 97%, with every other score level or up; it is in the reader as prompt version results-2
+- worked examples (`examples=on`) made no clear difference (−2.2 points) for a little more cost, so they stay off
 
 **Diagnosing the misses** (`sna eval results diagnose [--variant v1] [--all]`, no AI calls): for each case the latest run got wrong, code looks for the XBRL revenue and profit in two places:
 - the PDF's text

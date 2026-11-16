@@ -85,7 +85,7 @@ class ResultsSpec(Spec):
     }
     title = "Results reader"
     system = reader.SYSTEM
-    prompt_version = None
+    prompt_version = reader.PROMPT_VERSION
     metrics = [
         {"id": "correct", "label": "Correct", "kind": "binary"},
         {"id": "basis", "label": "Basis", "kind": "binary"},

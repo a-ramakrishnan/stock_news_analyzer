@@ -95,3 +95,13 @@ It is a setting (`results_examples`, on Settings), off until the eval shows it h
 `statement_for` (the best results filing holding a quarter's figures) and `written_as` (the unit a figure is written in) moved from the eval into the reader, which both now use.
 
 Tests: the example is the previous quarter's statement with its figures as written, and never the quarter itself; the reader shows it only with the setting on; a variant with `examples=on` looks only before the case's quarter and records the switch; an unknown switch is refused; a yes/no setting saved as "False" reads back as false.
+
+## Follow-up: what the clean comparisons showed
+
+With a fresh baseline on the current reader (75% on 30 cases), each change was measured alone:
+- **Worked examples (v4):** −2.2 points, no clear difference; 3 cases better, 3 worse, for a little more cost a call. They stay off.
+- **The v1 instructions (v3):** +1.1 points on the headline, no clear difference, but basis rose from 88% to 97% and every other score held or rose, at the same cost. The four cases that got better all stopped taking the standalone statement (HDFCBANK, ICICIBANK, ETERNAL, GAUDIUMIVF); the three that got worse had nothing to do with basis (Airtel's total profit instead of the owners', one run of Karur Vysya without revenue, ETERNAL's garbled revenue line).
+
+So v1's paragraph goes into the reader word for word, as prompt version results-2. Each results filing the AI reads records the prompt version (migration 0035), and the "Results PDFs read" monitor splits by it, so live monitoring shows how results-2 does on real filings. Earlier filings count as results-1.
+
+From now on the eval's baseline is results-2, and v1.txt is the agent's own instructions.

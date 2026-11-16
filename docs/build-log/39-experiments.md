@@ -78,3 +78,20 @@ The diagnosis of its 10 misses: 5 had the figures outside the excerpt, 5 in it.
 - **SUNPHARMA:** `19,885,3`, a comma for the decimal point, now read as 19,885.3.
 
 What remains is Haiku's: ICICIBANK still takes standalone; DIACABS's statement is in Rs thousand (`3074237` is 307.42 crore) and Haiku called it lakh; SHAILY wrote a PAT that isn't in the text.
+
+## Follow-up: worked examples
+
+The remaining misses were the kind a past example would fix: ICICIBANK reading standalone, DIACABS calling a statement in thousand lakh. A company lays out its results statement the same way each quarter, and the database has the right answer for its earlier quarters from XBRL.
+
+So the reader can show Haiku a worked example (`reader.example`):
+- the company's latest earlier quarter with XBRL figures and a results filing whose text holds them
+- about 6,000 characters of that statement around its revenue line
+- its right answer: basis, unit, and each figure as written in that statement (found by matching the XBRL figure in the text in each unit, allowing for rounding)
+
+It is never the quarter being read, and a quarter whose revenue is written in a garbled form is skipped. A company with no XBRL history is read as before.
+
+It is a setting (`results_examples`, on Settings), off until the eval shows it helps. To measure it, evals gain switches: a spec declares them (`Spec.options`), `run --option NAME=VALUE` sets them, and they go into the run's config, `change.md` and each attempt's version, so a switched run never resumes an unswitched one. The Results reader's eval has `examples`.
+
+`statement_for` (the best results filing holding a quarter's figures) and `written_as` (the unit a figure is written in) moved from the eval into the reader, which both now use.
+
+Tests: the example is the previous quarter's statement with its figures as written, and never the quarter itself; the reader shows it only with the setting on; a variant with `examples=on` looks only before the case's quarter and records the switch; an unknown switch is refused; a yes/no setting saved as "False" reads back as false.

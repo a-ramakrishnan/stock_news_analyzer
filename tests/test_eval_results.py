@@ -309,3 +309,86 @@ def test_diagnose_excludes_cases_that_measure_the_pdf(
     by_key = {c.key: c for c in fw.cases(loaded, SPEC)}
     assert by_key["LT-BAD"].status == "excluded" and by_key["LT-202609"].status == "verified"
     assert by_key["LT-BAD"].note.startswith("the figures aren't in the PDF's text")
+
+
+@pytest.mark.db
+def test_a_worked_example_is_the_previous_quarters_statement_and_answer(loaded):  # noqa: F811
+    xbrl_q2(loaded)
+    results_filing(loaded)
+    shown = rs.example(loaded, LT, date(2026, 12, 31))  # read Q3: Q2 is the example
+    assert shown.startswith('<earlier_filing date="28 Oct 2026">')
+    assert "Revenue from operations 67,00,000.00" in shown
+    assert "quarter ending 2026-09-30" in shown and "basis consolidated, unit lakh" in shown
+    assert 'revenue "67,00,000.00"' in shown and 'pat "4,40,000.00"' in shown
+    assert 'eps "31.20"' in shown
+    assert rs.example(loaded, LT, date(2026, 9, 30)) is None  # never the quarter itself
+
+
+@pytest.mark.db
+def test_the_reader_shows_the_example_when_the_setting_is_on(loaded, monkeypatch):  # noqa: F811
+    from test_concalls import _llm
+    from test_results import answer as one_answer
+
+    results_filing(loaded)
+    llm, client = _llm(loaded, replying(one_answer()), results_examples=True)
+    seen = []
+
+    def fake(session, isin, before):
+        seen.append((isin, before))
+        return "<earlier_filing>EXAMPLE</earlier_filing>\n"
+
+    monkeypatch.setattr(rs, "example", fake)
+    rs.read_results(loaded, llm)
+    assert seen == [(LT, date(2026, 9, 30))]  # quarters before the one being read
+    prompt = client.requests[0]["messages"][0]["content"]
+    assert prompt.index("EXAMPLE") < prompt.index("<document")
+    off, client = _llm(loaded, replying(one_answer()))
+    assert off.settings.results_examples is False
+
+
+@pytest.mark.db
+def test_a_variant_switches_the_examples_on(loaded, tmp_path, monkeypatch):  # noqa: F811
+    xbrl_q2(loaded)
+    results_filing(loaded)
+    case = fw.sample(loaded, SPEC, n=1)[0]
+    loaded.commit()
+    seen = []
+
+    def fake(session, isin, before):
+        seen.append(before)
+        return "<earlier_filing>EXAMPLE</earlier_filing>\n"
+
+    monkeypatch.setattr(rs, "example", fake)
+    _, client = _run_one(loaded, case, replying(answer([Q2, Q1])), tmp_path)
+    assert seen == [] and "EXAMPLE" not in client.requests[0]["messages"][0]["content"]
+    client = FakeAnthropic(replying(answer([Q2, Q1])))  # the case is detached already
+    bind = loaded.get_bind()
+    fw.run(
+        lambda: Session(bind),
+        lambda s: LLM(s, client=client, settings=settings()),
+        SPEC,
+        [case],
+        variant="v4",
+        model="claude-haiku-5-5",
+        reps=1,
+        flow=tmp_path,
+        approve_harness=True,
+        options={"examples": "on"},
+        say=lambda _: None,
+    )
+    assert seen == [date(2026, 9, 30)]  # before the case's own quarter
+    assert "EXAMPLE" in client.requests[0]["messages"][0]["content"]
+    assert "Options: examples=on" in (tmp_path / "v4" / "change.md").read_text()
+    with pytest.raises(ValueError, match="no option example for the results eval"):
+        fw.run_options(SPEC, {"example": "on"})
+    assert fw.run_config(SPEC, "m", None, None, {"examples": "off"}) == {
+        "model": "m",
+        "instructions": "the agent's own",
+    }
+
+
+def test_a_yes_no_setting_reads_back_as_saved():
+    from stock_news_analyzer.config import flag
+
+    assert flag("True") and flag(True) and flag("on")
+    assert not flag("False") and not flag(False) and not flag("")

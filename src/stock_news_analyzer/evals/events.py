@@ -246,7 +246,14 @@ class EventsSpec(Spec):
             ]
         }
 
-    def call(self, llm, case: EvalCase, model: str, system: str | None = None) -> Answer:
+    def call(
+        self,
+        llm,
+        case: EvalCase,
+        model: str,
+        system: str | None = None,
+        options: dict[str, str] | None = None,
+    ) -> Answer:
         doc, company = filing(case.input)
         prompt = extractor._prompt([(doc, company)])
         if system is None:  # the agent's own entry point

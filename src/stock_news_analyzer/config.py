@@ -38,9 +38,17 @@ class Settings(BaseSettings):
     llm_monthly_budget_usd: float = 20.0
     # What each AI call was sent and answered is kept this many days (0: not kept).
     llm_trace_days: int = 30
+    # The Results reader shows Haiku the company's previous results statement with its right
+    # figures (from XBRL), when there is one: same layout, unit and statement each quarter.
+    results_examples: bool = False
 
     # Scheduled jobs turned off on the Settings page, comma-separated.
     paused_jobs: str = ""
+
+
+def flag(value) -> bool:
+    """A yes/no setting as saved (text): 'True' and 'False' both read as true otherwise."""
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
 
 
 # The settings the Settings page can change, and the type each is stored as (text).
@@ -50,6 +58,7 @@ EDITABLE = {
     "llm_model_analysis": str,
     "llm_monthly_budget_usd": float,
     "llm_trace_days": int,
+    "results_examples": flag,
     "unusual_threshold": float,
     "paused_jobs": str,
 }

@@ -48,7 +48,7 @@ The first real run needs `--approve-harness`, after you've read the runner and t
 
 ## Experiments
 
-A variant is a run with something changed: another model (`--model`), or other instructions from a file (`--instructions FILE`). Every run records what it used (`eval_runs.config`: the model, and the agent's own instructions or a digest of the file) and why (`--note`). For a variant, that goes into `change.md` too.
+A variant is a run with something changed: another model (`--model`), other instructions from a file (`--instructions FILE`), or a switch the eval offers (`--option NAME=VALUE`; the Results reader's `examples=on`). Every run records what it used (`eval_runs.config`: the model, and the agent's own instructions or a digest of the file) and why (`--note`). For a variant, that goes into `change.md` too.
 
 ```
 uv run sna eval events instructions > v1.txt          # the agent's instructions, to edit
@@ -130,6 +130,13 @@ Over all runs it also gives recall (filings with events in which it found one), 
 | Quarter found | It found the quarter's column at all |
 
 Each answer keeps the reader's own note on what the document is, and any figure it wrote that isn't in the text (and so was left out, as the reader stores it).
+
+**Worked examples** (`--option examples=on`): the prompt also carries the company's latest earlier quarter that has XBRL figures and a results filing holding them: the part of that statement around revenue, and its right answer (basis, unit, each figure as written). It is never the case's own quarter, so the answer can't leak in. Production does the same when **Results reader examples** is ticked on Settings (off by default):
+
+```
+uv run sna eval results run --variant v4 --option examples=on --note "worked examples"
+uv run sna eval results compare baseline v4
+```
 
 **Diagnosing the misses** (`sna eval results diagnose [--variant v1] [--all]`, no AI calls): for each case the latest run got wrong, code looks for the XBRL revenue and profit in two places:
 - the PDF's text

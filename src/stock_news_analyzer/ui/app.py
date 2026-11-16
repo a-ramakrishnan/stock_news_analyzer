@@ -4236,11 +4236,20 @@ def settings_page() -> None:
                 value=int(cfg.llm_trace_days),
                 help="Shown on Traces (Agents). 0 keeps none; older ones are removed each morning.",
             )
+            examples = st.checkbox(
+                "Show the Results reader the company's previous results statement with its "
+                "right figures",
+                value=bool(cfg.results_examples),
+                help="A worked example from the exchange's XBRL figures: which statement, unit "
+                "and layout the company uses. Measure it first: sna eval results run --variant "
+                "v4 --option examples=on.",
+            )
             if st.form_submit_button("Save", icon=":material/save:"):
                 store.save(session, "llm_monthly_budget_usd", new_budget)
                 store.save(session, "llm_model_triage", triage)
                 store.save(session, "llm_model_analysis", analysis)
                 store.save(session, "llm_trace_days", int(trace_days))
+                store.save(session, "results_examples", examples)
                 st.rerun()
 
         st.subheader("Unusual days")

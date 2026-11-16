@@ -76,6 +76,9 @@ class Spec:
     metrics: list[dict] = []  # [{id, label, kind}], the headline first
     needs_checking = True  # answers are drafted, then checked by you
     code: tuple = ()  # the agent's modules: a result made with other code isn't resumed
+    # Switches a variant can set (`run --option name=value`), with their defaults and what
+    # each does, e.g. {"examples": ("off", "show the company's previous statement")}.
+    options: dict[str, tuple[str, str]] = {}
     default_n = 40
 
     def default_model(self) -> str:
@@ -87,9 +90,17 @@ class Spec:
     def draft(self, llm, case: EvalCase, model: str) -> dict:
         raise NotImplementedError
 
-    def call(self, llm, case: EvalCase, model: str, system: str | None = None) -> Answer:
+    def call(
+        self,
+        llm,
+        case: EvalCase,
+        model: str,
+        system: str | None = None,
+        options: dict[str, str] | None = None,
+    ) -> Answer:
         """Call the agent on one case. `system`, when given, replaces the agent's instructions
-        (an experiment); otherwise the agent's own entry point is used as is."""
+        (an experiment); otherwise the agent's own entry point is used as is. `options`: the
+        spec's switches, each set or at its default."""
         raise NotImplementedError
 
     def grade(self, case: EvalCase, output: dict) -> dict[str, float]:
@@ -391,7 +402,22 @@ def harness_digest(spec: Spec) -> str:
     return h.hexdigest()
 
 
-def attempt_version(spec: Spec, case: EvalCase, model: str, system: str | None) -> str:
+def run_options(spec: Spec, given: dict[str, str] | None = None) -> dict[str, str]:
+    """The spec's switches: those given, the rest at their defaults. Unknown ones refused."""
+    given = given or {}
+    unknown = sorted(set(given) - set(spec.options))
+    if unknown:
+        known = ", ".join(f"{k} ({h}; default {d})" for k, (d, h) in spec.options.items())
+        raise ValueError(
+            f"no option {', '.join(unknown)} for the {spec.name} eval; "
+            + (f"it has: {known}" if known else "it has none")
+        )
+    return {k: given.get(k, d) for k, (d, _) in spec.options.items()}
+
+
+def attempt_version(
+    spec: Spec, case: EvalCase, model: str, system: str | None, options: dict | None = None
+) -> str:
     """What an attempt depends on: the agent's code, the model, the instructions, and the
     case's input and answer. A result kept with another version is run again, not resumed."""
     import inspect
@@ -400,6 +426,7 @@ def attempt_version(spec: Spec, case: EvalCase, model: str, system: str | None) 
     for m in spec.code:
         h.update(Path(inspect.getfile(m)).read_bytes())
     h.update(f"{model}\n{system or ''}\n".encode())
+    h.update(json.dumps(run_options(spec, options), sort_keys=True).encode())
     h.update(json.dumps([case.input, case.reference], sort_keys=True, default=str).encode())
     return h.hexdigest()[:16]
 
@@ -477,6 +504,7 @@ def run(
     system: str | None = None,
     system_file: str | None = None,
     note: str | None = None,
+    options: dict[str, str] | None = None,
     say=print,
 ) -> dict:
     """Run the agent on every case `reps` times, grade, write results and keep the run;
@@ -491,7 +519,8 @@ def run(
     out = flow / variant
     (out / "traces").mkdir(parents=True, exist_ok=True)
     results, errors = out / "results.jsonl", out / "errors.jsonl"
-    version = {c.key: attempt_version(spec, c, model, system) for c in items}
+    options = run_options(spec, options)
+    version = {c.key: attempt_version(spec, c, model, system, options) for c in items}
     kept, stale = [], []
     for r in _rows(results):
         current = r.get("version") == version.get(r["prompt_id"], r.get("version"))
@@ -519,7 +548,7 @@ def run(
             start = time.monotonic()
             try:
                 with session_factory() as session:
-                    answer = spec.call(llm_factory(session), case, model, system)
+                    answer = spec.call(llm_factory(session), case, model, system, options)
                     session.commit()
                 return case, rep, answer, time.monotonic() - start, tries
             except LLMError as exc:
@@ -593,12 +622,14 @@ def run(
     keys = {c.key for c in items}
     summary = summarize(spec, results, errors, keys)
     (out / "summary.md").write_text(summary["markdown"])
-    config = run_config(spec, model, system, system_file)
+    config = run_config(spec, model, system, system_file, options)
     if variant != "baseline":
         (out / "change.md").write_text(
             f"{note or 'A variant'}\n\nModel: {model}. Instructions: {config['instructions']}"
             + (f" (from {system_file})" if system_file else "")
-            + ".\n"
+            + "."
+            + (f" Options: {config['options']}." if config.get("options") else "")
+            + "\n"
         )
     if mode == "agent" and session_factory is not None:
         with session_factory() as session:
@@ -608,16 +639,26 @@ def run(
     return summary
 
 
-def run_config(spec: Spec, model: str, system: str | None, system_file: str | None) -> dict:
-    """What a run used: the model, and the agent's own instructions or which others."""
+def run_config(
+    spec: Spec,
+    model: str,
+    system: str | None,
+    system_file: str | None,
+    options: dict[str, str] | None = None,
+) -> dict:
+    """What a run used: the model, the agent's own instructions or which others, and any
+    switches set away from their defaults."""
+    changed = {k: v for k, v in run_options(spec, options).items() if v != spec.options[k][0]}
+    extra = {"options": ", ".join(f"{k}={v}" for k, v in changed.items())} if changed else {}
     if system is None or system == spec.system:
-        return {"model": model, "instructions": "the agent's own"}
+        return {"model": model, "instructions": "the agent's own", **extra}
     digest = hashlib.sha256(system.encode()).hexdigest()[:12]
     return {
         "model": model,
         "instructions": f"changed ({digest})",
         "file": system_file,
         "system": system,
+        **extra,
     }
 
 

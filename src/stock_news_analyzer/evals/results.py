@@ -16,7 +16,7 @@ kept only if it is in the text). Graded by code:
 """
 
 import random
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 from stock_news_analyzer.agents import results as reader
 from stock_news_analyzer.agents.concalls import _month_end, quarter_before
 from stock_news_analyzer.evals.framework import Answer, NewCase, Spec
-from stock_news_analyzer.models import Company, Document, DocumentCompany, EvalCase
+from stock_news_analyzer.models import Company, Document, EvalCase
 from stock_news_analyzer.models import QuarterlyResult as Row
 from stock_news_analyzer.sources.announcements import IST
 
@@ -42,7 +42,7 @@ LABELS = {
 }
 REL, ABS = Decimal("0.001"), Decimal("0.02")
 PER_COMPANY = 2
-FILED_WITHIN = 75  # days after a quarter's end that its results filing is looked for
+FILED_WITHIN = reader.FILED_WITHIN
 
 
 def _close(expected, found) -> bool:
@@ -76,6 +76,13 @@ class ResultsSpec(Spec):
     name = "results"
     agent = "results"
     code = (reader,)
+    options = {
+        "examples": (
+            "off",
+            "on shows the company's previous statement with its right figures (from XBRL), "
+            "as the reader does with the results_examples setting",
+        )
+    }
     title = "Results reader"
     system = reader.SYSTEM
     prompt_version = None
@@ -149,32 +156,24 @@ class ResultsSpec(Spec):
         """The best results filing for the quarter ending `end` whose text holds the quarter's
         XBRL revenue or profit (in any unit): a covering letter, a scanned file or a garbled
         table would measure the PDF's conversion to text, not the reader."""
-        start = datetime.combine(end + timedelta(days=1), datetime.min.time(), tzinfo=IST)
-        docs = session.scalars(
-            select(Document)
-            .join(DocumentCompany, DocumentCompany.document_id == Document.id)
-            .where(
-                DocumentCompany.isin == isin,
-                Document.doc_type == "results",
-                Document.text_status.in_(("ok", "partial")),
-                Document.published_at >= start,
-                Document.published_at < start + timedelta(days=FILED_WITHIN),
-            )
-        ).all()
-        docs = [d for d in docs if len(reader.statement_text(d)) >= reader.MIN_CHARS]
-        for doc in sorted(docs, key=reader._rank):
-            if row is None:
-                return doc
-            numbers = reader.numbers_in(reader.statement_text(doc))
-            if any(_written_as(_f(getattr(row, f"{f}_cr")), numbers) for f in ("revenue", "pat")):
-                return doc
-        return None
+        return reader.statement_for(session, isin, end, row)
 
-    def call(self, llm, case: EvalCase, model: str, system: str | None = None) -> Answer:
+    def call(
+        self,
+        llm,
+        case: EvalCase,
+        model: str,
+        system: str | None = None,
+        options: dict[str, str] | None = None,
+    ) -> Answer:
         doc, company = _filing(case.input)
         text = reader.statement_text(doc)
         quarter = quarter_before(doc.published_at.astimezone(IST).date())
-        prompt = reader._prompt(company, quarter, doc, text)
+        shown = None
+        if (options or {}).get("examples") == "on":  # only quarters before the case's own
+            before = date.fromisoformat((case.reference or {})["period_end"])
+            shown = reader.example(llm.session, company.isin, before)
+        prompt = reader._prompt(company, quarter, doc, text, shown)
         if system is None:  # the agent's own entry point
             answer, _ = reader._ask(llm, (model,), prompt)
         else:  # the same call with other instructions (an experiment)
@@ -297,14 +296,7 @@ class ResultsSpec(Spec):
 
 # --- diagnosis: where did the figures go? (no model calls) ------------------------------
 
-STATEMENT_UNITS = {  # Rs crore -> the figure as a statement in that unit writes it
-    "crore": Decimal(1),
-    "lakh": Decimal(100),
-    "million": Decimal(10),
-    "thousand": Decimal(10_000),
-    "rupees": Decimal(10_000_000),
-    "billion": Decimal("0.01"),
-}
+STATEMENT_UNITS = reader.STATEMENT_UNITS
 VERDICTS = {
     "no_text": "no text in the PDF (a scanned file?)",
     "not_in_text": "the figures aren't in the PDF's text (another document, or garbled text)",
@@ -316,8 +308,8 @@ VERDICTS = {
 def _written_as(value_cr: float | None, numbers: set[Decimal]) -> str | None:
     """The unit in which `value_cr` (Rs crore, rounded to 2 decimals as XBRL gives it) is
     written among `numbers`, if it is."""
-    if value_cr is None:
-        return None
+    hit = reader.written_as(value_cr, numbers)
+    return hit[0] if hit else None
     v = abs(Decimal(str(value_cr)))
     for unit, factor in STATEMENT_UNITS.items():
         want = v * factor

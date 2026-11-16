@@ -15,6 +15,10 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.40 · Nov 16, 2026
+
+- Worked examples for the Results reader: the prompt can carry the company's previous statement with its right figures from XBRL (a setting on Settings, off by default). Evals gain switches a variant can set (`run --option NAME=VALUE`), recorded with the run and in each attempt's version; the Results reader's eval has `examples`. agent-design.md's Results Reader and design.md's.
+
 ### 1.39 · Nov 7, 2026
 
 - The Results reader after the v3 eval run: a filing that fits the 40,000-character allowance is sent whole; a revenue line in the filing's first lines gets its window (the statement after it used to be cut); "Revenues" and "Total revenue" lines are anchors too (Infosys, Airtel). Two more garbled forms are read: a comma for the decimal point, and a row of figures with dots for commas. agent-design.md's Results Reader and design.md's.

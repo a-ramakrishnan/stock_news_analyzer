@@ -118,6 +118,7 @@ Pick a kind to see the cases behind it.
 | API key | Turns the AI features on. It is checked with Anthropic before it is saved, which costs nothing |
 | Monthly budget | AI calls stop for the rest of the month once this much is spent; 0 turns them off. The bar shows this month's spend |
 | Models | Haiku for sorting and extracting, Sonnet for explaining and analysing. Opus is stronger and costs about twice Sonnet |
+| Results reader examples | Shows Haiku the company's previous results statement with its right figures, from the exchange's XBRL, so it sees which statement, unit and layout the company uses. Off by default: measure it first with the Results reader's eval (`--option examples=on`) |
 | Unusual days | How big a move against the Nifty 50 counts as unusual: 2.0 marks about 1 trading day in 20, 2.5 about 1 in 80 |
 | Scheduled jobs | Turn a job off to stop it running on its schedule, for example the AI jobs while you are away |
 
@@ -209,6 +210,8 @@ An eval measures one AI agent on a fixed set of cases whose answers are known, s
      1. Save the instructions with `uv run sna eval events instructions > v1.txt` and edit the file.
      2. Run it as a variant: `uv run sna eval events run --variant v1 --instructions v1.txt --note "what changed"`. Use `--model` to try another model instead.
      3. `uv run sna eval events compare` prints the comparison; the page shows it too.
+
+     Some evals have switches a variant can turn on: `--option examples=on` shows the Results reader the company's previous statement with its right figures.
 
      Running again resumes where a run stopped, but attempts made with other code, instructions or a changed case are run again. Cases you exclude later drop out of the scores.
 

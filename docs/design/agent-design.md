@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.39 · Nov 7, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.40 · Nov 16, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -378,6 +378,7 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
     - **Against the filing:** a figure is kept only if that exact number, decimal point included, is in the filing's text. Ways a PDF's text garbles a table are read as well: columns run together ("320.13522.38"), dots for commas ("2.56.921", or a whole row like "17.292 16.315 54.364"), spaces for commas ("5 405") and a comma for the point ("19,885,3"). A figure that lost its decimal point in the text is not matched; the check below catches that.
     - **Against each other:** after each run, revenue is compared with the company's other periods, and costs and profit with the period's revenue. Some PDFs lose a decimal point in their text layer; L&T's "67,078.68" came out as "6707868". A figure 50–200 times too large and written without the point its neighbours have is divided by 100. Anything else far out of scale is left out.
   - **No statement:** some filings (L&T's latest) attach only the results press release. Its key-figures annexure (revenue, finance costs, depreciation, profit) is used instead, and the figures it doesn't give stay empty.
+  - **Worked examples (a setting, off by default):** a company lays out its statement the same way each quarter, so the prompt can carry its latest earlier quarter that has XBRL figures and a results filing holding them: the part of that statement around revenue (about 6,000 characters) and its right answer (basis, unit, each figure as written there). Never the quarter being read. Measured as an eval variant before turning it on.
   - **Unusable answers:** when Haiku's answer is cut off or malformed, as with long bank statements, Sonnet 5.5 tries the same filing once. If that fails too, the filing is marked `failed` and the period's next filing is tried.
   - **One filing, three periods:** the statement's previous-quarter and year-ago columns fill those periods at once. A period's own filing wins over a later filing's comparative column.
   - **Periods:** quarters for main-board companies; half years (H1, H2) for SME companies, which report half-yearly; and the year.

@@ -370,13 +370,138 @@ def _mark(session, doc, company, status, period=None, note=None, model=None) -> 
     )
 
 
-def _prompt(company: Company, quarter: str, doc: Document, text: str) -> str:
+def _prompt(
+    company: Company, quarter: str, doc: Document, text: str, example: str | None = None
+) -> str:
     return (
         f"Company: {company.name} (NSE: {company.nse_symbol or '-'})\n"
         f"Probably results for {quarter} (Indian fiscal year) or the half year ending then.\n\n"
-        f'<document date="{doc.published_at.astimezone(IST):%d %b %Y}">\n'
+        + (example or "")
+        + f'<document date="{doc.published_at.astimezone(IST):%d %b %Y}">\n'
         f"{clean(doc.title)}\n{excerpt(text)}\n</document>"
     )
+
+
+# --- worked examples: the company's previous statement with its right figures --------------
+
+FILED_WITHIN = 75  # days after a quarter's end that its results filing is looked for
+EXAMPLE_BEFORE, EXAMPLE_AFTER = 2500, 3500  # characters of the statement around revenue
+EXAMPLE_QUARTERS = 4  # earlier quarters tried for one whose filing holds its figures
+STATEMENT_UNITS = {  # Rs crore -> the figure as a statement in that unit writes it
+    "crore": Decimal(1),
+    "lakh": Decimal(100),
+    "million": Decimal(10),
+    "thousand": Decimal(10_000),
+    "rupees": Decimal(10_000_000),
+    "billion": Decimal("0.01"),
+}
+
+
+def written_as(value_cr, numbers: set[Decimal]) -> tuple[str, Decimal] | None:
+    """(unit, the number as written) in which `value_cr` (Rs crore, rounded to 2 decimals as
+    XBRL gives it) is among `numbers`, allowing for rounding; None if it isn't."""
+    if value_cr is None:
+        return None
+    v = abs(Decimal(str(value_cr)))
+    for unit, factor in STATEMENT_UNITS.items():
+        want = v * factor
+        tolerance = max(Decimal("0.0051") * factor + Decimal("0.006"), want * Decimal("0.0002"))
+        near = [n for n in numbers if abs(n - want) <= tolerance]
+        if near:
+            return unit, min(near, key=lambda n: abs(n - want))
+    return None
+
+
+def statement_for(session: Session, isin: str, end: date, row=None) -> Document | None:
+    """The best results filing for the quarter ending `end`; with `row` (its XBRL figures),
+    the best one whose text holds the quarter's revenue or profit in any unit."""
+    start = datetime.combine(end + timedelta(days=1), datetime.min.time(), tzinfo=IST)
+    docs = session.scalars(
+        select(Document)
+        .join(DocumentCompany, DocumentCompany.document_id == Document.id)
+        .where(
+            DocumentCompany.isin == isin,
+            Document.doc_type == "results",
+            Document.text_status.in_(("ok", "partial")),
+            Document.published_at >= start,
+            Document.published_at < start + timedelta(days=FILED_WITHIN),
+        )
+    ).all()
+    docs = [d for d in docs if len(statement_text(d)) >= MIN_CHARS]
+    for doc in sorted(docs, key=_rank):
+        if row is None:
+            return doc
+        numbers = numbers_in(statement_text(doc))
+        if any(written_as(getattr(row, f"{f}_cr"), numbers) for f in ("revenue", "pat")):
+            return doc
+    return None
+
+
+def _token(text: str, value: Decimal) -> re.Match | None:
+    """Where `value` is written in `text`, as a plain number."""
+    return next(
+        (m for m in _NUMBER.finditer(text) if Decimal(m.group(0).replace(",", "")) == value), None
+    )
+
+
+def example(session: Session, isin: str, before: date) -> str | None:
+    """The company's latest quarter before `before` with XBRL figures and a results filing
+    that holds them: the part of its statement around revenue, and the right answer (basis,
+    unit, figures as written there), for the prompt. None when there is none."""
+    rows = session.scalars(
+        select(QuarterlyResult)
+        .where(
+            QuarterlyResult.isin == isin,
+            QuarterlyResult.model == XBRL,
+            QuarterlyResult.months == 3,
+            QuarterlyResult.primary.is_(True),
+            QuarterlyResult.period_end < before,
+            QuarterlyResult.revenue_cr.isnot(None),
+        )
+        .order_by(QuarterlyResult.period_end.desc())
+        .limit(EXAMPLE_QUARTERS)
+    ).all()
+    for row in rows:
+        doc = statement_for(session, isin, row.period_end, row)
+        if doc is None:
+            continue
+        text = statement_text(doc)
+        numbers = numbers_in(text)
+        revenue = written_as(row.revenue_cr, numbers)
+        at = _token(text, revenue[1]) if revenue else None
+        if at is None:
+            continue  # its revenue is written in a garbled form: no clean example
+        unit = revenue[0]
+        figures = []
+        for f in FIELDS:
+            value = getattr(row, f"{f}_cr" if f != "eps" else "eps")
+            if value is None:
+                continue
+            hit = written_as(value, numbers)  # EPS is in rupees: written as is ("crore")
+            found = (
+                _token(text, hit[1])
+                if hit and hit[0] == ("crore" if f == "eps" else unit)
+                else None
+            )
+            if found:
+                written = found.group(0)
+                if value < 0 and f != "eps":
+                    written = f"({written})"
+                figures.append(f'{f} "{written}"')
+        a = text.rfind("\n", 0, max(0, at.start() - EXAMPLE_BEFORE)) + 1
+        b = text.find("\n", at.start() + EXAMPLE_AFTER)
+        part = text[a : b if b >= 0 else len(text)]
+        return (
+            f'<earlier_filing date="{doc.published_at.astimezone(IST):%d %b %Y}">\n'
+            f"{part}\n</earlier_filing>\n"
+            f"A worked example: this company's filing for the quarter ending "
+            f"{row.period_end.isoformat()}, above in part, and its right answer for that "
+            f"quarter (from the company's own XBRL filing): basis {row.basis}, unit {unit}, "
+            f"{', '.join(figures)}. The company lays out its statement the same way each "
+            "quarter: use the example to see which statement to read, its unit and its "
+            "layout, but copy every figure for your answer from the document below.\n\n"
+        )
+    return None
 
 
 def _store(session, doc, company, text, answer: ResultsAnswer, model) -> tuple[str, int]:
@@ -499,7 +624,9 @@ def read_results(
                 session.commit()
                 return result
             try:
-                answer, used = _ask(llm, (model, fallback), _prompt(company, quarter, doc, text))
+                shown = example(session, isin, end) if llm.settings.results_examples else None
+                prompt = _prompt(company, quarter, doc, text, shown)
+                answer, used = _ask(llm, (model, fallback), prompt)
             except BudgetExceeded as exc:
                 result.errors.append(str(exc))
                 say(f"stopped: {exc}")

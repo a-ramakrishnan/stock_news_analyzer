@@ -3384,6 +3384,12 @@ def _eval_commands(spec) -> typer.Typer:
             None, help="A file of instructions to use instead of the agent's (an experiment)."
         ),
         note: str = typer.Option(None, help="Why this run, e.g. what the variant changes."),
+        option: list[str] = typer.Option(
+            [],
+            "--option",
+            help="A switch of this eval, NAME=VALUE (results: examples=on shows the company's "
+            "previous statement with its right figures).",
+        ),
         approve_harness: bool = typer.Option(
             False, "--approve-harness", help="Accept the current runner and grader (after reading)."
         ),
@@ -3397,6 +3403,23 @@ def _eval_commands(spec) -> typer.Typer:
 
         settings = get_settings()
         model = model or spec.default_model()
+        bad = [o for o in option if "=" not in o]
+        if bad:
+            typer.echo(f"An option is NAME=VALUE, e.g. examples=on (not {bad[0]}).")
+            raise typer.Exit(2)
+        options = dict(o.split("=", 1) for o in option)
+        try:
+            chosen_options = fw.run_options(spec, options)
+        except ValueError as exc:
+            typer.echo(f"{exc}.")
+            raise typer.Exit(2) from exc
+        if variant == "baseline" and any(
+            v != spec.options[k][0] for k, v in chosen_options.items()
+        ):
+            typer.echo(
+                "A switch away from its default is a variant: pass --variant v1 (or v2, ...)."
+            )
+            raise typer.Exit(1)
         system = None
         if instructions:
             from pathlib import Path
@@ -3437,6 +3460,7 @@ def _eval_commands(spec) -> typer.Typer:
                 system=system,
                 system_file=instructions,
                 note=note,
+                options=options,
                 say=typer.echo,
             )
         except fw.HarnessChanged as exc:

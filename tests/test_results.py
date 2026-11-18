@@ -325,6 +325,9 @@ def test_reads_a_quarter_and_its_comparatives_once(loaded):  # noqa: F811
     filings = {f.document_id: f for f in loaded.query(ResultFiling)}
     assert (filings[bse.id].status, filings[bse.id].period) == ("read", "Q2 FY27")
     assert filings[nse.id].status == "duplicate"
+    assert filings[bse.id].prompt_version == rs.PROMPT_VERSION == "results-2"
+    assert filings[nse.id].prompt_version is None  # not read by the AI
+    assert "always use the consolidated one" in client.requests[0]["system"][0]["text"]
     assert rs.pending(loaded) == []
     assert loaded.query(LlmCall).filter_by(task="results").count() == 1
 

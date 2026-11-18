@@ -560,6 +560,7 @@ class ResultFiling(Base):
     period: Mapped[str | None] = mapped_column(String(16))  # 'Q2 FY27', 'H1 FY27'
     note: Mapped[str | None] = mapped_column(Text)
     model: Mapped[str | None] = mapped_column(String(64))
+    prompt_version: Mapped[str | None] = mapped_column(String(16))  # null: before results-2
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

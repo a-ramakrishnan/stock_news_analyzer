@@ -15,6 +15,10 @@ Versions: a minor bump (1.1) for corrections and decisions that fit the existing
 
 ## Changes
 
+### 1.41 · Nov 16, 2026
+
+- The Results reader's instructions gain the "Which statement" paragraph tested in its eval (consolidated whenever there is one; one statement and its own unit), as prompt version results-2. Each results filing read records the prompt version (migration 0035), and live monitoring splits the read rate by it. Worked examples stay off: no clear difference. agent-design.md's Results Reader and design.md's.
+
 ### 1.40 · Nov 16, 2026
 
 - Worked examples for the Results reader: the prompt can carry the company's previous statement with its right figures from XBRL (a setting on Settings, off by default). Evals gain switches a variant can set (`run --option NAME=VALUE`), recorded with the run and in each attempt's version; the Results reader's eval has `examples`. agent-design.md's Results Reader and design.md's.

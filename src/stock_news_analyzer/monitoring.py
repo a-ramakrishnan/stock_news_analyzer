@@ -127,7 +127,7 @@ def _results_read(session, since):
     return _rows(
         session,
         day,
-        ResultFiling.model,
+        func.coalesce(ResultFiling.prompt_version, "results-1"),  # versions began at results-2
         func.sum(case((ResultFiling.status == "read", 1), else_=0)),
         func.sum(case((attempted, 1), else_=0)),
         [ResultFiling.model.isnot(None), attempted],
@@ -231,7 +231,7 @@ MONITORS = [
         "Results PDFs read",
         "Share of results PDFs the Results reader got figures from (not failed or empty).",
         _results_read,
-        split="model",
+        split="prompt version",
     ),
     Monitor(
         "orders.amounts",

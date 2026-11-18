@@ -1,6 +1,6 @@
 # Agent design
 
-Version 1.40 · Nov 16, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
+Version 1.41 · Nov 16, 2026 (first written Oct 21, 2026) · @Ramki · companion to the [system design](design.md); changes are listed in [README.md](README.md)
 
 ## Agent team at a glance
 
@@ -374,6 +374,7 @@ An orchestrator plus 17 agents in four layers: Collect, Understand, Analyse, Del
   - **Where it shows:** `sna events run/list/show/coverage/reset`, the 07:25 `events` job, an "Events" section in the digest and an **Events** tab on the Stock page.
 - **As built (step 16), results only.** Results, the first event type built, go into `results`; the order tracker uses them to fill revenue gaps. Two sources: the exchange's XBRL files (exact, no LLM) first, and the **Results Reader** (`agents/results.py`, Haiku 5.5) reading the PDF where XBRL has nothing.
   - **What it reads:** every results filing of every watchlist stock. It copies the headline figures from the results statement: revenue, other income, finance costs, depreciation, profit before and after tax, and EPS.
+  - **Which statement (prompt version results-2):** when a document has both, always the consolidated statement, and every figure from that one statement in its own unit. Tested as an eval variant: basis right 97% of the time, against 88%. Each results filing the AI reads records the prompt version (migration 0035), and the Monitoring page splits the read rate by it.
   - **Checking:** Haiku copies each figure as written, with the statement's unit (lakh, crore, million). The code converts the figures to Rs crore, so the model does no arithmetic, and checks them in two ways:
     - **Against the filing:** a figure is kept only if that exact number, decimal point included, is in the filing's text. Ways a PDF's text garbles a table are read as well: columns run together ("320.13522.38"), dots for commas ("2.56.921", or a whole row like "17.292 16.315 54.364"), spaces for commas ("5 405") and a comma for the point ("19,885,3"). A figure that lost its decimal point in the text is not matched; the check below catches that.
     - **Against each other:** after each run, revenue is compared with the company's other periods, and costs and profit with the period's revenue. Some PDFs lose a decimal point in their text layer; L&T's "67,078.68" came out as "6707868". A figure 50–200 times too large and written without the point its neighbours have is divided by 100. Anything else far out of scale is left out.
